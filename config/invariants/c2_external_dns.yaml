@@ -1,0 +1,8 @@
+id: c2_external_dns
+block_key: integrity
+block_label_ru: "Блок 5 — Целостность"
+title_ru: "Подозрительный внешний DNS / C2-паттерн"
+context_window_events: 5
+predicate_ref: builtin:c2_external_dns
+inputs: []
+severity_curve: null

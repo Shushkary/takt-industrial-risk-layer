@@ -1,0 +1,8 @@
+id: expert_dissonance
+block_key: data_hitl
+block_label_ru: "Блок 6 — Данные и HITL"
+title_ru: "Расхождение с экспертной оценкой / HITL"
+context_window_events: 5
+predicate_ref: builtin:expert_dissonance
+inputs: []
+severity_curve: null

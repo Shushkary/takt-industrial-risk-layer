@@ -1,0 +1,8 @@
+id: conflict_logic
+block_key: physics
+block_label_ru: "Блок 4 — Физическая логика"
+title_ru: "Конфликт логики управления / взаимоисключающие команды"
+context_window_events: 5
+predicate_ref: builtin:conflict_logic
+inputs: []
+severity_curve: null

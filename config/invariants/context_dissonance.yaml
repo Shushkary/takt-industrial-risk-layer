@@ -1,0 +1,8 @@
+id: context_dissonance
+block_key: data_hitl
+block_label_ru: "Блок 6 — Данные и HITL"
+title_ru: "Расхождение с контекстом ТО / заявок"
+context_window_events: 5
+predicate_ref: builtin:noop
+inputs: []
+severity_curve: null

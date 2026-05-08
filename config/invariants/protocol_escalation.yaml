@@ -1,0 +1,8 @@
+id: protocol_escalation
+block_key: identity
+block_label_ru: "Блок 3 — Идентификация"
+title_ru: "Эскалация «тяжёлого» протокола по активу"
+context_window_events: 5
+predicate_ref: builtin:protocol_escalation
+inputs: []
+severity_curve: null

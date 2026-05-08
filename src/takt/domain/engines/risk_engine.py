@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Mapping
+
+
+@dataclass(frozen=True, slots=True)
+class RiskBreakdown:
+    rhythm: float
+    graph: float
+    context: float
+    user: float
+    data_quality: float
+
+
+@dataclass(frozen=True, slots=True)
+class RiskAssessment:
+    score: float
+    risk_class: str
+    breakdown: RiskBreakdown
+
+
+def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    return max(lo, min(hi, x))
+
+
+def asymptotic_normalize(raw: float, cap: float) -> float:
+    """Плато при экстремальной нагрузке (мягкая отсечка)."""
+    if cap <= 0:
+        return 0.0
+    return _clamp(raw / (raw + cap))
+
+
+def mandelbrot_entropy_proxy(values: list[float], entropy_cap: float) -> float:
+    """
+    Упрощённый «порог устойчивости»: дисперсия нормированных вкладов не выше cap.
+    Возвращает множитель доверия 0..1.
+    """
+    if not values:
+        return 1.0
+    m = sum(values) / len(values)
+    var = sum((v - m) ** 2 for v in values) / len(values)
+    if var <= entropy_cap:
+        return 1.0
+    return _clamp(entropy_cap / var if var else 1.0)
+
+
+def combine_risk(
+    vectors: RiskBreakdown,
+    weights: Mapping[str, float],
+    *,
+    dq_score: float,
+    eps_estimate: float,
+    mandel_cap: float,
+    eps_soft_cap: float,
+) -> RiskAssessment:
+    """
+    Risk = F(R, G, C, U, DQ) с учётом деградации DQ и асимптотики EPS.
+    """
+    wsum = (
+        weights["rhythm"] * vectors.rhythm
+        + weights["graph"] * vectors.graph
+        + weights["context"] * vectors.context
+        + weights["user"] * vectors.user
+        + weights["data_quality"] * vectors.data_quality
+    )
+    dq_factor = _clamp(dq_score if dq_score >= 0.5 else dq_score * 1.2)
+    burst = asymptotic_normalize(eps_estimate, eps_soft_cap)
+    adj = wsum * dq_factor * (0.5 + 0.5 * burst)
+    trust = mandelbrot_entropy_proxy(
+        [vectors.rhythm, vectors.graph, vectors.context, vectors.user, vectors.data_quality],
+        mandel_cap,
+    )
+    score = _clamp(adj * trust)
+    if score >= 0.85:
+        rclass = "CRITICAL"
+    elif score >= 0.65:
+        rclass = "HIGH"
+    elif score >= 0.4:
+        rclass = "MEDIUM"
+    else:
+        rclass = "LOW"
+    return RiskAssessment(score=score, risk_class=rclass, breakdown=vectors)
+
+
+_RISK_CLASS_RANK: dict[str, int] = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+
+
+def worst_risk_class(a: str, b: str) -> str:
+    """Более «тяжёлый» из двух классов (для тот же score или агрегации при merge)."""
+    ra = _RISK_CLASS_RANK.get(a.upper(), 0)
+    rb = _RISK_CLASS_RANK.get(b.upper(), 0)
+    return a if ra >= rb else b

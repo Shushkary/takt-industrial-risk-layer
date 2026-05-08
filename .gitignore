@@ -1,0 +1,31 @@
+# SQLite (storage.backend: sqlite)
+/data/
+*.db
+*.sqlite
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.pytest_tmp_path_local/
+.hypothesis/
+.import_linter_cache/
+.tmp_pytest*/
+tmp_pytest*/
+.tmp_pip_audit_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+
+# Local env (secrets); keep .env.example tracked
+.env
+
+# IDE
+.idea/
+.vscode/

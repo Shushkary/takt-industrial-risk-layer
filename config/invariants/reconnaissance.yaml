@@ -1,0 +1,8 @@
+id: reconnaissance
+block_key: topology
+block_label_ru: "Блок 2 — Топология"
+title_ru: "Разведка: скан, SNMP walk, топология"
+context_window_events: 5
+predicate_ref: builtin:reconnaissance
+inputs: []
+severity_curve: null

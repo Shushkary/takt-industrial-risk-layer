@@ -1,0 +1,8 @@
+id: jump_server_bypass
+block_key: topology
+block_label_ru: "Блок 2 — Топология"
+title_ru: "Доступ к ПЛК/критузлу минуя jump-сервер"
+context_window_events: 5
+predicate_ref: builtin:noop
+inputs: []
+severity_curve: null

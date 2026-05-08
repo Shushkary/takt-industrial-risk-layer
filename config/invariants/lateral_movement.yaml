@@ -1,0 +1,8 @@
+id: lateral_movement
+block_key: topology
+block_label_ru: "Блок 2 — Топология"
+title_ru: "Признаки lateral movement"
+context_window_events: 5
+predicate_ref: builtin:lateral_movement
+inputs: []
+severity_curve: null

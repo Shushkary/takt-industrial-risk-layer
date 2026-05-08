@@ -1,0 +1,8 @@
+id: stale_data
+block_key: data_hitl
+block_label_ru: "Блок 6 — Данные и HITL"
+title_ru: "Устаревшие данные в конвейере"
+context_window_events: 5
+predicate_ref: builtin:noop
+inputs: []
+severity_curve: null

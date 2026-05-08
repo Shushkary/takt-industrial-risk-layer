@@ -1,0 +1,8 @@
+id: polling_period_doubling_suspect
+block_key: rhythm
+block_label_ru: "Блок 1 — Ритмика и протоколы"
+title_ru: "Подозрение на шаг к удвоению периода в ряду интервалов опроса (эвристика)"
+context_window_events: 24
+predicate_ref: builtin:noop
+inputs: []
+severity_curve: null

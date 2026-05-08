@@ -1,0 +1,77 @@
+# Веса факторов Risk = F(R, G, C, U, DQ) — ТЗ MPV 2.0
+rhythm: 0.22
+graph: 0.22
+context: 0.18
+user: 0.18
+data_quality: 0.20
+
+# Пороги
+mandelbrot_entropy_cap: 2.5
+dq_degraded_threshold: 0.5
+feigenbaum_target: 4.669201609
+
+# Слияние кейсов (L2): bucketed — ключ актив|операция|time_bucket(UTC); legacy — source|актив|операция
+alert_fatigue:
+  mode: bucketed
+  bucket_sec: 300
+
+# Асимптотическая отсечка при высоком EPS (нормировка весов)
+eps_soft_cap: 100000
+
+# Топология для JumpServerBypass (граф задаётся снаружи; здесь — эталонные хосты)
+topology:
+  jump_host: jump-01
+  plc_hosts:
+    - plc-01
+    - plc-02
+  # Рёбра для демо POST /assess (обход jump). Если пусто — одно ребро eng-workstation -> первый plc_hosts
+  demo_graph_edges:
+    - src: eng-workstation
+      dst: plc-01
+      kind: ssh
+
+# Инварианты (движок extended rules). allowed_function_codes: null — проверка отключена.
+invariants:
+  allowed_function_codes: null
+  expected_payload_baseline: null
+  payload_drift_ratio: 0.45
+  auth_fail_window: 20
+  auth_fail_threshold: 5
+  # ASDU type ids (IEC 60870-5-104), запрещённые для сегмента; при совпадении в payload iec104_type_id — инвариант illegal_function_code
+  iec104_disallowed_type_ids: []
+
+# Нормализация семантики payload до оценки риска (флаги для инвариантов)
+enrichment:
+  enabled: true
+  air_gap_segments:
+    - AIR_GAP_L2
+  # Подстановка iec104_type_id из сырых колонок CSV/импорта (asdu_type, type_id, …)
+  iec104_type_aliases:
+    - asdu_type
+    - asdu_type_id
+    - type_id
+    - iec_asdu_type
+
+# Доверие источников для DQ / Inv_DQ_03 (0..1). Ключи = значения EventSource (plc_polling, auth_logs, …)
+ingest_trust:
+  by_source:
+    plc_polling: 1.0
+    auth_logs: 0.92
+    network_events: 0.78
+    service_desk: 0.95
+    unknown: 0.5
+
+# SQLite-файл кейсов (если storage.backend: sqlite); каталог создаётся при старте API
+storage:
+  backend: memory
+  sqlite_path: data/takt_cases.db
+
+# Webhook SIEM: пустой список = разрешены только loopback-хосты (127.0.0.1, localhost, ::1)
+siem_webhook:
+  allowed_url_prefixes: []
+  retries: 3
+  backoff_sec: 0.35
+
+# Экспорт: путь к TTF с кириллицей внутри репозитория (напр. assets/fonts/DejaVuSans.ttf); пусто — только Helvetica + latin-1 fallback
+export:
+  pdf_unicode_font: ""

@@ -1,0 +1,8 @@
+id: brute_force
+block_key: identity
+block_label_ru: "Блок 3 — Идентификация"
+title_ru: "Серия неуспешных аутентификаций"
+context_window_events: 20
+predicate_ref: builtin:brute_force
+inputs: []
+severity_curve: null

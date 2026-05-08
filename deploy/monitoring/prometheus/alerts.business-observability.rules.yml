@@ -1,0 +1,32 @@
+groups:
+  - name: takt-business-observability
+    rules:
+      - alert: TaktHighDataQualityDegradation
+        expr: takt_business_dq_degraded_ratio > 0.20
+        for: 10m
+        labels:
+          severity: warning
+          service: takt-api
+        annotations:
+          summary: "TAKT data quality degraded ratio is high"
+          description: "DQ degraded ratio is above 20% for more than 10 minutes."
+
+      - alert: TaktEventToCaseLatencyP95High
+        expr: histogram_quantile(0.95, sum(rate(takt_business_event_to_case_latency_seconds_bucket[10m])) by (le)) > 30
+        for: 15m
+        labels:
+          severity: warning
+          service: takt-api
+        annotations:
+          summary: "TAKT event-to-case latency P95 is high"
+          description: "P95 event-to-case latency exceeds 30 seconds for more than 15 minutes."
+
+      - alert: TaktCriticalRiskScoreDetected
+        expr: max(takt_business_risk_score{risk_class="CRITICAL"}) > 0.85
+        for: 5m
+        labels:
+          severity: critical
+          service: takt-api
+        annotations:
+          summary: "TAKT critical risk score remains elevated"
+          description: "Risk score for CRITICAL class is above 0.85 for more than 5 minutes."

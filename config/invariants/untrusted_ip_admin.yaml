@@ -1,0 +1,8 @@
+id: untrusted_ip_admin
+block_key: identity
+block_label_ru: "Блок 3 — Идентификация"
+title_ru: "Админ-действия с недоверенного IP"
+context_window_events: 5
+predicate_ref: builtin:untrusted_ip_admin
+inputs: []
+severity_curve: null

@@ -1,0 +1,8 @@
+id: cyclic_service_crash
+block_key: physics
+block_label_ru: "Блок 4 — Физическая логика"
+title_ru: "Циклический отказ сервиса исполнения"
+context_window_events: 5
+predicate_ref: builtin:cyclic_service_crash
+inputs: []
+severity_curve: null

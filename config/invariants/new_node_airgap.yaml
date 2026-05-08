@@ -1,0 +1,8 @@
+id: new_node_airgap
+block_key: topology
+block_label_ru: "Блок 2 — Топология"
+title_ru: "Новый узел в сегменте air-gap"
+context_window_events: 5
+predicate_ref: builtin:new_node_airgap
+inputs: []
+severity_curve: null

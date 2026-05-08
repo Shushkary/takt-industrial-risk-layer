@@ -1,0 +1,5 @@
+ALTER TABLE cases ADD COLUMN manual_permits TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE cases ADD COLUMN decision_records TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE cases ADD COLUMN pdf_last_sha256 TEXT NOT NULL DEFAULT '';
+ALTER TABLE cases ADD COLUMN pdf_last_generated_at TEXT NOT NULL DEFAULT '';
+

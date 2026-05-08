@@ -1,0 +1,170 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: takt-industrial-risk-layer:ci
+          build-args: TAKT_BUILD_REVISION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ matrix.python-version }}-pip-
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Pytest
+        run: python -m pytest -q
+
+      - name: Import linter
+        run: lint-imports --config pyproject.toml
+
+  release-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Generate CycloneDX SBOM
+        run: python scripts/generate_sbom.py
+
+      - name: Verify SBOM artifact
+        run: test -f dist/sbom.cyclonedx.json
+
+      - name: Monitoring artifacts gate
+        run: |
+          test -f deploy/monitoring/grafana/takt-business-observability-dashboard.json
+          test -f deploy/monitoring/prometheus/alerts.business-observability.rules.yml
+          python -m pytest -q tests/test_monitoring_artifacts.py
+
+      - name: Ledger verifier smoke gate
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          p = Path("dist/ledger-smoke.sqlite")
+          p.parent.mkdir(parents=True, exist_ok=True)
+          conn = sqlite3.connect(str(p))
+          conn.execute(
+              "CREATE TABLE case_audit_ledger (seq INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL, audit_line TEXT NOT NULL, line_sha256 TEXT NOT NULL, prev_chain_sha256 TEXT NOT NULL, chain_sha256 TEXT NOT NULL, created_at TEXT NOT NULL)"
+          )
+          conn.execute(
+              "CREATE TABLE operation_audit_ledger (seq INTEGER PRIMARY KEY AUTOINCREMENT, stream_key TEXT NOT NULL, operation_type TEXT NOT NULL, entity_id TEXT NOT NULL, actor TEXT NOT NULL, payload_json TEXT NOT NULL, payload_sha256 TEXT NOT NULL, prev_chain_sha256 TEXT NOT NULL, chain_sha256 TEXT NOT NULL, created_at TEXT NOT NULL)"
+          )
+          conn.commit()
+          conn.close()
+          PY
+          python scripts/verify_audit_ledger.py --db dist/ledger-smoke.sqlite --case-id smoke-case
+          python scripts/verify_operation_ledger.py --db dist/ledger-smoke.sqlite --stream-key decision:smoke-case
+
+      - name: pip-audit gate
+        run: pip-audit
+
+      - name: Schemathesis gate
+        run: |
+          uvicorn takt.interface_adapters.api.main:app --host 127.0.0.1 --port 8000 &
+          sleep 3
+          python -m schemathesis run --max-examples 20 --checks all http://127.0.0.1:8000/openapi.json
+
+      - name: Mutation gate (weights loader)
+        run: |
+          mutmut run --paths-to-mutate src/takt/infrastructure/config/weights_loader.py --runner "python -m pytest -q tests/test_weights_loader.py"
+
+  release-evidence-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Prepare prod-ready fixture
+        run: |
+          cp docs/releases/2026-05-07_v0.6.23_prod_ready.md dist/release-dry-run-prod-ready.md
+
+      - name: Release finalize dry run
+        run: |
+          python scripts/release_finalize.py --db dist/release-dry-run.sqlite --evidence dist/release-dry-run-evidence.md --prod-ready dist/release-dry-run-prod-ready.md --apply-migrate --strict --strict-generate-sbom
+
+      - name: Validate auto-filled fields
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path("dist/release-dry-run-prod-ready.md").read_text(encoding="utf-8")
+          targets = [line for line in text.splitlines() if line.startswith(("| 5.", "| 6.", "| 7.", "| 8."))]
+          if len(targets) != 4:
+              raise SystemExit("expected fields 5/6/7/8 in prod-ready")
+          if any("_(заполнить)_" in line for line in targets):
+              raise SystemExit("auto fields still contain placeholders")
+          print("prod_ready_auto_fields_ok=true")
+          PY
+
+      - name: Validate prod-ready placeholders policy
+        run: |
+          python scripts/validate_prod_ready.py --prod-ready dist/release-dry-run-prod-ready.md
+
+      - name: Build release package dry run
+        run: |
+          python scripts/build_release_package.py --db dist/release-package-dry-run.sqlite --package-root dist --apply-migrate --strict --strict-generate-sbom
+
+      - name: Verify release package manifest and checksums
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          candidates = sorted([p for p in Path("dist").glob("release-package-*") if p.is_dir()])
+          if not candidates:
+              raise SystemExit("release package directory not found")
+          pkg = candidates[-1]
+          print(f"verifying={pkg}")
+          import subprocess, sys
+          subprocess.check_call([sys.executable, "scripts/verify_release_package.py", "--package-dir", str(pkg)])
+          PY

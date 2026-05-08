@@ -1,0 +1,30 @@
+{
+  "fixture": "plc_polling_demo.csv",
+  "alert_fatigue": {
+    "mode": "legacy",
+    "bucket_sec": 300
+  },
+  "report": {
+    "events_processed": 2,
+    "cases_created": 1,
+    "merges": 1,
+    "risk_class_histogram": {
+      "LOW": 2
+    }
+  },
+  "final_case_count": 1,
+  "cases_snapshot": [
+    {
+      "case_id": "aaaaaaaa",
+      "risk_score": 0.077762376238,
+      "risk_class": "LOW",
+      "invariant_hits": [],
+      "burst_fingerprint": "plc_polling|plc-01|POLL",
+      "normalized_event_ids": [
+        "e0",
+        "e1"
+      ],
+      "invariant_hit_records_count": 0
+    }
+  ]
+}

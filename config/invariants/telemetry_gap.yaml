@@ -1,0 +1,8 @@
+id: telemetry_gap
+block_key: data_hitl
+block_label_ru: "Блок 6 — Данные и HITL"
+title_ru: "Разрыв телеметрии / пропуск выборок"
+context_window_events: 5
+predicate_ref: builtin:noop
+inputs: []
+severity_curve: null

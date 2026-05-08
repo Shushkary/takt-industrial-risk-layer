@@ -1,0 +1,8 @@
+id: log_wiping
+block_key: integrity
+block_label_ru: "Блок 5 — Целостность"
+title_ru: "Очистка журналов / аудита"
+context_window_events: 5
+predicate_ref: builtin:log_wiping
+inputs: []
+severity_curve: null

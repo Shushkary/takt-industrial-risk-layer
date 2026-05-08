@@ -1,0 +1,8 @@
+id: trust_index_drop
+block_key: integrity
+block_label_ru: "Блок 5 — Целостность"
+title_ru: "Просадка индекса доверия источника"
+context_window_events: 5
+predicate_ref: builtin:trust_index_drop
+inputs: []
+severity_curve: null

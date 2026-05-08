@@ -1,0 +1,8 @@
+id: runtime_config_change
+block_key: integrity
+block_label_ru: "Блок 5 — Целостность"
+title_ru: "Изменение конфигурации на исполнении"
+context_window_events: 5
+predicate_ref: builtin:runtime_config_change
+inputs: []
+severity_curve: null

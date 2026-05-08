@@ -1,0 +1,38 @@
+# Локальный запуск API с персистентным SQLite (том takt_sqlite).
+# docker compose up --build
+# Опционально (PowerShell): $env:TAKT_BUILD_REVISION = (git rev-parse HEAD) — попадёт в build.arg (аналог export в bash).
+
+services:
+  api:
+    build:
+      context: .
+      args:
+        TAKT_BUILD_REVISION: ${TAKT_BUILD_REVISION:-}
+    ports:
+      - "8090:8090"
+    environment:
+      TAKT_STORAGE: sqlite
+      TAKT_SQLITE_PATH: data/takt_cases.db
+      # По умолчанию API требует TAKT_API_KEY на старте; для локального compose без ключа:
+      TAKT_AUTH_REQUIRED: "0"
+      # Опционально: см. README — лимит тела для POST/PUT/PATCH (МБ)
+      # TAKT_MAX_REQUEST_BODY_MB: "32"
+      # Лимит запросов/мин (см. README); метрики **takt_rate_limit_*** при **TAKT_METRICS=1**
+      # TAKT_RATE_LIMIT_PER_MIN: "300"
+      # TAKT_RATE_LIMIT_MAX_IPS: "8192"
+      # TAKT_RATE_LIMIT_IP_HEADER: "CF-Connecting-IP"
+      # Ревизия в GET /health → build_revision (см. README); при сборке: TAKT_BUILD_REVISION=$(git rev-parse HEAD) docker compose build
+      # TAKT_BUILD_REVISION: "local-dev"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8090/ready', method='HEAD'), timeout=4)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

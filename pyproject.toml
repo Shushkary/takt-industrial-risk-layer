@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "takt-industrial-risk-layer"
+version = "0.6.23"
+description = "ТАКТ MVP — второй аналитический эшелон для КИИ/АСУ ТП (Industrial Risk Layer)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "pydantic>=2.10.0",
+  "pyyaml>=6.0.2",
+  "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=9.0.3",
+  "hypothesis>=6.100.0",
+  "import-linter>=2.0",
+  "fpdf2>=2.8.0",
+  "prometheus-client>=0.21.0",
+  "pygments>=2.20.0",
+  "lxml>=6.1.0",
+  "pip-audit>=2.7.0",
+  "cyclonedx-bom>=4.1.0",
+  "schemathesis>=3.30.0",
+  "mutmut>=2.4.5",
+]
+metrics = [
+  "prometheus-client>=0.21.0",
+]
+export = [
+  "fpdf2>=2.8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.importlinter]
+root_package = "takt"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain is independent (L1)"
+type = "forbidden"
+source_modules = ["takt.domain"]
+forbidden_modules = [
+  "takt.application",
+  "takt.interface_adapters",
+  "takt.infrastructure",
+  "fastapi",
+  "uvicorn",
+  "sqlalchemy",
+  "pydantic_settings",
+]
+
+[[tool.importlinter.contracts]]
+name = "Application does not depend on delivery or infra"
+type = "forbidden"
+source_modules = ["takt.application"]
+forbidden_modules = [
+  "takt.infrastructure",
+  "takt.interface_adapters",
+  "fastapi",
+  "uvicorn",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-p no:cacheprovider"
