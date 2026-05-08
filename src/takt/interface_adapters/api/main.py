@@ -401,6 +401,17 @@ def _resolve_config_path() -> Path:
     return Path(raw).expanduser().resolve()
 
 
+def _ensure_explicit_takt_config_under_project(cfg_path: Path) -> None:
+    """При непустом `TAKT_CONFIG` файл конфигурации должен лежать внутри дерева `_ROOT`."""
+    if not os.environ.get("TAKT_CONFIG", "").strip():
+        return
+    root_res = _ROOT.resolve()
+    try:
+        cfg_path.resolve().relative_to(root_res)
+    except ValueError as exc:
+        raise ValueError(f"TAKT_CONFIG must stay under project root: {root_res}") from exc
+
+
 def _invariant_catalog_dir_for_config(cfg_path: Path) -> Path:
     """Каталог `invariants`: рядом с активным YAML или из коробки (`config/invariants` проекта)."""
     sibling = cfg_path.parent / "invariants"
@@ -1363,6 +1374,7 @@ def create_app() -> FastAPI:
     app.state.rate_limit_lock = threading.Lock()
     app.state.rate_limit_buckets = {}
     cfg_path = _resolve_config_path()
+    _ensure_explicit_takt_config_under_project(cfg_path)
     weights = load_risk_weights(cfg_path)
     apply_storage_env_overrides(weights)
     stor = weights.get("storage") if isinstance(weights.get("storage"), dict) else {}
