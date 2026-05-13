@@ -51,6 +51,11 @@
 - [ ] Release readiness card заполнена в `docs/releases/`.
 - [ ] Тег/образ собран из зафиксированного SHA.
 
+## Закрытие аудита в целевой среде
+
+- [ ] Выполнен чеклист [`docs/releases/2026-05-08_ops_handover.md`](releases/2026-05-08_ops_handover.md) (конфиг, БД, post-deploy smoke, наблюдаемость, подписи).
+- [ ] Сверено с [`docs/releases/2026-05-08_audit_closure_note.md`](releases/2026-05-08_audit_closure_note.md): локальные ворота закрыты, остаток только эксплуатационный.
+
 ## Подпись
 
 | Роль | Имя | Дата | Комментарий |

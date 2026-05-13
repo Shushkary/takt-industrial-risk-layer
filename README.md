@@ -171,6 +171,7 @@ python scripts/generate_sbom.py
 - Pre-deploy: [`docs/releases/runbook_pre_deploy.md`](docs/releases/runbook_pre_deploy.md)
 - Smoke после выкладки: [`docs/releases/runbook_smoke_checks.md`](docs/releases/runbook_smoke_checks.md)
 - Rollback: [`docs/releases/runbook_rollback.md`](docs/releases/runbook_rollback.md)
+- Закрытие аудита в среде (чеклист эксплуатации): [`docs/releases/2026-05-08_ops_handover.md`](docs/releases/2026-05-08_ops_handover.md) · сводка статуса: [`docs/releases/2026-05-08_audit_closure_note.md`](docs/releases/2026-05-08_audit_closure_note.md)
 
 Для `TAKT_FORENSIC_CRYPTO_MODE=gost_strict`:
 
