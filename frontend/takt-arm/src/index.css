@@ -1,0 +1,65 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource/jetbrains-mono/latin-400.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Дизайн-токены ТАКТ (из ТАКТ_Фронтенд_Промпт_и_Чеклист.docx) */
+:root {
+  --bg-0: #0b0f14;
+  --bg-1: #11161d;
+  --bg-2: #161c25;
+  --line: #1f2733;
+  --line-strong: #2a3441;
+  --fg-1: #e6edf3;
+  --fg-2: #9aa6b2;
+  --fg-3: #5b6473;
+  --teal-1: #2dd4bf;
+  --teal-2: #0fa89c;
+  --teal-3: #0b3d3a;
+  --amber-1: #f59e0b;
+  --amber-2: #d97706;
+  --risk-low: #2dd4bf;
+  --risk-mid: #f59e0b;
+  --risk-high: #ef4444;
+  --risk-crit: #b91c1c;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--bg-0);
+    color: var(--fg-1);
+    font-size: 13px;
+    line-height: 1.45;
+    font-family: 'Inter Variable', Inter, system-ui, sans-serif;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer utilities {
+  .takt-focus-ring:focus-visible {
+    outline: 2px solid var(--teal-1);
+    outline-offset: 2px;
+  }
+}

@@ -11,6 +11,7 @@ __pycache__/
 *$py.class
 .venv/
 venv/
+node_modules/
 .pytest_cache/
 .pytest_tmp_path_local/
 .hypothesis/
