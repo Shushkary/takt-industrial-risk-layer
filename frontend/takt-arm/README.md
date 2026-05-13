@@ -18,6 +18,8 @@ npm install
 npm run dev
 npm run build
 npm run lint
+npm run storybook
+npm run build-storybook
 ```
 
 ## Следующие шаги по чек-листу из .docx
