@@ -12,6 +12,7 @@ from takt.domain.entities.case import (
     Case,
     CaseDecisionRecord,
     CaseStatus,
+    FormalVerdictRecord,
     InvariantHitRecord,
     ManualPermit,
     Observation,
@@ -369,6 +370,7 @@ def test_sqlite_roundtrip_persists_manual_decision_remediation_and_pdf_fields(tm
             risk_class="HIGH",
             risk_score=0.81,
             created_at=t0,
+            operator_id="operator-1",
             manual_permits=[
                 ManualPermit(
                     permit_id="permit-1",
@@ -383,6 +385,18 @@ def test_sqlite_roundtrip_persists_manual_decision_remediation_and_pdf_fields(tm
                     rationale="planned work",
                     counterfactual="would be illegitimate otherwise",
                     note="ok",
+                )
+            ],
+            formal_verdict_records=[
+                FormalVerdictRecord(
+                    ts=t0,
+                    actor="operator-1",
+                    prev="неопределённое",
+                    next="легитимное",
+                    score=0.85,
+                    source="manual_permit",
+                    permit_id="permit-1",
+                    reason="planned work",
                 )
             ],
             decision_records=[
@@ -417,7 +431,10 @@ def test_sqlite_roundtrip_persists_manual_decision_remediation_and_pdf_fields(tm
         store.save(case)
         loaded = store.get("case-full-1")
         assert loaded is not None
+        assert loaded.operator_id == "operator-1"
         assert loaded.manual_permits and loaded.manual_permits[0].work_order_number == "WO-1"
+        assert loaded.formal_verdict_records and loaded.formal_verdict_records[0].next == "легитимное"
+        assert loaded.formal_verdict_records[0].score == 0.85
         assert loaded.decision_records and loaded.decision_records[0].reason == "manual review"
         assert loaded.remediation_attempts and loaded.remediation_attempts[0].readiness_after is True
         assert loaded.pdf_last_sha256 == "a" * 64

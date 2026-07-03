@@ -361,3 +361,26 @@ def test_db_migrate_v6_adds_raw_evidence_and_append_only_triggers(tmp_path) -> N
             conn2.execute("UPDATE operation_audit_ledger SET payload_json='tamper' WHERE stream_key='decision:c-1'")
     finally:
         conn2.close()
+
+
+def test_db_migrate_v8_adds_recent_events_table(tmp_path) -> None:
+    db = tmp_path / "migrate-v8.sqlite"
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute("CREATE TABLE app_metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)")
+        conn.execute("INSERT INTO app_metadata (key, value) VALUES ('schema_version', '7')")
+        conn.commit()
+    finally:
+        conn.close()
+
+    rc = run(db)
+    assert rc == 0
+
+    conn2 = sqlite3.connect(str(db))
+    try:
+        cols = {str(row[1]) for row in conn2.execute("PRAGMA table_info(recent_events)").fetchall()}
+        assert {"event_id", "observed_at", "payload_json", "inserted_at"}.issubset(cols)
+        version = conn2.execute("SELECT value FROM app_metadata WHERE key='schema_version'").fetchone()[0]
+        assert version == "8"
+    finally:
+        conn2.close()

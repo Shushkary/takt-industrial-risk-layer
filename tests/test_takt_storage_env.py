@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from takt.infrastructure.config.settings_helpers import apply_storage_env_overrides
 from takt.infrastructure.config.weights_loader import load_risk_weights
+from takt.infrastructure.stores.sqlite_store import CURRENT_DB_SCHEMA_VERSION
 from takt.interface_adapters.api.main import create_app
 
 
@@ -54,7 +55,7 @@ def test_create_app_takt_storage_forces_sqlite(tmp_path: Path, monkeypatch) -> N
         h = c.get("/health").json()
         assert h["case_storage"] == "sqlite"
         assert h["expected_behavior_storage"] == "sqlite"
-        assert h["sqlite_schema_version"] == 6
+        assert h["sqlite_schema_version"] == CURRENT_DB_SCHEMA_VERSION
         assert h["sqlite_busy_timeout_ms"] == 5000
         assert h["takt_storage_env_set"] is True
         assert h["takt_sqlite_path_env_set"] is True

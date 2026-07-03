@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from fastapi.testclient import TestClient
 
 from takt.infrastructure.config.weights_loader import load_risk_weights
+from takt.interface_adapters.api.schemas.case_actions import FormalVerdictConfirmationBody
 from takt.interface_adapters.api.main import create_app
+from takt.infrastructure.stores.sqlite_store import CURRENT_DB_SCHEMA_VERSION
 
 
 def test_health_reports_sqlite_when_configured(tmp_path: Path, monkeypatch) -> None:
@@ -22,7 +25,7 @@ def test_health_reports_sqlite_when_configured(tmp_path: Path, monkeypatch) -> N
         h = client.get("/health").json()
         assert h["case_storage"] == "sqlite"
         assert h["expected_behavior_storage"] == "sqlite"
-        assert h["sqlite_schema_version"] == 6
+        assert h["sqlite_schema_version"] == CURRENT_DB_SCHEMA_VERSION
         assert h["sqlite_busy_timeout_ms"] == 5000
         assert client.get("/ready").status_code == 200
 
@@ -231,6 +234,71 @@ def test_sqlite_operation_ledger_verify_for_import_flow(tmp_path: Path, monkeypa
         body = verified.json()
         assert body["ok"] is True
         assert body["checked_entries"] >= 1
+
+
+def test_sqlite_operation_ledger_verify_for_hitl_actions(tmp_path: Path, monkeypatch) -> None:
+    db = tmp_path / "hitl-ledger.sqlite"
+
+    def fake_load(p):
+        d = load_risk_weights(p)
+        d["storage"] = {"backend": "sqlite", "sqlite_path": str(db)}
+        return d
+
+    monkeypatch.setattr("takt.interface_adapters.api.main.load_risk_weights", fake_load)
+    with TestClient(create_app()) as client:
+        created = client.post(
+            "/assess",
+            json={
+                "observed_at": "2026-05-11T10:00:00+00:00",
+                "operation": "WRITE_COIL",
+                "asset_id": "plc-hitl-ledger",
+                "operator_id": "operator-1",
+            },
+        )
+        assert created.status_code == 200
+        cid = created.json()["case_id"]
+        assert client.post(f"/cases/{cid}/operator-actions/viewed", json={"note": "opened"}).status_code == 200
+        assert (
+            client.post(
+                f"/cases/{cid}/operator-actions/additional-review",
+                json={"reason": "shift supervisor review"},
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/cases/{cid}/manual-permits",
+                json={
+                    "work_order_number": "WO-HITL-1",
+                    "asset_id": "plc-hitl-ledger",
+                    "operation": "WRITE_COIL",
+                    "executor": "operator-1",
+                    "approver": "lead",
+                    "valid_from": "2026-05-11T09:00:00+00:00",
+                    "valid_to": "2026-05-11T11:00:00+00:00",
+                    "document_status": "approved",
+                },
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/cases/{cid}/formal-verdict/confirmation",
+                json={
+                    "verdict": get_args(FormalVerdictConfirmationBody.model_fields["verdict"].annotation)[0],
+                    "confidence": 0.9,
+                    "reason": "operator confirmed permit context",
+                },
+            ).status_code
+            == 200
+        )
+
+        for stream in (f"operator_action:{cid}", f"manual_permit:{cid}", f"formal_verdict:{cid}"):
+            verified = client.get("/audit-ledger/operations/verify", params={"stream_key": stream})
+            assert verified.status_code == 200
+            body = verified.json()
+            assert body["ok"] is True
+            assert body["checked_entries"] >= 1
 
 
 def test_audit_engagements_survive_new_app_instance_with_sqlite(tmp_path: Path, monkeypatch) -> None:

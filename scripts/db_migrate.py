@@ -5,7 +5,7 @@ import argparse
 import sqlite3
 from pathlib import Path
 
-LATEST_SCHEMA_VERSION = 6
+LATEST_SCHEMA_VERSION = 8
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
@@ -140,6 +140,33 @@ def _apply_to_v6(conn: sqlite3.Connection) -> None:
         )
 
 
+def _apply_to_v7(conn: sqlite3.Connection) -> None:
+    cols = {str(row[1]) for row in conn.execute("PRAGMA table_info(cases)").fetchall()}
+    if cols and "formal_verdict_records" not in cols:
+        conn.execute("ALTER TABLE cases ADD COLUMN formal_verdict_records TEXT NOT NULL DEFAULT '[]'")
+
+
+def _apply_to_v8(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS recent_events (
+          seq INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_id TEXT NOT NULL,
+          observed_at TEXT NOT NULL,
+          source TEXT NOT NULL,
+          protocol TEXT NOT NULL,
+          operation TEXT NOT NULL,
+          payload_size INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          operator_id TEXT NOT NULL DEFAULT '',
+          inserted_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_recent_events_seq
+          ON recent_events (seq DESC);
+        """
+    )
+
+
 def run(db_path: Path) -> int:
     conn = _connect(db_path)
     try:
@@ -160,6 +187,12 @@ def run(db_path: Path) -> int:
         if current < 6:
             _apply_to_v6(conn)
             current = 6
+        if current < 7:
+            _apply_to_v7(conn)
+            current = 7
+        if current < 8:
+            _apply_to_v8(conn)
+            current = 8
         _set_schema_version(conn, current)
         conn.commit()
         print(f"schema_version={current}")
