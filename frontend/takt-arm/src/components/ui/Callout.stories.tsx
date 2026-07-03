@@ -2,21 +2,21 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { Callout } from './Callout'
 
 const meta = {
-  title: 'UI/Callout',
+  title: 'Интерфейс/Сообщение',
   component: Callout,
 } satisfies Meta<typeof Callout>
 
 export default meta
 type Story = StoryObj<typeof meta>
 
-export const Info: Story = {
-  args: { title: 'Информация', tone: 'info', children: 'Контур изолирован; внешние вызовы из UI запрещены политикой.' },
+export const Информация: Story = {
+  args: { title: 'Информация', tone: 'info', children: 'Контур изолирован; внешние вызовы из интерфейса запрещены политикой.' },
 }
 
-export const Warning: Story = {
-  args: { title: 'Внимание', tone: 'warning', children: 'Часть источников недоступна — режим DEGRADED, пересчёт риска активен.' },
+export const Внимание: Story = {
+  args: { title: 'Внимание', tone: 'warning', children: 'Часть источников недоступна; режим деградации, пересчёт риска активен.' },
 }
 
-export const Danger: Story = {
-  args: { title: 'Критично', tone: 'danger', children: 'Порог Кзи превышен; требуется классификация оператором.' },
+export const Критично: Story = {
+  args: { title: 'Критично', tone: 'danger', children: 'Порог КЗИ превышен; требуется классификация оператором.' },
 }
