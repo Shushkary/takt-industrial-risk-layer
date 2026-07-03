@@ -141,5 +141,22 @@ python scripts/build_release_package.py --db "<PATH_TO_DB>" --apply-migrate --st
 Проверка целостности пакета:
 
 ```powershell
+python scripts/verify_release_package.py "dist/release-package-<UTCSTAMP>.zip"
 python scripts/verify_release_package.py --package-dir "dist/release-package-<UTCSTAMP>"
+python scripts/verify_release_package.py --package-zip "dist/release-package-<UTCSTAMP>.zip"
+```
+
+РџСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё СѓР¶РµСЃС‚РѕС‡РёС‚Рµ zip-Р»РёРјРёС‚С‹ РЅР° РїСЂРёС‘РјРєРµ:
+
+```powershell
+python scripts/verify_release_package.py --package-zip "dist/release-package-<UTCSTAMP>.zip" --max-zip-files 1000 --max-zip-uncompressed-bytes 262144000 --max-zip-compression-ratio 100
+```
+
+РўРµ Р¶Рµ Р»РёРјРёС‚С‹ РјРѕР¶РЅРѕ Р·Р°РґР°С‚СЊ РєР°Рє env-defaults РґР»СЏ CI/ops; CLI-С„Р»Р°РіРё РёРјРµСЋС‚ РїСЂРёРѕСЂРёС‚РµС‚:
+
+```powershell
+$env:TAKT_RELEASE_VERIFY_MAX_ZIP_FILES="1000"
+$env:TAKT_RELEASE_VERIFY_MAX_ZIP_UNCOMPRESSED_BYTES="262144000"
+$env:TAKT_RELEASE_VERIFY_MAX_ZIP_COMPRESSION_RATIO="100"
+python scripts/verify_release_package.py "dist/release-package-<UTCSTAMP>.zip"
 ```

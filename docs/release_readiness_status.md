@@ -25,6 +25,8 @@
 | Release gate (CI) | Готово | `release-gates`: SBOM, monitoring, ledger CLI fixture, pip-audit, Schemathesis, mutmut; `release-evidence-dry-run`: полный локальный smoke (`close_operational_tails` → флаги `gossopka_official_ok` / forensic / audit) + упаковка и verify манифеста |
 | SQLite migrations / backup | Готово | `scripts/db_migrate.py`, `scripts/db_backup.py`; тесты |
 | Audit immutability | Готово (SQLite) | Append-only `case_audit_ledger`, `operation_audit_ledger`; API verify; CLI `scripts/verify_audit_ledger.py`, `scripts/verify_operation_ledger.py` |
+| Compliance mode | Готово базово | `GET /compliance/mode` показывает режим `standard`/`compliance`, границы продукта, отсутствие СКЗИ, отсутствие активного управления, ручное подтверждение и Service Desk контекст |
+| Product boundary | Готово базово | `docs/product_boundary.md`; release-gate проверяет отсутствие активного управления в API/UI и отсутствие криптографии в домене |
 
 ---
 
@@ -35,6 +37,7 @@
 | КЭП / ГОСТ / СКЗИ | Контракт HTTP + верификация; не встроен криптопровайдер | Реальный сертифицированный сервис подписи/проверки, согласование формата `signature` и ответа verify |
 | GosSOPKA production | Внутренний контракт + transport envelope | Официальная схема и транспорт оператора (СМЭВ/шлюз и т.д.), приёмка по их ТЗ |
 | Audit ledger | Полная цепочка на SQLite; in-memory без ledger | Для non-SQLite: либо документировать ограничение, либо вынести ledger в отдельное хранилище |
+| Сертификационный риск-менеджмент | Roadmap создан | `docs/certification_risk_roadmap.md`; нужен владелец трека, бюджет и pre-assessment с аккредитованной лабораторией |
 
 ---
 
@@ -46,6 +49,7 @@
 4. **Операционка**: импорт правил Prometheus в реальный Alertmanager; импорт dashboard в Grafana; datasource variable `DS_PROMETHEUS`.
 5. **Резервное копирование**: внедрить расписание `scripts/db_backup.py` и политику хранения.
 6. **Документация эксплуатации**: переменные окружения для подписи, path БД, version схемы после `db_migrate`, и smoke gates `gossopka_official_ok=true` + `forensic_signing_unavailable=false` + `forensic_verify_ok=true` + `audit_engagement_api_ok=true`.
+7. **Сертификационный трек**: назначить владельца, заложить бюджет, передать `docs/certification_risk_roadmap.md` и `docs/product_boundary.md` на pre-assessment в аккредитованную лабораторию.
 
 ---
 
@@ -58,6 +62,7 @@
 - Monitoring: `deploy/monitoring/grafana/`, `deploy/monitoring/prometheus/`
 - Миграции и проверка ledger: `scripts/db_migrate.py`, `scripts/verify_audit_ledger.py`, `scripts/verify_operation_ledger.py`
 - CI: `.github/workflows/ci.yml` (jobs `release-gates`, `release-evidence-dry-run`)
+- Сертификационный риск-менеджмент: `docs/certification_risk_roadmap.md`
 
 ---
 
