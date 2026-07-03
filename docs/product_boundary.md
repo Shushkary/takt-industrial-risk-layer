@@ -68,8 +68,8 @@
 
 - архитектурная схема L1-L5;
 - описание границ продукта;
-- модель угроз и ограничений;
-- матрица 26 инвариантов;
+- модель угроз и ограничений: [`docs/threat_model.md`](threat_model.md);
+- матрица 26 инвариантов: [`docs/invariant_matrix.md`](invariant_matrix.md);
 - тесты true positive / false positive;
 - описание аудиторского следа;
 - описание `partial_observability`;

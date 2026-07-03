@@ -107,5 +107,5 @@ readinessProbe:
 
 План спринтов v0.7 (промпты, DoD, зависимости): [`docs/sprint_prompts_checklists.md`](docs/sprint_prompts_checklists.md).
 Аудит и статус ремедиации: [`AUDIT_REPORT.md`](AUDIT_REPORT.md), [`docs/backend_remediation_sprint_plan.md`](docs/backend_remediation_sprint_plan.md), [`docs/frontend_api_alignment_sprint_plan.md`](docs/frontend_api_alignment_sprint_plan.md).
-Сертификационный трек (ФСТЭК/ФСБ, отдельно от MVP-готовности): [`docs/certification_risk_roadmap.md`](docs/certification_risk_roadmap.md).
+Сертификационный трек (ФСТЭК/ФСБ, отдельно от MVP-готовности): [`docs/certification_risk_roadmap.md`](docs/certification_risk_roadmap.md), модель угроз [`docs/threat_model.md`](docs/threat_model.md), матрица инвариантов [`docs/invariant_matrix.md`](docs/invariant_matrix.md).
 Релизные документы: [`docs/release_checklist.md`](docs/release_checklist.md), [`docs/release_readiness_status.md`](docs/release_readiness_status.md), [`docs/release_readiness_template.md`](docs/release_readiness_template.md), [`docs/backend_release_readiness.md`](docs/backend_release_readiness.md).
