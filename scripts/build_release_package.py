@@ -46,6 +46,14 @@ def _manifest_package_dir(out_dir: Path, repo_root: Path) -> str:
         return str(out_dir)
 
 
+def _required_release_evidence(root: Path) -> list[Path]:
+    return [
+        root / "dist" / "sbom.cyclonedx.json",
+        root / "frontend" / "takt-arm" / "dist" / "frontend-sbom.cyclonedx.json",
+        root / "frontend" / "takt-arm" / "nginx" / "csp.conf",
+    ]
+
+
 def run(
     db_path: Path,
     *,
@@ -78,19 +86,25 @@ def run(
         print("release_package_status=FAILED")
         return rc
 
-    files_to_copy = [
+    optional_files = [
         readiness,
         root / "docs" / "releases" / "runbook_pre_deploy.md",
         root / "docs" / "releases" / "runbook_smoke_checks.md",
         root / "docs" / "releases" / "runbook_rollback.md",
-        root / "dist" / "sbom.cyclonedx.json",
         root / "deploy" / "monitoring" / "grafana" / "takt-business-observability-dashboard.json",
         root / "deploy" / "monitoring" / "prometheus" / "alerts.business-observability.rules.yml",
         root / "scripts" / "verify_audit_ledger.py",
         root / "scripts" / "verify_operation_ledger.py",
     ]
+    required_release_evidence = _required_release_evidence(root)
+    missing_required = [str(src.relative_to(root)) for src in required_release_evidence if not src.exists()]
+    if strict and missing_required:
+        print("release_package_status=FAILED")
+        print("reason=missing_required_release_evidence:" + ",".join(missing_required))
+        return 2
+
     copied: list[str] = []
-    for src in files_to_copy:
+    for src in optional_files + required_release_evidence:
         if not src.exists():
             continue
         dst = out_dir / src.name

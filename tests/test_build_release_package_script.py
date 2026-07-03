@@ -25,6 +25,16 @@ def _load_manifest_package_dir():
     return module._manifest_package_dir
 
 
+def _load_required_release_evidence():
+    root = Path(__file__).resolve().parents[1]
+    script_path = root / "scripts" / "build_release_package.py"
+    spec = importlib.util.spec_from_file_location("build_pkg_required_evidence", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module._required_release_evidence
+
+
 def test_manifest_package_dir_is_repo_relative_when_under_repo() -> None:
     repo = Path(__file__).resolve().parents[1]
     fn = _load_manifest_package_dir()
@@ -36,6 +46,16 @@ def test_manifest_package_dir_fallback_when_outside_repo() -> None:
     fn = _load_manifest_package_dir()
     outside = repo.parent / "_outside_release_pkg_demo"
     assert fn(outside, repo) == str(outside)
+
+
+def test_required_release_evidence_includes_backend_and_frontend_artifacts(tmp_path: Path) -> None:
+    fn = _load_required_release_evidence()
+    required = [path.relative_to(tmp_path).as_posix() for path in fn(tmp_path)]
+    assert required == [
+        "dist/sbom.cyclonedx.json",
+        "frontend/takt-arm/dist/frontend-sbom.cyclonedx.json",
+        "frontend/takt-arm/nginx/csp.conf",
+    ]
 
 
 def test_build_release_package_generates_bundle_and_manifest(tmp_path: Path) -> None:

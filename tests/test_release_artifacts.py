@@ -41,12 +41,96 @@ def _iter_text_files(path: Path):
 
 
 def test_release_readiness_artifacts_exist() -> None:
+    assert (ROOT / "docs" / "backend_release_readiness.md").is_file()
     assert (ROOT / "docs" / "release_checklist.md").is_file()
     assert (ROOT / "docs" / "release_readiness_template.md").is_file()
+    assert (ROOT / "docs" / "certification_risk_roadmap.md").is_file()
     assert (ROOT / "docs" / "releases").is_dir()
     assert (ROOT / "migrations" / "0001_init.sql").is_file()
     assert (ROOT / "migrations" / "0005_operation_audit_ledger_remediation.sql").is_file()
     assert (ROOT / "migrations" / "0006_raw_evidence_append_only.sql").is_file()
+
+
+def test_backend_release_readiness_records_s8_gate_status() -> None:
+    text = (ROOT / "docs" / "backend_release_readiness.md").read_text(encoding="utf-8")
+    required = (
+        "Backend status: ready for frontend integration against the real API.",
+        "S0-S8 backend remediation gate",
+        "architecture guard",
+        "OpenAPI snapshot",
+        "Schemathesis",
+        "backtest regression",
+        "domain purity policy",
+        "no active equipment control",
+        "no SCZI scope expansion",
+        "human remains in the loop",
+        "release evidence",
+        "SBOM",
+    )
+    missing = [phrase for phrase in required if phrase not in text]
+    assert missing == []
+
+
+def test_root_and_frontend_readmes_match_release_gates() -> None:
+    root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    frontend_readme = (ROOT / "frontend" / "takt-arm" / "README.md").read_text(encoding="utf-8")
+    required_root = (
+        "frontend-ci",
+        "npm run test:frontend",
+        "frontend evidence dry run",
+        "frontend SBOM",
+        "build_release_package",
+    )
+    required_frontend = (
+        "44 Vitest/MSW/Testing Library unit tests",
+        "frontend CycloneDX SBOM",
+        "Playwright e2e scenarios",
+        "Runtime API configuration remains limited to `VITE_TAKT_API_BASE_URL` and `VITE_TAKT_API_KEY`",
+    )
+    assert [phrase for phrase in required_root if phrase not in root_readme] == []
+    assert [phrase for phrase in required_frontend if phrase not in frontend_readme] == []
+
+
+def test_ci_defines_backend_release_gate_jobs() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    required = (
+        "release-gates:",
+        "release-evidence-dry-run:",
+        "python -m pytest -q",
+        "lint-imports --config pyproject.toml",
+        "python scripts/generate_sbom.py",
+        "pip-audit",
+        "python -m schemathesis run",
+        "http://127.0.0.1:8000/openapi.json",
+        "python scripts/verify_audit_ledger.py",
+        "python scripts/verify_operation_ledger.py",
+        "python scripts/release_finalize.py",
+        "python scripts/build_release_package.py",
+        "node-version: \"22\"",
+        "cache-dependency-path: frontend/takt-arm/package-lock.json",
+        "working-directory: frontend/takt-arm",
+        "npm ci",
+        "npm run test:frontend",
+    )
+    missing = [phrase for phrase in required if phrase not in workflow]
+    assert missing == []
+
+
+def test_ci_defines_frontend_release_gate_job() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    required = (
+        "frontend-ci:",
+        "actions/setup-node@v4",
+        "cache-dependency-path: frontend/takt-arm/package-lock.json",
+        "working-directory: frontend/takt-arm",
+        "npm ci",
+        "npm run lint",
+        "npm run test:frontend",
+        "npm run audit:frontend",
+        "npm run build-storybook",
+    )
+    missing = [phrase for phrase in required if phrase not in workflow]
+    assert missing == []
 
 
 def test_dockerfile_pins_single_worker_for_process_local_event_window() -> None:
@@ -64,12 +148,142 @@ def test_source_docs_and_ci_do_not_reference_local_machine_paths() -> None:
     assert offenders == []
 
 
+def test_product_boundary_documents_no_crypto_and_no_active_control() -> None:
+    text = (ROOT / "docs" / "product_boundary.md").read_text(encoding="utf-8")
+    required = (
+        "ТАКТ не является СКЗИ",
+        "ТАКТ не является системой активного управления оборудованием",
+        "ТАКТ не выполняет блокировку, останов, переключение, перезагрузку или команды на ПЛК",
+        "API и фронтенд не должны содержать endpoint, кнопку или сценарий активного управления оборудованием",
+        "Приказ ФСТЭК №239",
+    )
+    missing = [phrase for phrase in required if phrase not in text]
+    assert missing == []
+
+
+def test_certification_risk_roadmap_covers_fstec_fsb_budget_and_lab() -> None:
+    text = (ROOT / "docs" / "certification_risk_roadmap.md").read_text(encoding="utf-8")
+    required = (
+        "Приказа ФСТЭК №239",
+        "аккредитованной лабораторией",
+        "ТАКТ MVP не должен позиционироваться как СКЗИ",
+        "Бюджетные строки",
+        "Риск-реестр",
+        "Вопросы к лаборатории",
+        "MVP-готовность и сертификационную готовность",
+    )
+    missing = [phrase for phrase in required if phrase not in text]
+    assert missing == []
+
+
+def test_api_and_frontend_do_not_expose_active_control_commands() -> None:
+    checked_roots = [
+        ROOT / "src" / "takt" / "interface_adapters" / "api",
+        ROOT / "frontend" / "takt-arm" / "src",
+    ]
+    forbidden_phrases = (
+        "отключить узел",
+        "заблокировать учетную запись",
+        "заблокировать учётную запись",
+        "остановить ПЛК",
+        "перезагрузить ПЛК",
+        "переключить оборудование",
+        "отправить команду",
+        "shutdown plc",
+        "stop plc",
+        "disable node",
+        "block account",
+    )
+    offenders: list[str] = []
+    for root in checked_roots:
+        for path in _iter_text_files(root):
+            text = path.read_text(encoding="utf-8", errors="ignore").lower()
+            if any(phrase.lower() in text for phrase in forbidden_phrases):
+                offenders.append(str(path.relative_to(ROOT)))
+    assert offenders == []
+
+
 def test_sbom_has_no_local_file_references_when_present() -> None:
     sbom = ROOT / "dist" / "sbom.cyclonedx.json"
     if not sbom.is_file():
         return
     assert sbom.stat().st_size > 0
     payload = json.loads(sbom.read_text(encoding="utf-8"))
+    file_refs = [
+        ref.get("url")
+        for component in payload.get("components", [])
+        for ref in component.get("externalReferences", [])
+        if isinstance(ref, dict) and str(ref.get("url", "")).lower().startswith("file:")
+    ]
+    assert file_refs == []
+
+
+def test_frontend_release_artifact_gate_is_defined() -> None:
+    package = json.loads((ROOT / "frontend" / "takt-arm" / "package.json").read_text(encoding="utf-8"))
+    scripts = package["scripts"]
+    assert package["engines"]["node"] == ">=20.10"
+    assert (ROOT / "frontend" / "takt-arm" / ".nvmrc").read_text(encoding="utf-8").strip() == "22"
+    assert "check:workspace-boundary" in scripts["test:frontend"]
+    assert "check:api-client" in scripts["test:frontend"]
+    assert "test:unit" in scripts["test:frontend"]
+    assert "test:e2e" in scripts["test:frontend"]
+    assert "sbom:frontend" in scripts["test:frontend"]
+    assert "check:release-artifacts" in scripts["test:frontend"]
+    assert scripts["test:unit:vitest"] == "vitest run"
+    assert scripts["test:e2e:playwright"] == "playwright test"
+    assert scripts["audit:frontend"] == "npm audit --omit=dev --audit-level=high"
+    for dependency in ("vitest", "@testing-library/react", "@testing-library/jest-dom", "msw", "@playwright/test"):
+        assert dependency in package["devDependencies"]
+    assert (ROOT / "frontend" / "takt-arm" / "scripts" / "generate-frontend-sbom.mjs").is_file()
+    assert (ROOT / "frontend" / "takt-arm" / "scripts" / "check-frontend-release-artifacts.mjs").is_file()
+    assert (ROOT / "frontend" / "takt-arm" / "nginx" / "csp.conf").is_file()
+    playwright_config = ROOT / "frontend" / "takt-arm" / "playwright.config.ts"
+    playwright_spec = ROOT / "frontend" / "takt-arm" / "e2e" / "app-shell.spec.ts"
+    assert playwright_config.is_file()
+    assert playwright_spec.is_file()
+    assert playwright_spec.read_text(encoding="utf-8").count("test(") >= 3
+    unit_test_sources = [
+        ROOT / "frontend" / "takt-arm" / "src" / "app" / "taktApi.test.ts",
+        ROOT / "frontend" / "takt-arm" / "src" / "app" / "format.test.ts",
+        ROOT / "frontend" / "takt-arm" / "src" / "components" / "ui" / "DataTable.test.tsx",
+        ROOT / "frontend" / "takt-arm" / "src" / "layout" / "AppShell.test.tsx",
+        ROOT / "frontend" / "takt-arm" / "src" / "pages" / "CaseDetail.test.tsx",
+    ]
+    unit_test_count = sum(path.read_text(encoding="utf-8").count("it(") + path.read_text(encoding="utf-8").count("it.each(") for path in unit_test_sources)
+    assert unit_test_count >= 30
+    frontend_sources = (
+        ROOT / "frontend" / "takt-arm" / "src" / "components" / "ui" / "RiskBadge.tsx",
+        ROOT / "frontend" / "takt-arm" / "src" / "pages" / "CaseDetail.tsx",
+        ROOT / "frontend" / "takt-arm" / "src" / "pages" / "IncidentQueue.tsx",
+        ROOT / "frontend" / "takt-arm" / "src" / "pages" / "SegmentOverview.tsx",
+        ROOT / "frontend" / "takt-arm" / "src" / "pages" / "TopologyMap.tsx",
+    )
+    assert all(".replace('.', ',')" not in path.read_text(encoding="utf-8") for path in frontend_sources)
+
+
+def test_frontend_csp_documents_static_bundle_boundary() -> None:
+    csp = (ROOT / "frontend" / "takt-arm" / "nginx" / "csp.conf").read_text(encoding="utf-8")
+    required = (
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "connect-src 'self'",
+        "frame-ancestors 'none'",
+        'X-Frame-Options "DENY"',
+        'X-Content-Type-Options "nosniff"',
+        'Referrer-Policy "no-referrer"',
+    )
+    missing = [phrase for phrase in required if phrase not in csp]
+    assert missing == []
+
+
+def test_frontend_sbom_has_no_local_file_references_when_present() -> None:
+    sbom = ROOT / "frontend" / "takt-arm" / "dist" / "frontend-sbom.cyclonedx.json"
+    if not sbom.is_file():
+        return
+    assert sbom.stat().st_size > 0
+    payload = json.loads(sbom.read_text(encoding="utf-8"))
+    assert payload["bomFormat"] == "CycloneDX"
     file_refs = [
         ref.get("url")
         for component in payload.get("components", [])
