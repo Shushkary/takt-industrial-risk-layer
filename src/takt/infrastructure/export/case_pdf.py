@@ -46,6 +46,8 @@ def render_case_pdf(
     ts = generated_at or datetime.now()
 
     pdf = FPDF()
+    if hasattr(pdf, "set_creation_date"):
+        pdf.set_creation_date(ts)
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 

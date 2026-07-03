@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from takt.domain.entities.case import Case
 from takt.domain.invariants.catalog import invariant_titles_by_id
+from takt.domain.services.forensic_verdict import case_forensic_verdict
 
 
 def _utc_iso(dt: datetime) -> str:
@@ -25,6 +26,19 @@ def _incident_category(case: Case) -> str:
     if {"physical_invariant_breach", "conflict_logic", "blind_command"} & hits:
         return "industrial_process_disruption_risk"
     return "security_event_requiring_triage"
+
+
+def _action_class(operation: str) -> str:
+    op = operation.strip().upper()
+    if any(token in op for token in ("WRITE", "COIL", "SET", "START", "STOP", "RESET", "OPEN", "CLOSE")):
+        return "управляющее воздействие"
+    if any(token in op for token in ("ADMIN", "LOGIN", "USER", "CONFIG", "FIRMWARE")):
+        return "администрирование"
+    if any(token in op for token in ("READ", "POLL", "GET", "STATUS")):
+        return "чтение/опрос"
+    if any(token in op for token in ("NETFLOW", "IPFIX", "PING", "SNMP", "SYSLOG")):
+        return "сетевое событие"
+    return "общее действие"
 
 
 class _GossopkaInvariantHit(BaseModel):
@@ -139,6 +153,43 @@ def _signature_status_default() -> str:
     return "unsigned_mvp"
 
 
+def _organizational_document_payload(permit) -> dict[str, object]:  # noqa: ANN001
+    doc = permit.organizational_document()
+    return {
+        "document_id": doc.document_id,
+        "document_type": doc.document_type,
+        "asset_id": doc.asset_id,
+        "operation": doc.operation,
+        "action_class": doc.action_class,
+        "executor": doc.executor,
+        "approver": doc.approver,
+        "valid_from": doc.valid_from,
+        "valid_to": doc.valid_to,
+        "document_status": doc.document_status,
+        "restrictions": doc.restrictions,
+        "checksum_algorithm": doc.checksum_algorithm,
+        "checksum": doc.checksum,
+    }
+
+
+def _manual_permit_payload(permit) -> dict[str, object]:  # noqa: ANN001
+    return {
+        "work_order_number": permit.work_order_number,
+        "actor": permit.actor,
+        "created_at": _utc_iso(permit.created_at),
+        "asset_id": permit.asset_id,
+        "operation": permit.operation,
+        "action_class": permit.action_class,
+        "verdict": permit.verdict,
+        "confidence": permit.confidence,
+        "rationale": permit.rationale,
+        "counterfactual": permit.counterfactual,
+        "organizational_context_sha256": permit.organizational_context_sha256,
+        "organizational_context": _organizational_document_payload(permit),
+        "note": permit.note,
+    }
+
+
 def case_to_gossopka_card(
     case: Case,
     *,
@@ -151,19 +202,9 @@ def case_to_gossopka_card(
     the fields required to later map the Risk Case into an operator's official ГосСОПКА workflow.
     """
     titles = invariant_titles_by_id()
+    forensic_verdict = case_forensic_verdict(case)
     manual_permits = [
-        {
-            "work_order_number": p.work_order_number,
-            "actor": p.actor,
-            "created_at": _utc_iso(p.created_at),
-            "asset_id": p.asset_id,
-            "operation": p.operation,
-            "verdict": p.verdict,
-            "confidence": p.confidence,
-            "rationale": p.rationale,
-            "counterfactual": p.counterfactual,
-            "note": p.note,
-        }
+        _manual_permit_payload(p)
         for p in case.manual_permits
     ]
     card = {
@@ -178,6 +219,14 @@ def case_to_gossopka_card(
         "incident": {
             "case_id": case.case_id,
             "status": case.status.value,
+            "formal_verdict": forensic_verdict.value,
+            "context_match": {
+                "matched": forensic_verdict.match.matched,
+                "score": forensic_verdict.match.score,
+                "reasons": list(forensic_verdict.match.reasons),
+                "source": forensic_verdict.match.source,
+            },
+            "counterfactual": forensic_verdict.counterfactual,
             "category": _incident_category(case),
             "risk_class": case.risk_class,
             "risk_score": case.risk_score,
@@ -188,8 +237,10 @@ def case_to_gossopka_card(
         "critical_information_infrastructure": {
             "object_id": case.primary_asset_id,
             "asset_id": case.primary_asset_id,
+            "operator_id": case.operator_id,
             "last_event_source": case.last_event_source,
             "trigger_operation": case.trigger_operation,
+            "action_class": _action_class(case.trigger_operation),
         },
         "evidence": {
             "event_ids": list(case.normalized_event_ids),
@@ -209,6 +260,7 @@ def case_to_gossopka_card(
         "operator_actions": {
             "manual_permit_count": len(manual_permits),
             "latest_manual_permit_verdict": manual_permits[-1]["verdict"] if manual_permits else "",
+            "formal_verdict": forensic_verdict.value,
             "remediation_attempts": [
                 {
                     "attempt_id": a.attempt_id,

@@ -15,12 +15,17 @@ from takt.domain.entities.forensic import (
     ForensicBundleVerificationIssue,
     ForensicEvidenceItem,
 )
+from takt.domain.services.forensic_verdict import case_forensic_verdict
 from takt.infrastructure.export.gossopka import case_to_gossopka_card
 from takt.infrastructure.export.siem_webhook import case_to_siem_payload
 from takt.infrastructure.security.root_hash_signature import RootHashSignatureAdapter
 
 
 _ZIP_TS = (1980, 1, 1, 0, 0, 0)
+_VERIFY_MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
+_VERIFY_MAX_FILES = 128
+_VERIFY_MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+_VERIFY_MAX_COMPRESSION_RATIO = 100.0
 
 
 def _sha256_hex(data: bytes) -> str:
@@ -44,6 +49,7 @@ def _zip_write(zf: ZipFile, path: str, data: bytes) -> None:
 
 
 def _case_payload(case: Case) -> dict[str, object]:
+    forensic_verdict = case_forensic_verdict(case)
     return {
         "case_id": case.case_id,
         "status": case.status.value,
@@ -54,31 +60,35 @@ def _case_payload(case: Case) -> dict[str, object]:
         "event_ids": list(case.normalized_event_ids),
         "xai_summary": case.xai_summary,
         "audit_log": list(case.audit_log),
+        "operator_action_history": _operator_action_history(case.audit_log),
+        "formal_verdict_history": _formal_verdict_records_payload(case)
+        or _formal_verdict_history(case.audit_log),
+        "formal_verdict_records": _formal_verdict_records_payload(case),
         "fingerprint": case.burst_fingerprint,
         "primary_asset_id": case.primary_asset_id,
         "trigger_operation": case.trigger_operation,
+        "operator_id": case.operator_id,
+        "action_class": _action_class(case.trigger_operation),
         "invariant_hits": list(case.invariant_hits),
         "observations": [
             {"source": o.source, "ingest_trust": o.ingest_trust, "event_ids": list(o.event_ids)}
             for o in case.observations
         ],
         "manual_permits": [
-            {
-                "permit_id": p.permit_id,
-                "case_id": p.case_id,
-                "work_order_number": p.work_order_number,
-                "actor": p.actor,
-                "created_at": _utc_iso(p.created_at),
-                "asset_id": p.asset_id,
-                "operation": p.operation,
-                "verdict": p.verdict,
-                "confidence": p.confidence,
-                "rationale": p.rationale,
-                "counterfactual": p.counterfactual,
-                "note": p.note,
-            }
+            _manual_permit_payload(p)
             for p in case.manual_permits
         ],
+        "formal_verdict": {
+            "value": forensic_verdict.value,
+            "source": forensic_verdict.source,
+            "context_match": {
+                "matched": forensic_verdict.match.matched,
+                "score": forensic_verdict.match.score,
+                "reasons": list(forensic_verdict.match.reasons),
+                "source": forensic_verdict.match.source,
+            },
+            "counterfactual": forensic_verdict.counterfactual,
+        },
         "decision_records": [
             {
                 "ts": _utc_iso(r.ts),
@@ -142,6 +152,61 @@ def _case_payload(case: Case) -> dict[str, object]:
     }
 
 
+def _organizational_document_payload(permit) -> dict[str, object]:  # noqa: ANN001
+    doc = permit.organizational_document()
+    return {
+        "document_id": doc.document_id,
+        "document_type": doc.document_type,
+        "asset_id": doc.asset_id,
+        "operation": doc.operation,
+        "action_class": doc.action_class,
+        "executor": doc.executor,
+        "approver": doc.approver,
+        "valid_from": doc.valid_from,
+        "valid_to": doc.valid_to,
+        "document_status": doc.document_status,
+        "restrictions": doc.restrictions,
+        "checksum_algorithm": doc.checksum_algorithm,
+        "checksum": doc.checksum,
+    }
+
+
+def _manual_permit_payload(permit) -> dict[str, object]:  # noqa: ANN001
+    return {
+        "permit_id": permit.permit_id,
+        "case_id": permit.case_id,
+        "work_order_number": permit.work_order_number,
+        "actor": permit.actor,
+        "created_at": _utc_iso(permit.created_at),
+        "asset_id": permit.asset_id,
+        "operation": permit.operation,
+        "action_class": permit.action_class,
+        "verdict": permit.verdict,
+        "confidence": permit.confidence,
+        "rationale": permit.rationale,
+        "counterfactual": permit.counterfactual,
+        "organizational_context_sha256": permit.organizational_context_sha256,
+        "organizational_context": _organizational_document_payload(permit),
+        "note": permit.note,
+    }
+
+
+def _formal_verdict_records_payload(case: Case) -> list[dict[str, object]]:
+    return [
+        {
+            "ts": _utc_iso(r.ts),
+            "actor": r.actor,
+            "prev": r.prev,
+            "next": r.next,
+            "score": r.score,
+            "source": r.source,
+            "permit_id": r.permit_id,
+            "reason": r.reason,
+        }
+        for r in case.formal_verdict_records
+    ]
+
+
 def _compliance_report_payload(report: ComplianceDataQualityReport) -> dict[str, object]:
     return {
         "format": "TAKT Compliance Data Quality Report",
@@ -172,6 +237,64 @@ def _compliance_report_payload(report: ComplianceDataQualityReport) -> dict[str,
             for flag in report.readiness_flags
         ],
     }
+
+
+def _audit_actor(parts: list[str]) -> str:
+    for part in parts[2:]:
+        if part.startswith("actor="):
+            return part.split("=", 1)[1]
+    return ""
+
+
+def _decode_audit_value(raw: str) -> str:
+    return "" if raw == "-" else raw.replace("%20", " ")
+
+
+def _operator_action_history(audit_log: list[str]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for line in audit_log:
+        parts = [chunk.strip() for chunk in line.split(" | ")]
+        if len(parts) < 2 or not parts[1].startswith("operator action "):
+            continue
+        tokens = parts[1].split()
+        if len(tokens) < 3:
+            continue
+        entry = {"ts": parts[0], "action": tokens[2], "reason": "", "note": "", "actor": _audit_actor(parts)}
+        for token in tokens[3:]:
+            if "=" not in token:
+                continue
+            key, value = token.split("=", 1)
+            if key in entry:
+                entry[key] = _decode_audit_value(value)
+        out.append(entry)
+    return out
+
+
+def _formal_verdict_history(audit_log: list[str]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    prefix = "formal verdict change "
+    for line in audit_log:
+        parts = [chunk.strip() for chunk in line.split(" | ")]
+        if len(parts) < 2 or not parts[1].startswith(prefix):
+            continue
+        fields: dict[str, str] = {}
+        for token in parts[1][len(prefix) :].split():
+            if "=" not in token:
+                continue
+            key, value = token.split("=", 1)
+            fields[key] = value
+        out.append(
+            {
+                "ts": parts[0],
+                "prev": fields.get("prev", ""),
+                "next": fields.get("next", ""),
+                "score": fields.get("score", ""),
+                "source": fields.get("source", ""),
+                "permit_id": fields.get("permit_id", ""),
+                "actor": _audit_actor(parts),
+            }
+        )
+    return out
 
 
 def _forensic_readiness_payload(report: ForensicReadinessReport) -> dict[str, object]:
@@ -231,8 +354,78 @@ def _chain_hashes(files: list[tuple[str, str, bytes]]) -> list[str]:
     return out
 
 
+def _action_class(operation: str) -> str:
+    op = operation.strip().upper()
+    if any(token in op for token in ("WRITE", "COIL", "SET", "START", "STOP", "RESET", "OPEN", "CLOSE")):
+        return "управляющее воздействие"
+    if any(token in op for token in ("ADMIN", "LOGIN", "USER", "CONFIG", "FIRMWARE")):
+        return "администрирование"
+    if any(token in op for token in ("READ", "POLL", "GET", "STATUS")):
+        return "чтение/опрос"
+    if any(token in op for token in ("NETFLOW", "IPFIX", "PING", "SNMP", "SYSLOG")):
+        return "сетевое событие"
+    return "общее действие"
+
+
+def _manifest_item_classification(path: str) -> tuple[str, str, str]:
+    if path == "case.json":
+        return ("дело", "реестр дел ТАКТ", "основная карточка дела")
+    if path == "siem.json":
+        return ("экспорт SIEM", "адаптер SIEM ТАКТ", "машинный экспорт события")
+    if path == "gossopka-card.json":
+        return ("карточка инцидента", "адаптер ГосСОПКА ТАКТ", "карточка передачи инцидента")
+    if path == "audit.txt":
+        return ("аудиторский след", "журнал дела ТАКТ", "история действий и решений")
+    if path.startswith("raw/"):
+        return ("исходное доказательство", "исходный источник события", "первичный материал")
+    if path == "evidence-index.json":
+        return ("индекс доказательств", "реестр исходных доказательств ТАКТ", "описание первичных материалов")
+    if path == "compliance-data-quality-report.json":
+        return ("отчет о качестве данных", "модуль compliance ТАКТ", "оценка полноты наблюдения")
+    if path == "forensic-readiness-report.json":
+        return ("отчет о готовности доказательств", "модуль forensic readiness ТАКТ", "контроль пригодности пакета")
+    if path == "case-evidence-checklist.json":
+        return ("чек-лист доказательств", "модуль compliance ТАКТ", "перечень недостающих материалов")
+    if path == "engagement.json":
+        return ("аудиторское задание", "модуль аудиторских заданий ТАКТ", "контекст сервисного аудита")
+    if path == "engagement-report.json":
+        return ("отчет аудиторского задания", "модуль аудиторских заданий ТАКТ", "зафиксированный результат аудита")
+    return ("дополнительный материал", "дополнительный источник", "дополнение к доказательному пакету")
+
+
 def _issue(code: str, detail: str) -> ForensicBundleVerificationIssue:
     return ForensicBundleVerificationIssue(code=code, detail=detail)
+
+
+def _unsafe_zip_path(path: str) -> bool:
+    return not path or path.startswith("/") or "\\" in path or ".." in path.split("/")
+
+
+def _zip_structure_issues(zf: ZipFile) -> list[ForensicBundleVerificationIssue]:
+    infos = zf.infolist()
+    issues: list[ForensicBundleVerificationIssue] = []
+    if len(infos) > _VERIFY_MAX_FILES:
+        issues.append(_issue("too_many_files", f"archive has {len(infos)} files; max is {_VERIFY_MAX_FILES}"))
+    total_size = 0
+    for info in infos:
+        total_size += int(info.file_size)
+        if _unsafe_zip_path(info.filename):
+            issues.append(_issue("invalid_path", f"unsafe archive path: {info.filename!r}"))
+        if info.compress_size > 0 and (info.file_size / info.compress_size) > _VERIFY_MAX_COMPRESSION_RATIO:
+            issues.append(
+                _issue(
+                    "compression_ratio_exceeded",
+                    f"{info.filename}: ratio {info.file_size / info.compress_size:.1f} exceeds {_VERIFY_MAX_COMPRESSION_RATIO:.1f}",
+                )
+            )
+    if total_size > _VERIFY_MAX_UNCOMPRESSED_BYTES:
+        issues.append(
+            _issue(
+                "uncompressed_size_exceeded",
+                f"archive uncompressed size {total_size} exceeds {_VERIFY_MAX_UNCOMPRESSED_BYTES}",
+            )
+        )
+    return issues
 
 
 def _raw_evidence_files(case: Case) -> tuple[list[tuple[str, str, bytes]], dict[str, object]]:
@@ -263,6 +456,63 @@ def _process_suitability(signature_status: str) -> str:
     if signature_status == "hmac_sha256_mvp":
         return "integrity_chain_present_non_qualified_signature"
     return "machine_readable_evidence_bundle_without_qualified_signature"
+
+
+def _suitability_label(signature_status: str) -> str:
+    if signature_status in {"external_qualified_detached", "external_gost2012_detached"}:
+        return "пригоден"
+    if signature_status == "hmac_sha256_mvp":
+        return "условно пригоден"
+    if signature_status == "unsigned_mvp":
+        return "требует дополнительной проверки"
+    return "непригоден"
+
+
+def _suitability_checks(case: Case, *, signature_status: str, root_hash: str) -> tuple[dict[str, object], ...]:
+    formal_verdict = case_forensic_verdict(case)
+    has_operator_history = any(
+        "operator action " in line or "formal verdict change " in line or "status -> " in line
+        for line in case.audit_log
+    )
+    has_org_context_checksum = any(bool(p.organizational_context_sha256) for p in case.manual_permits)
+    checks = (
+        {
+            "code": "normalized_event",
+            "ok": bool(case.normalized_event_ids),
+            "detail": f"event_ids={len(case.normalized_event_ids)}",
+        },
+        {
+            "code": "observability",
+            "ok": not case.dq_partial,
+            "detail": f"dq_partial={case.dq_partial}",
+        },
+        {
+            "code": "formal_verdict",
+            "ok": bool(formal_verdict.value),
+            "detail": formal_verdict.value,
+        },
+        {
+            "code": "operator_history",
+            "ok": has_operator_history,
+            "detail": "operator action, formal verdict change or decision record present" if has_operator_history else "operator history absent",
+        },
+        {
+            "code": "organizational_context_checksum",
+            "ok": has_org_context_checksum,
+            "detail": "manual permit checksum present" if has_org_context_checksum else "manual permit checksum absent",
+        },
+        {
+            "code": "aggregate_checksum",
+            "ok": len(root_hash) == 64,
+            "detail": "root_hash_sha256 present" if len(root_hash) == 64 else "root_hash_sha256 invalid",
+        },
+        {
+            "code": "signature",
+            "ok": signature_status in {"hmac_sha256_mvp", "external_qualified_detached", "external_gost2012_detached"},
+            "detail": signature_status,
+        },
+    )
+    return checks
 
 
 class ZipForensicBundleBuilder:
@@ -329,45 +579,65 @@ class ZipForensicBundleBuilder:
         )
         evidence_files.insert(2, ("gossopka-card.json", "application/json", gossopka_payload))
         chain_hashes = _chain_hashes(evidence_files)
-        items = tuple(
-            ForensicEvidenceItem(
-                path=path,
-                media_type=media_type,
-                sha256=_sha256_hex(data),
-                chain_sha256=chain_hash,
-                size_bytes=len(data),
+        included_at = generated_at if generated_at.tzinfo else generated_at.replace(tzinfo=timezone.utc)
+        item_rows: list[ForensicEvidenceItem] = []
+        for (path, media_type, data), chain_hash in zip(evidence_files, chain_hashes, strict=True):
+            element_type, source, role = _manifest_item_classification(path)
+            item_rows.append(
+                ForensicEvidenceItem(
+                    path=path,
+                    element_type=element_type,
+                    source=source,
+                    role=role,
+                    media_type=media_type,
+                    sha256=_sha256_hex(data),
+                    checksum_algorithm="SHA-256",
+                    chain_sha256=chain_hash,
+                    size_bytes=len(data),
+                    included_at=included_at,
+                )
             )
-            for (path, media_type, data), chain_hash in zip(evidence_files, chain_hashes, strict=True)
-        )
+        items = tuple(item_rows)
         root_hash = items[-1].chain_sha256 if items else _sha256_hex(b"")
         signature = self._signer.build_signature(root_hash)
         signature_status = signature.signature_status
         signature_ref = signature.signature_ref
         meta = ForensicBundle(
             case_id=case.case_id,
+            package_id=f"takt-{case.case_id}-{root_hash[:16]}",
             generated_at=generated_at if generated_at.tzinfo else generated_at.replace(tzinfo=timezone.utc),
             root_hash_sha256=root_hash,
             signature_status=signature_status,
             process_suitability=_process_suitability(signature_status),
+            suitability_label=_suitability_label(signature_status),
+            suitability_checks=_suitability_checks(case, signature_status=signature_status, root_hash=root_hash),
             signature_ref=signature_ref,
             items=items,
         )
         manifest = {
             "format": "TAKT Forensic Bundle",
             "format_version": "0.1",
+            "package_id": meta.package_id,
             "case_id": meta.case_id,
             "generated_at": _utc_iso(meta.generated_at),
             "root_hash_sha256": meta.root_hash_sha256,
             "signature_status": meta.signature_status,
             "signature_ref": meta.signature_ref,
             "process_suitability": meta.process_suitability,
+            "suitability_label": meta.suitability_label,
+            "suitability_checks": list(meta.suitability_checks),
             "items": [
                 {
                     "path": item.path,
+                    "element_type": item.element_type,
+                    "source": item.source,
+                    "role": item.role,
                     "media_type": item.media_type,
                     "sha256": item.sha256,
+                    "checksum_algorithm": item.checksum_algorithm,
                     "chain_sha256": item.chain_sha256,
                     "size_bytes": item.size_bytes,
+                    "included_at": _utc_iso(item.included_at),
                 }
                 for item in meta.items
             ],
@@ -394,8 +664,32 @@ class ZipForensicBundleVerifier:
         root_hash = ""
         signature_status = ""
         checked = 0
+        if len(archive_bytes) > _VERIFY_MAX_ARCHIVE_BYTES:
+            return ForensicBundleVerification(
+                ok=False,
+                case_id="",
+                root_hash_sha256="",
+                signature_status="",
+                checked_items=0,
+                issues=(
+                    _issue(
+                        "archive_size_exceeded",
+                        f"archive size {len(archive_bytes)} exceeds {_VERIFY_MAX_ARCHIVE_BYTES}",
+                    ),
+                ),
+            )
         try:
             with ZipFile(BytesIO(archive_bytes)) as zf:
+                structure_issues = _zip_structure_issues(zf)
+                if structure_issues:
+                    return ForensicBundleVerification(
+                        ok=False,
+                        case_id="",
+                        root_hash_sha256="",
+                        signature_status="",
+                        checked_items=0,
+                        issues=tuple(structure_issues),
+                    )
                 try:
                     manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
                 except KeyError:
@@ -433,7 +727,7 @@ class ZipForensicBundleVerifier:
                     expected_sha = str(raw_item.get("sha256", ""))
                     expected_chain = str(raw_item.get("chain_sha256", ""))
                     expected_size = raw_item.get("size_bytes")
-                    if not path or path == "manifest.json" or path.startswith("/") or ".." in path.split("/"):
+                    if path == "manifest.json" or _unsafe_zip_path(path):
                         issues.append(_issue("invalid_path", f"unsafe evidence path: {path!r}"))
                         continue
                     try:
