@@ -52,9 +52,14 @@ def _cors_all_origins_from_env() -> bool:
     return parts == ["*"]
 
 
+def takt_api_keys_raw_configured() -> bool:
+    """Задан ли **TAKT_API_KEYS** (непустая строка); валидность отдельных записей не проверяется здесь."""
+    return bool(os.environ.get("TAKT_API_KEYS", "").strip())
+
+
 def validate_startup_auth_or_raise() -> None:
     """
-    Fail-closed: при включённом **TAKT_AUTH_REQUIRED** без **TAKT_API_KEY** — исключение,
+    Fail-closed: при включённом **TAKT_AUTH_REQUIRED** без **TAKT_API_KEY**/**TAKT_API_KEYS** — исключение,
     кроме **TAKT_PROFILE=dev** (единственный поддерживаемый режим запуска без секрета; в лог — WARNING).
     """
     if not takt_auth_required_from_env():
@@ -64,7 +69,7 @@ def validate_startup_auth_or_raise() -> None:
             )
         _log.warning("TAKT_AUTH_REQUIRED отключён — режим не для промышленной эксплуатации КИИ без иных мер.")
         return
-    if takt_api_key_value():
+    if takt_api_key_value() or takt_api_keys_raw_configured():
         return
     if takt_profile_from_env() == "dev":
         _log.warning(
@@ -72,6 +77,6 @@ def validate_startup_auth_or_raise() -> None:
         )
         return
     raise RuntimeError(
-        "FATAL: TAKT_API_KEY must be set when TAKT_AUTH_REQUIRED is enabled. "
+        "FATAL: TAKT_API_KEY or TAKT_API_KEYS must be set when TAKT_AUTH_REQUIRED is enabled. "
         "Use TAKT_PROFILE=dev only for local development without a secret, or set TAKT_AUTH_REQUIRED=0 (not for production)."
     )

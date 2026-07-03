@@ -44,9 +44,16 @@ def mtls_dn_from_request(request: Request) -> str:
 
 
 def security_actor_from_request(request: Request) -> str:
-    """Приоритет: проверенный mTLS DN, иначе IP для rate limit (с учётом доверенных прокси)."""
+    """
+    Приоритет: проверенный mTLS DN, иначе `actor_id` именованного API-ключа
+    (см. `takt.infrastructure.security.api_keys`), иначе IP для rate limit
+    (с учётом доверенных прокси).
+    """
     dn = mtls_dn_from_request(request)
     if dn:
         return dn
+    key_actor = getattr(request.state, "takt_actor_id", "")
+    if key_actor and key_actor != "no-auth":
+        return key_actor
     ip = client_ip_for_rate_limit(request)
     return ip if ip else "unknown"

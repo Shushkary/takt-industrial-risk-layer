@@ -24,6 +24,7 @@ from takt.infrastructure.http.request_body_limit_middleware import max_request_b
 from takt.infrastructure.http.request_id_middleware import request_id_alternate_header_from_env
 from takt.infrastructure.http.security_headers import hsts_enabled_from_env, hsts_preload_enabled_from_env
 from takt.infrastructure.http.timing_middleware import slow_log_threshold_seconds
+from takt.infrastructure.security.api_keys import api_key_entries_from_env
 from takt.infrastructure.security.auth_env import auth_mode_for_health
 from takt.infrastructure.security.trusted_proxies import trusted_proxy_networks_from_env
 from takt.infrastructure.security.webhook_allowlist import (
@@ -35,6 +36,14 @@ from takt.interface_adapters.api.dependencies import ApiContext
 from takt.interface_adapters.api.schemas.system import DataQualityResponse, HealthResponse, LiveResponse, ReadyResponse
 
 _LOGGER = logging.getLogger("takt.api")
+
+
+def _rbac_health_snapshot() -> dict[str, Any]:
+    entries = api_key_entries_from_env()
+    role_counts: dict[str, int] = {}
+    for entry in entries:
+        role_counts[entry.role] = role_counts.get(entry.role, 0) + 1
+    return {"roles_configured": len(entries), "role_counts": role_counts}
 
 
 def register_system_routes(ctx: ApiContext) -> None:
@@ -74,7 +83,7 @@ def register_system_routes(ctx: ApiContext) -> None:
             "python_executable": sys.executable,
             "working_directory": os.getcwd(),
             "api_key_enabled": bool(os.environ.get("TAKT_API_KEY", "").strip()),
-            "auth": {"mode": auth_mode_for_health()},
+            "auth": {"mode": auth_mode_for_health(), **_rbac_health_snapshot()},
             "siem": {
                 "allowlist_mode": siem_allowlist_mode_label(),
                 "profile": takt_security_profile_from_env(),

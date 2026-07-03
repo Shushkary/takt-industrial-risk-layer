@@ -30,7 +30,8 @@
 | `TAKT_METRICS` | `1`/`true`/`yes`: включает `GET /metrics` (текст Prometheus); нужен `prometheus-client` (`pip install ".[metrics]"` или extras `dev`); при `TAKT_API_KEY` scrape выполняют с тем же ключом | `prometheus_metrics_enabled` |
 | `TAKT_OPENAPI_SERVER_URL` | Один или несколько абсолютных `https://…`/`http://…` через запятую — поле `servers` в `/openapi.json` и база для Try it out за reverse proxy | `openapi_servers_count` |
 | `TAKT_BUILD_REVISION` | Непустая строка (до 256 символов) — метка CI/образа | `build_revision` |
-| `TAKT_AUTH_REQUIRED` | По умолчанию включён: при старте без `TAKT_API_KEY` процесс завершается с ошибкой (fail-closed); отключение — `0`/`false`/`no`/`off` | `auth.mode` (`required`/`optional`/`disabled`) |
+| `TAKT_AUTH_REQUIRED` | По умолчанию включён: при старте без `TAKT_API_KEY`/`TAKT_API_KEYS` процесс завершается с ошибкой (fail-closed); отключение — `0`/`false`/`no`/`off` | `auth.mode` (`required`/`optional`/`disabled`) |
+| `TAKT_API_KEYS` | Именованные ключи с ролями: `ключ:actor_id:роль,ключ2:actor_id2:роль2` (роль — `operator`/`auditor`/`admin`). Некорректные записи (пустой ключ/actor_id, неизвестная роль, дубликат ключа) отбрасываются с предупреждением в лог, не валят процесс. См. раздел «Роли (RBAC)» ниже | `auth.roles_configured`, `auth.role_counts` |
 | `TAKT_SECURITY_PROFILE` | `prod`/`production` — только https для SIEM webhook, фильтрация DNS на частные/loopback адреса; иначе `dev` | — |
 | `TAKT_COMPLIANCE_MODE` | `1` — маркировка режима соответствия в `GET /compliance/mode` (не добавляет активного управления, не делает продукт СКЗИ) | — |
 | `TAKT_FORENSIC_HMAC_SECRET` | MVP-подпись root hash доказательного пакета через HMAC-SHA256 | — |
@@ -46,6 +47,34 @@
 - **`TAKT_SECURITY_PROFILE`**: **`prod`** (или **`production`**) — только **https** для SIEM webhook, фильтрация DNS на частные/loopback адреса; иначе профиль **`dev`**.
 - **`TAKT_TRUSTED_PROXIES`**: CIDR через запятую. Заголовки **`X-Forwarded-For`** / **`TAKT_RATE_LIMIT_IP_HEADER`** для rate limit учитываются только если прямой peer входит в эти сети.
 - SIEM URL: структурный allowlist по **`siem_webhook.allowed_url_prefixes`**; исходящий запрос после DNS использует закреплённый IP для всех ретраев. Подробности — **`CHANGELOG.md`**.
+
+## Роли (RBAC)
+
+По умолчанию (**`TAKT_API_KEY`**, один ключ) любой валидный ключ имеет полный доступ (роль **`admin`**) —
+поведение не изменилось для существующих развёртываний. Для разделения ролей задайте **`TAKT_API_KEYS`**
+вместо (или в дополнение к) **`TAKT_API_KEY`**: список записей `ключ:actor_id:роль` через запятую.
+
+Роли: **`operator`**, **`auditor`**, **`admin`**. Иерархия для write-запросов: **`admin`** может всё, что
+может **`operator`**; **`auditor`** — только чтение. Матрица маршрутов (`src/takt/infrastructure/security/rbac.py`):
+
+| Правило | Минимальная роль |
+|---|---|
+| Любой `GET`/`HEAD` | любая аутентифицированная роль (в т.ч. `auditor`) |
+| `POST /forensic-bundle/verify` | любая аутентифицированная роль (только проверяет уже сформированный пакет, не меняет состояние) |
+| `POST /cases/import/full.json`, `POST /integrations/siem/forward(/async)`, `/audit-engagements*` | `admin` |
+| Все остальные `POST`/`PUT`/`PATCH`/`DELETE` (decision, manual-permits, operator-actions, remediations, ingest: `/assess`, `/events*`, `/integrations/ingest/*`, `/backtest/fixture`) | `operator` (или `admin`) |
+
+Несоответствие роли маршруту — **403 Forbidden** с телом `{"detail": "...", "request_id": "..."}`.
+
+`actor_id` из сработавшего ключа `TAKT_API_KEYS` попадает в `decision_records`, `operator_action_history`,
+доказательный пакет и ГосСОПКА-карточку через `security_actor_from_request` — с приоритетом ниже проверенного
+mTLS DN (`TAKT_MTLS_DN_HEADER`), но выше IP-адреса запроса (fallback, когда ключ не аутентифицирован по имени).
+
+Если ни `TAKT_API_KEY`, ни `TAKT_API_KEYS` не заданы и `TAKT_AUTH_REQUIRED=0` (только для разработки),
+роль по умолчанию — **`admin`** без разделения, как и до появления ролей.
+
+`GET /health` → `auth.roles_configured` (число настроенных ключей) и `auth.role_counts` (карта роль → число
+ключей) позволяют проверить конфигурацию ролей без раскрытия самих ключей.
 
 ## Хранилище (`storage` в `risk_weights.yaml`)
 

@@ -9,6 +9,8 @@ _TAKT_BUILD_REVISION_MAX_LEN = 256
 
 class HealthAuthBlock(BaseModel):
     mode: str
+    roles_configured: int = Field(default=0, ge=0)
+    role_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class HealthSiemBlock(BaseModel):
