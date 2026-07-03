@@ -44,12 +44,24 @@ def auth_mode_for_health() -> AuthMode:
     return "disabled"
 
 
+def _cors_all_origins_from_env() -> bool:
+    raw = os.environ.get("TAKT_CORS_ORIGINS", "").strip()
+    if not raw:
+        return False
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    return parts == ["*"]
+
+
 def validate_startup_auth_or_raise() -> None:
     """
     Fail-closed: при включённом **TAKT_AUTH_REQUIRED** без **TAKT_API_KEY** — исключение,
     кроме **TAKT_PROFILE=dev** (единственный поддерживаемый режим запуска без секрета; в лог — WARNING).
     """
     if not takt_auth_required_from_env():
+        if _cors_all_origins_from_env():
+            raise RuntimeError(
+                "FATAL: TAKT_CORS_ORIGINS=* is not allowed when TAKT_AUTH_REQUIRED is disabled."
+            )
         _log.warning("TAKT_AUTH_REQUIRED отключён — режим не для промышленной эксплуатации КИИ без иных мер.")
         return
     if takt_api_key_value():

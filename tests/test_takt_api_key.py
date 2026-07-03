@@ -67,6 +67,16 @@ def test_startup_fails_when_auth_required_without_api_key(monkeypatch) -> None:
             pass
 
 
+def test_startup_fails_when_cors_wildcard_and_auth_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("TAKT_AUTH_REQUIRED", "false")
+    monkeypatch.setenv("TAKT_CORS_ORIGINS", "*")
+    monkeypatch.delenv("TAKT_API_KEY", raising=False)
+    app = create_app()
+    with pytest.raises(RuntimeError, match="TAKT_CORS_ORIGINS=\\*"):
+        with TestClient(app):
+            pass
+
+
 def test_api_key_header_allows_assess(monkeypatch) -> None:
     key = "secret-token-32chars-long!!!!"
     monkeypatch.setenv("TAKT_API_KEY", key)
