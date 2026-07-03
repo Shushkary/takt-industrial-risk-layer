@@ -46,6 +46,7 @@ def test_zip_forensic_bundle_contains_manifest_and_evidence() -> None:
     assert raw[:2] == b"PK"
     assert meta.signature_status == "unsigned_mvp"
     assert meta.process_suitability == "machine_readable_evidence_bundle_without_qualified_signature"
+    assert meta.suitability_label == "требует дополнительной проверки"
     assert len(meta.root_hash_sha256) == 64
 
     with ZipFile(BytesIO(raw)) as zf:
@@ -56,15 +57,41 @@ def test_zip_forensic_bundle_contains_manifest_and_evidence() -> None:
         gossopka = json.loads(zf.read("gossopka-card.json").decode("utf-8"))
 
     assert manifest["case_id"] == "fb-1"
+    assert manifest["package_id"] == meta.package_id
+    assert manifest["package_id"].startswith("takt-fb-1-")
     assert manifest["root_hash_sha256"] == meta.root_hash_sha256
+    assert manifest["suitability_label"] == "требует дополнительной проверки"
+    checks = {item["code"]: item for item in manifest["suitability_checks"]}
+    assert checks["normalized_event"]["ok"] is True
+    assert checks["formal_verdict"]["ok"] is True
+    assert checks["operator_history"]["ok"] is False
+    assert checks["organizational_context_checksum"]["ok"] is False
+    assert checks["aggregate_checksum"]["ok"] is True
+    assert checks["signature"]["ok"] is False
     assert [item["path"] for item in manifest["items"]] == ["case.json", "siem.json", "gossopka-card.json", "audit.txt"]
+    assert manifest["items"][0]["element_type"] == "дело"
+    assert manifest["items"][0]["source"] == "реестр дел ТАКТ"
+    assert manifest["items"][0]["role"] == "основная карточка дела"
+    assert manifest["items"][0]["checksum_algorithm"] == "SHA-256"
+    assert manifest["items"][0]["included_at"] == "2026-05-05T11:00:00+00:00"
+    assert all("element_type" in item for item in manifest["items"])
+    assert all("source" in item for item in manifest["items"])
+    assert all("role" in item for item in manifest["items"])
+    assert all(item["checksum_algorithm"] == "SHA-256" for item in manifest["items"])
+    assert all("included_at" in item for item in manifest["items"])
     assert manifest["root_hash_sha256"] == manifest["items"][-1]["chain_sha256"]
     assert all(len(item["chain_sha256"]) == 64 for item in manifest["items"])
     assert case_payload["primary_asset_id"] == "plc-01"
+    assert case_payload["action_class"] == "управляющее воздействие"
     assert case_payload["invariant_hits"] == ["blind_command"]
     assert case_payload["remediation_attempts"] == []
+    assert case_payload["formal_verdict"]["value"] == "неопределённое"
+    assert case_payload["formal_verdict"]["context_match"]["matched"] is False
+    assert case_payload["formal_verdict"]["context_match"]["score"] == 0.0
     assert gossopka["format"] == "TAKT-GosSOPKA-MVP"
     assert gossopka["incident"]["category"] == "industrial_process_disruption_risk"
+    assert gossopka["incident"]["formal_verdict"] == "неопределённое"
+    assert gossopka["incident"]["context_match"]["matched"] is False
 
 
 def test_api_forensic_bundle_manifest_and_zip() -> None:
@@ -86,7 +113,12 @@ def test_api_forensic_bundle_manifest_and_zip() -> None:
     assert manifest.status_code == 200
     root_hash = manifest.json()["root_hash_sha256"]
     assert len(root_hash) == 64
+    assert manifest.json()["package_id"].startswith(f"takt-{case_id}-")
     assert manifest.json()["signature_status"] == "unsigned_mvp"
+    assert manifest.json()["suitability_label"] == "требует дополнительной проверки"
+    assert "suitability_checks" in manifest.json()
+    assert manifest.json()["items"][0]["element_type"] == "дело"
+    assert manifest.json()["items"][0]["checksum_algorithm"] == "SHA-256"
     assert manifest.json()["items"][-1]["chain_sha256"] == root_hash
 
     archive = client.get(f"/cases/{case_id}/forensic-bundle.zip")
@@ -137,7 +169,16 @@ def test_api_gossopka_export() -> None:
     case_id = created.json()["case_id"]
     permit = client.post(
         f"/cases/{case_id}/manual-permits",
-        json={"work_order_number": "WO-GS-1", "asset_id": "plc-01", "operation": "WRITE_COIL"},
+        json={
+            "work_order_number": "WO-GS-1",
+            "asset_id": "plc-01",
+            "operation": "WRITE_COIL",
+            "executor": "Иванов И.И.",
+            "approver": "Петров П.П.",
+            "valid_from": "2026-05-05T09:00:00+00:00",
+            "valid_to": "2026-05-05T12:00:00+00:00",
+            "document_status": "утверждён",
+        },
     )
     assert permit.status_code == 200
     decision = client.post(
@@ -156,6 +197,12 @@ def test_api_gossopka_export() -> None:
     body = r.json()
     assert body["format"] == "TAKT-GosSOPKA-MVP"
     assert body["legal_context"]["uk_rf_article"] == "274.1"
+    assert body["incident"]["formal_verdict"] == "легитимное"
+    assert body["incident"]["context_match"]["matched"] is True
+    assert body["critical_information_infrastructure"]["action_class"] == "управляющее воздействие"
+    assert len(body["evidence"]["manual_permits"][0]["organizational_context_sha256"]) == 64
+    assert body["evidence"]["manual_permits"][0]["organizational_context"]["checksum_algorithm"] == "SHA-256"
+    assert body["operator_actions"]["formal_verdict"] == "легитимное"
     assert body["evidence"]["manual_permits"][0]["work_order_number"] == "WO-GS-1"
     assert body["operator_actions"]["remediation_attempts"][0]["kind"] == "generate_forensic_bundle"
     assert body["operator_actions"]["decision_records"][0]["reason"] == "operator acknowledged"
@@ -165,6 +212,7 @@ def test_api_gossopka_export() -> None:
     assert t_body["contract"] == "TAKT-GosSOPKA-Transport"
     assert t_body["exchange"]["mode"] == "pull_http_json"
     assert t_body["payload"]["incident"]["case_id"] == case_id
+    assert t_body["payload"]["incident"]["formal_verdict"] == "легитимное"
     official = client.get(f"/cases/{case_id}/export/gossopka-official.json")
     assert official.status_code == 200
     off_body = official.json()
@@ -175,6 +223,7 @@ def test_api_gossopka_export() -> None:
     off_t_body = official_t.json()
     assert off_t_body["contract"] == "GOSSOPKA-TRANSPORT-INTEROP"
     assert off_t_body["payload"]["incident"]["case_id"] == case_id
+    assert off_t_body["payload"]["incident"]["formal_verdict"] == "легитимное"
 
 
 def test_zip_forensic_bundle_verifier_accepts_valid_archive() -> None:
@@ -207,6 +256,55 @@ def test_zip_forensic_bundle_verifier_rejects_tampered_archive() -> None:
     assert result.ok is False
     assert any(i.code == "sha256_mismatch" for i in result.issues)
     assert any(i.code == "chain_mismatch" for i in result.issues)
+
+
+def test_zip_forensic_bundle_verifier_rejects_path_traversal_entry() -> None:
+    out = BytesIO()
+    with ZipFile(out, "w") as zf:
+        zf.writestr("manifest.json", "{}")
+        zf.writestr("../evil.txt", "x")
+
+    result = ZipForensicBundleVerifier().verify_bundle(out.getvalue())
+
+    assert result.ok is False
+    assert any(i.code == "invalid_path" for i in result.issues)
+
+
+def test_zip_forensic_bundle_verifier_rejects_too_many_files() -> None:
+    out = BytesIO()
+    with ZipFile(out, "w") as zf:
+        zf.writestr("manifest.json", "{}")
+        for i in range(129):
+            zf.writestr(f"extra-{i}.txt", "x")
+
+    result = ZipForensicBundleVerifier().verify_bundle(out.getvalue())
+
+    assert result.ok is False
+    assert any(i.code == "too_many_files" for i in result.issues)
+
+
+def test_zip_forensic_bundle_verifier_rejects_high_compression_ratio() -> None:
+    out = BytesIO()
+    with ZipFile(out, "w", compression=ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", "{}")
+        zf.writestr("payload.bin", b"0" * 200_000)
+
+    result = ZipForensicBundleVerifier().verify_bundle(out.getvalue())
+
+    assert result.ok is False
+    assert any(i.code == "compression_ratio_exceeded" for i in result.issues)
+
+
+def test_zip_forensic_bundle_verifier_rejects_archive_size_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "takt.infrastructure.export.forensic_bundle._VERIFY_MAX_ARCHIVE_BYTES",
+        16,
+    )
+
+    result = ZipForensicBundleVerifier().verify_bundle(b"not-a-zip-but-too-large")
+
+    assert result.ok is False
+    assert any(i.code == "archive_size_exceeded" for i in result.issues)
 
 
 def test_api_forensic_bundle_verify_endpoint() -> None:
@@ -300,6 +398,71 @@ def test_forensic_bundle_includes_audit_engagement_when_requested() -> None:
         assert any(item["path"] == "engagement.json" for item in manifest["items"])
 
 
+def test_forensic_bundle_rejects_unknown_audit_engagement() -> None:
+    client = TestClient(create_app())
+    created = client.post(
+        "/events",
+        json={
+            "observed_at": "2026-05-05T10:00:00+00:00",
+            "operation": "WRITE_COIL",
+            "asset_id": "plc-eng-missing",
+            "source": "network_events",
+        },
+    )
+    assert created.status_code == 200
+    case_id = created.json()["case_id"]
+
+    archive = client.get(f"/cases/{case_id}/forensic-bundle.zip", params={"engagement_id": "missing-engagement"})
+
+    assert archive.status_code == 404
+    assert archive.json()["detail"] == "engagement not found"
+
+
+def test_forensic_bundle_rejects_unlinked_audit_engagement() -> None:
+    client = TestClient(create_app())
+    first = client.post(
+        "/events",
+        json={
+            "observed_at": "2026-05-05T10:00:00+00:00",
+            "operation": "WRITE_COIL",
+            "asset_id": "plc-eng-a",
+            "source": "network_events",
+        },
+    )
+    second = client.post(
+        "/events",
+        json={
+            "observed_at": "2026-05-05T10:01:00+00:00",
+            "operation": "READ_COIL",
+            "asset_id": "plc-eng-b",
+            "source": "network_events",
+        },
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    linked_case_id = first.json()["case_id"]
+    requested_case_id = second.json()["case_id"]
+    engagement = client.post(
+        "/audit-engagements",
+        json={
+            "customer": "Plant C",
+            "scope": "Forensic audit service",
+            "case_ids": [linked_case_id],
+            "nda_signed": True,
+            "evidence_intake_checklist": ["nda"],
+        },
+    )
+    assert engagement.status_code == 200
+
+    archive = client.get(
+        f"/cases/{requested_case_id}/forensic-bundle.zip",
+        params={"engagement_id": engagement.json()["engagement_id"]},
+    )
+
+    assert archive.status_code == 400
+    assert archive.json()["detail"] == "engagement is not linked to case"
+
+
 def test_forensic_bundle_hmac_signature_when_secret_is_set(monkeypatch) -> None:
     monkeypatch.setenv("TAKT_FORENSIC_HMAC_SECRET", "test-secret")
     meta, raw = ZipForensicBundleBuilder().build_case_bundle(
@@ -307,11 +470,13 @@ def test_forensic_bundle_hmac_signature_when_secret_is_set(monkeypatch) -> None:
         generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
     )
     assert meta.signature_status == "hmac_sha256_mvp"
+    assert meta.suitability_label == "условно пригоден"
     assert meta.signature_ref == "root-hash-signature.json"
     with ZipFile(BytesIO(raw)) as zf:
         assert "root-hash-signature.json" in zf.namelist()
         manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
     assert manifest["signature_status"] == "hmac_sha256_mvp"
+    assert manifest["suitability_label"] == "условно пригоден"
     assert manifest["signature_ref"] == "root-hash-signature.json"
 
     ok = ZipForensicBundleVerifier().verify_bundle(raw)
@@ -406,6 +571,7 @@ def test_forensic_bundle_external_signature_adapter_roundtrip(monkeypatch) -> No
     )
     assert meta.signature_status == "external_qualified_detached"
     assert meta.process_suitability == "qualified_signature_attached_for_procedural_actions"
+    assert meta.suitability_label == "пригоден"
     ok = ZipForensicBundleVerifier().verify_bundle(raw)
     assert ok.ok is True
 
@@ -457,6 +623,7 @@ def test_forensic_bundle_strict_mode_requires_gost_signature(monkeypatch) -> Non
         generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
     )
     assert meta.signature_status == "external_gost2012_detached"
+    assert meta.suitability_label == "пригоден"
     verified = ZipForensicBundleVerifier().verify_bundle(raw)
     assert verified.ok is True
 

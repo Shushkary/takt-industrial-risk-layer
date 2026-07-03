@@ -84,11 +84,11 @@ def test_compliance_data_quality_report_counts_case_readiness() -> None:
     assert early_items["invariant_evidence"]["ok"] is True
     assert early_items["hitl_decision"]["ok"] is False
     assert early_items["hitl_decision"]["remediation_kind"] == "submit_decision"
-    assert early_items["hitl_decision"]["remediation_action"] == f"POST /cases/{case_id}/decision with operator reason"
+    assert early_items["hitl_decision"]["remediation_action"] == f"POST /cases/{case_id}/decision с основанием оператора"
     assert early_items["manual_permit"]["ok"] is False
     assert early_items["manual_permit"]["remediation_kind"] == "attach_manual_permit"
     assert early_items["manual_permit"]["remediation_action"] == (
-        f"POST /cases/{case_id}/manual-permits with work_order_number"
+        f"POST /cases/{case_id}/manual-permits с номером наряда"
     )
     assert early_items["manual_permit"]["remediation_attempted"] is False
     assert early_items["manual_permit"]["latest_remediation_status"] == ""
@@ -163,6 +163,52 @@ def test_remediation_kinds_catalog_lists_machine_readable_actions() -> None:
         "submit_decision",
     }
     assert all(kinds.values())
+    assert kinds["attach_manual_permit"] == "Прикрепить ручной наряд к делу."
+    assert "доказательный ZIP-пакет" in kinds["generate_forensic_bundle"]
+    assert "решение оператора" in kinds["submit_decision"]
+
+
+def test_compliance_mode_report_exposes_boundaries_and_operator_control(monkeypatch) -> None:
+    monkeypatch.setenv("TAKT_COMPLIANCE_MODE", "1")
+    app = create_app()
+    case_id = "compliance-mode-1"
+    app.state.repo.save(
+        Case(
+            case_id=case_id,
+            status=CaseStatus.TRIAGE,
+            title="Risk HIGH: WRITE_COIL",
+            risk_class="HIGH",
+            risk_score=0.81,
+            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+            invariant_hits=["blind_command"],
+            dq_partial=True,
+        )
+    )
+    client = TestClient(app)
+
+    r = client.get("/compliance/mode")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["mode"] == "compliance"
+    assert body["compliance_enabled"] is True
+    assert body["product_boundary"]["is_crypto_tool"] is False
+    assert body["product_boundary"]["has_active_control"] is False
+    assert body["product_boundary"]["requires_operator_final_decision"] is True
+    assert "не является СКЗИ" in body["product_boundary"]["crypto_note"]
+    assert "не выполняет блокировку" in body["product_boundary"]["active_control_note"]
+    assert body["manual_confirmation"] == {
+        "required_for_high_risk": True,
+        "decision_endpoint": "/cases/{case_id}/decision",
+        "permit_endpoint": "/cases/{case_id}/manual-permits",
+        "reason_required": True,
+    }
+    assert body["service_desk_context"]["supported"] is True
+    assert "утверждающий" in body["service_desk_context"]["fields"]
+    assert body["readiness"]["total_cases"] == 1
+    assert body["readiness"]["not_ready_cases"] == 1
+    assert body["readiness"]["dq_partial_count"] == 1
+    assert body["readiness"]["high_risk_without_decision"] == 1
+    assert body["reports"]["forensic_readiness"] == "/compliance/forensic-readiness"
 
 
 def test_record_remediation_attempt_updates_case_and_audit() -> None:

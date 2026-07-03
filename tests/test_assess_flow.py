@@ -362,6 +362,10 @@ def test_assess_suppresses_period_doubling_when_marked_experimental_in_catalog(m
         "takt.application.use_cases.assess_risk.predict_polling_chaos",
         lambda *_: pred,
     )
+    monkeypatch.setattr(
+        "takt.domain.invariants.rule_predicates.predict_polling_chaos",
+        lambda *_: pred,
+    )
     uc = AssessRiskUseCase(
         weights,
         plc_hosts=frozenset({"plc-99"}),
@@ -392,6 +396,10 @@ def test_assess_includes_period_doubling_when_include_experimental_in_profile(mo
     pred = ChaosPrediction(bifurcation_ratio=4.67, suggests_period_doubling_cluster=True, jitter_trend_increasing=False)
     monkeypatch.setattr(
         "takt.application.use_cases.assess_risk.predict_polling_chaos",
+        lambda *_: pred,
+    )
+    monkeypatch.setattr(
+        "takt.domain.invariants.rule_predicates.predict_polling_chaos",
         lambda *_: pred,
     )
     weights = {

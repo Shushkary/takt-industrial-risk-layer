@@ -26,11 +26,11 @@ FORENSIC_READINESS_MISSING_CODES = frozenset(
 )
 
 REMEDIATION_KIND_DESCRIPTIONS: dict[str, str] = {
-    "attach_manual_permit": "Attach a manual work permit to the Risk Case.",
-    "generate_forensic_bundle": "Generate the Forensic Bundle ZIP and record its root hash in audit trail.",
-    "ingest_telemetry": "Ingest additional trusted telemetry to close partial observability.",
-    "rerun_assessment": "Run assessment again with invariant evidence available.",
-    "submit_decision": "Submit an operator HITL decision with a reason.",
+    "attach_manual_permit": "Прикрепить ручной наряд к делу.",
+    "generate_forensic_bundle": "Сформировать доказательный ZIP-пакет и записать корневой хэш в аудиторский след.",
+    "ingest_telemetry": "Загрузить дополнительную доверенную телеметрию для закрытия частичной наблюдаемости.",
+    "rerun_assessment": "Повторить оценку при наличии доказательств по инвариантам.",
+    "submit_decision": "Зафиксировать решение оператора с обязательным основанием.",
 }
 
 
@@ -146,7 +146,7 @@ class BuildCaseEvidenceChecklistUseCase:
                     ok=not case.dq_partial,
                     detail="dq_partial=false" if not case.dq_partial else "dq_partial=true",
                     remediation_kind="ingest_telemetry" if case.dq_partial else "",
-                    remediation_action="ingest additional trusted telemetry for the affected asset"
+                    remediation_action="загрузить дополнительную доверенную телеметрию по затронутому активу"
                     if case.dq_partial
                     else "",
                 ),
@@ -155,7 +155,7 @@ class BuildCaseEvidenceChecklistUseCase:
                     ok=bool(case.invariant_hits),
                     detail=f"invariant_hits={len(case.invariant_hits)}",
                     remediation_kind="rerun_assessment" if not case.invariant_hits else "",
-                    remediation_action="run assessment with invariant evidence before exporting the bundle"
+                    remediation_action="повторить оценку с доказательствами по инвариантам перед экспортом пакета"
                     if not case.invariant_hits
                     else "",
                 ),
@@ -164,7 +164,7 @@ class BuildCaseEvidenceChecklistUseCase:
                     ok=(not _is_high_risk(case)) or bool(case.decision_records),
                     detail=f"decision_records={len(case.decision_records)}",
                     remediation_kind="submit_decision" if _is_high_risk(case) and not case.decision_records else "",
-                    remediation_action=f"POST /cases/{case.case_id}/decision with operator reason"
+                    remediation_action=f"POST /cases/{case.case_id}/decision с основанием оператора"
                     if _is_high_risk(case) and not case.decision_records
                     else "",
                 ),
@@ -173,16 +173,16 @@ class BuildCaseEvidenceChecklistUseCase:
                     ok=bool(case.manual_permits),
                     detail=f"manual_permits={len(case.manual_permits)}",
                     remediation_kind="attach_manual_permit" if not case.manual_permits else "",
-                    remediation_action=f"POST /cases/{case.case_id}/manual-permits with work_order_number"
+                    remediation_action=f"POST /cases/{case.case_id}/manual-permits с номером наряда"
                     if not case.manual_permits
                     else "",
                 ),
                 CaseEvidenceChecklistItem(
                     code="forensic_bundle_audit",
                     ok=_has_forensic_bundle_audit(case),
-                    detail="audit trail contains forensic bundle root hash"
+                    detail="аудиторский след содержит корневой хэш доказательного пакета"
                     if _has_forensic_bundle_audit(case)
-                    else "audit trail has no forensic bundle root hash",
+                    else "в аудиторском следе нет корневого хэша доказательного пакета",
                     remediation_kind="generate_forensic_bundle" if not _has_forensic_bundle_audit(case) else "",
                     remediation_action=f"GET /cases/{case.case_id}/forensic-bundle.zip"
                     if not _has_forensic_bundle_audit(case)

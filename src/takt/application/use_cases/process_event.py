@@ -117,6 +117,7 @@ class ProcessEventUseCase:
             existing.title = f"[x{n}] {base_title}"
             existing.xai_summary = new_case.xai_summary
             existing.trigger_operation = new_case.trigger_operation
+            existing.operator_id = new_case.operator_id or existing.operator_id
             existing.last_event_source = new_case.last_event_source
             existing.dq_score = assessment.data_quality.dq_score
             existing.dq_partial = assessment.data_quality.partial_observability

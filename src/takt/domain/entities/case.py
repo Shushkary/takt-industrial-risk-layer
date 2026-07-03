@@ -36,6 +36,23 @@ class InvariantHitRecord:
 
 
 @dataclass(slots=True)
+class OrganizationalContextDocument:
+    document_id: str
+    document_type: str
+    asset_id: str
+    operation: str
+    action_class: str
+    executor: str
+    approver: str
+    valid_from: str
+    valid_to: str
+    document_status: str
+    restrictions: str
+    checksum_algorithm: str = "SHA-256"
+    checksum: str = ""
+
+
+@dataclass(slots=True)
 class ManualPermit:
     permit_id: str
     case_id: str
@@ -48,7 +65,31 @@ class ManualPermit:
     confidence: float
     rationale: str
     counterfactual: str
+    action_class: str = ""
+    executor: str = ""
+    approver: str = ""
+    valid_from: str = ""
+    valid_to: str = ""
+    document_status: str = ""
+    restrictions: str = ""
+    organizational_context_sha256: str = ""
     note: str = ""
+
+    def organizational_document(self) -> OrganizationalContextDocument:
+        return OrganizationalContextDocument(
+            document_id=self.work_order_number,
+            document_type="ручной наряд",
+            asset_id=self.asset_id,
+            operation=self.operation,
+            action_class=self.action_class,
+            executor=self.executor,
+            approver=self.approver,
+            valid_from=self.valid_from,
+            valid_to=self.valid_to,
+            document_status=self.document_status,
+            restrictions=self.restrictions,
+            checksum=self.organizational_context_sha256,
+        )
 
 
 @dataclass(slots=True)
@@ -59,6 +100,18 @@ class CaseDecisionRecord:
     next_status: str
     reason: str
     request_id: str = ""
+
+
+@dataclass(slots=True)
+class FormalVerdictRecord:
+    ts: datetime
+    actor: str
+    prev: str
+    next: str
+    score: float
+    source: str
+    permit_id: str = ""
+    reason: str = ""
 
 
 @dataclass(slots=True)
@@ -108,6 +161,7 @@ class Case:
     burst_fingerprint: str = ""
     primary_asset_id: str = ""
     trigger_operation: str = ""
+    operator_id: str = ""
     invariant_hits: list[str] = field(default_factory=list)
     invariant_hit_records: list[InvariantHitRecord] = field(default_factory=list)
     observations: list[Observation] = field(default_factory=list)
@@ -116,6 +170,7 @@ class Case:
     dq_reasons: list[str] = field(default_factory=list)
     last_event_source: str = ""
     manual_permits: list[ManualPermit] = field(default_factory=list)
+    formal_verdict_records: list[FormalVerdictRecord] = field(default_factory=list)
     decision_records: list[CaseDecisionRecord] = field(default_factory=list)
     remediation_attempts: list[RemediationAttempt] = field(default_factory=list)
     raw_evidence_refs: list[RawEvidenceRef] = field(default_factory=list)

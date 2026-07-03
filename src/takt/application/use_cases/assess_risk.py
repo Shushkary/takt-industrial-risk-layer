@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Mapping, Sequence
 
 from takt.application.system_defaults import default_clock, default_id_provider
 from takt.domain.engines.alert_fatigue import compute_burst_fingerprint
-from takt.domain.engines.causal_mesh import GraphEdge, detect_jump_server_bypass
+from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.engines.chaos_predictor import predict_polling_chaos
 from takt.domain.engines.context_matcher import match_event_to_ticket
 from takt.domain.engines.data_quality import DataQualitySnapshot, evaluate_full_pipeline
-from takt.domain.engines.phase_time_tagger import phase_dissonance_admin_activity, tag_phase
+from takt.domain.engines.phase_time_tagger import tag_phase
 from takt.domain.engines.risk_engine import RiskBreakdown, combine_risk
 from takt.domain.engines.xai import XAIReport, build_xai
 from takt.domain.entities.case import Case, CaseStatus, InvariantHitRecord, Observation
@@ -110,30 +110,22 @@ class AssessRiskUseCase:
 
         asset_id = str(event.payload.get("asset_id") or event.payload.get("plc_id") or "")
 
+        # --- Движки: вычисляем сигналы (инварианты детектируются предикатами) ---
         phase = tag_phase(event.observed_at)
-        if phase_dissonance_admin_activity(phase) and "admin" in event.operation.lower():
-            inv.append(InvariantId.OUT_OF_SHIFT_ACCESS.value)
 
         chaos = predict_polling_chaos(polling_intervals_us)
         rhythm_signal = 0.15
         if chaos:
-            pid = InvariantId.POLLING_PERIOD_DOUBLING_SUSPECT.value
-            doubling_active = chaos.suggests_period_doubling_cluster and pid not in eff_lab
-            if doubling_active:
+            if chaos.suggests_period_doubling_cluster:
                 rhythm_signal = 0.75
-                inv.append(pid)
             elif chaos.jitter_trend_increasing:
+                rhythm_signal = max(rhythm_signal, 0.42)
+                # POLLING_JITTER остаётся с ручным детектированием (флаг-чекер + chaos)
                 jid = InvariantId.POLLING_JITTER.value
                 if jid not in eff_lab:
-                    rhythm_signal = max(rhythm_signal, 0.42)
                     inv.append(jid)
 
-        if detect_jump_server_bypass(graph_edges, self._jump, self._plc):
-            inv.append(InvariantId.JUMP_SERVER_BYPASS.value)
-
         ctx = match_event_to_ticket(event, tickets, now=ts)
-        if ctx.dissonance:
-            inv.append(InvariantId.CONTEXT_DISSONANCE.value)
 
         trust = dict(trust_by_source or {})
         dq = evaluate_full_pipeline(
@@ -143,18 +135,26 @@ class AssessRiskUseCase:
             source_key=event.source.value,
             trust_by_source=trust,
         )
-        if "telemetry_gap" in dq.reasons:
-            inv.append(InvariantId.TELEMETRY_GAP.value)
-        if "stale_data" in dq.reasons:
-            inv.append(InvariantId.STALE_DATA.value)
-        if "source_reputation_drift" in dq.reasons:
-            inv.append(InvariantId.SOURCE_REPUTATION_DRIFT.value)
+
+        # --- Расширенный контекст для предикатов 7 инвариантов ---
+        eff_profile = replace(
+            profile,
+            tickets=tuple(tickets),
+            graph_edges=tuple(graph_edges),
+            jump_host=self._jump,
+            plc_hosts=self._plc,
+            polling_intervals_us=tuple(polling_intervals_us),
+            trust_by_source=trust,
+            now=ts,
+            max_gap_seconds=120.0,
+            stale_window_seconds=90.0,
+        )
 
         inv.extend(
             collect_extended_invariants(
                 event,
                 recent_events,
-                profile,
+                eff_profile,
                 rule_overrides=self._rule_overrides,
                 rule_specs=self._rule_specs,
             )
@@ -195,6 +195,7 @@ class AssessRiskUseCase:
             eps_estimate=eps_estimate,
             mandel_cap=float(self._w.get("mandelbrot_entropy_cap", 2.5)),
             eps_soft_cap=float(self._w.get("eps_soft_cap", 100_000)),
+            risk_class_thresholds=self._w.get("risk_class_thresholds"),
         )
         xai = build_xai(
             assessment,
@@ -230,6 +231,7 @@ class AssessRiskUseCase:
             burst_fingerprint=fp,
             primary_asset_id=asset_id,
             trigger_operation=event.operation,
+            operator_id=event.operator_id,
             invariant_hits=list(inv),
             invariant_hit_records=hit_records,
             observations=obs,

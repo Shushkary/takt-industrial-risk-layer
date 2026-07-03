@@ -4,6 +4,15 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from takt.domain.entities.event import NormalizedEvent
+from takt.domain.engines.causal_mesh import detect_jump_server_bypass
+from takt.domain.engines.chaos_predictor import predict_polling_chaos
+from takt.domain.engines.context_matcher import match_event_to_ticket
+from takt.domain.engines.data_quality import (
+    evaluate_sequence_gaps,
+    evaluate_source_reputation,
+    evaluate_stale_telemetry,
+)
+from takt.domain.engines.phase_time_tagger import phase_dissonance_admin_activity, tag_phase
 from takt.domain.invariants.catalog import InvariantId
 from takt.domain.invariants.rule_spec import InvariantRuleSpec
 
@@ -176,22 +185,64 @@ def pred_reconnaissance(
 
 def pred_new_node_airgap(
     event: NormalizedEvent,
-    _recent: list[NormalizedEvent],
-    _ctx: Any,
+    recent: list[NormalizedEvent],
+    ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
+    """New Node в Air-Gap: MAC/IP отсутствует в реестре известных активов."""
+    # Флаг-чекер (внешний SIEM уже определил)
     if event.payload.get("new_node_airgap") in (True, "true", "1", 1):
+        return [spec.id]
+    # Активная детекция: src_ip/mac не встречался в recent для того же сегмента
+    src_ip = str(event.payload.get("src_ip") or "")
+    mac = str(event.payload.get("mac") or "")
+    if not src_ip and not mac:
+        return []
+    known_ips = {str(e.payload.get("src_ip") or "") for e in recent}
+    known_macs = {str(e.payload.get("mac") or "") for e in recent}
+    if src_ip and src_ip not in known_ips:
+        return [spec.id]
+    if mac and mac not in known_macs:
         return [spec.id]
     return []
 
 
 def pred_physical_invariant_breach(
     event: NormalizedEvent,
-    _recent: list[NormalizedEvent],
-    _ctx: Any,
+    recent: list[NormalizedEvent],
+    ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
+    """Physical Invariant Breach: аномальная скорость изменения dX/dt датчика."""
+    # Флаг-чекер (внешний SIEM уже определил)
     if event.payload.get("physical_invariant_breach") in (True, "true", "1", 1):
+        return [spec.id]
+    # Активная детекция: |dX/dt| превышает порог
+    val = event.payload.get("telemetry_value")
+    if val is None:
+        return []
+    try:
+        cur = float(val)
+    except (TypeError, ValueError):
+        return []
+    asset_id = str(event.payload.get("asset_id") or event.payload.get("plc_id") or "")
+    same_asset = _recent_same_asset(recent, asset_id) if asset_id else recent
+    if not same_asset:
+        return []
+    prev = same_asset[-1]
+    prev_val = prev.payload.get("telemetry_value")
+    if prev_val is None:
+        return []
+    try:
+        prev_f = float(prev_val)
+    except (TypeError, ValueError):
+        return []
+    dt = (event.observed_at - prev.observed_at).total_seconds()
+    if dt <= 0:
+        return []
+    rate = abs(cur - prev_f) / dt
+    max_rate = float(ctx.max_rate_of_change) if hasattr(ctx, "max_rate_of_change") and ctx.max_rate_of_change else 100.0
+    if rate > max_rate:
         return [spec.id]
     return []
 
@@ -199,32 +250,68 @@ def pred_physical_invariant_breach(
 def pred_trust_index_drop(
     event: NormalizedEvent,
     _recent: list[NormalizedEvent],
-    _ctx: Any,
+    ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
+    """Trust Index Drop: кумулятивный дрейф доверия ниже порога."""
+    # Флаг-чекер (внешний SIEM уже определил)
     if event.payload.get("trust_index_drop") in (True, "true", "1", 1):
+        return [spec.id]
+    # Активная детекция: trust источника ниже критического порога
+    trust_map = ctx.trust_by_source or {}
+    trust = float(trust_map.get(event.source.value, 1.0))
+    if trust < 0.3:
         return [spec.id]
     return []
 
 
 def pred_request_reply_dissonance(
     event: NormalizedEvent,
-    _recent: list[NormalizedEvent],
+    recent: list[NormalizedEvent],
     _ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
+    """Request-Reply Dissonance: ответ (REPLY/RESPONSE) без предшествующего запроса."""
+    # Флаг-чекер (внешний SIEM уже определил)
     if event.payload.get("reply_without_prior_request") in (True, "true", "1", 1):
+        return [spec.id]
+    # Активная детекция: REPLY без REQUEST в recent для того же актива
+    op = event.operation.upper()
+    if not any(x in op for x in ("REPLY", "RESPONSE", "ANSWER")):
+        return []
+    asset_id = str(event.payload.get("asset_id") or event.payload.get("plc_id") or "")
+    same_asset = _recent_same_asset(recent, asset_id) if asset_id else recent
+    had_request = any(
+        any(x in e.operation.upper() for x in ("REQUEST", "READ", "POLL", "QUERY"))
+        for e in same_asset
+    )
+    if not had_request:
         return [spec.id]
     return []
 
 
 def pred_cyclic_service_crash(
     event: NormalizedEvent,
-    _recent: list[NormalizedEvent],
+    recent: list[NormalizedEvent],
     _ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
+    """Cyclic Service Crash: ≥3 CRASH/RESTART для того же сервиса в recent."""
+    # Флаг-чекер (внешний SIEM уже определил)
     if event.payload.get("cyclic_service_crash") in (True, "true", "1", 1):
+        return [spec.id]
+    # Активная детекция: ≥3 событий CRASH/RESTART в recent
+    op = event.operation.upper()
+    is_crash = any(x in op for x in ("CRASH", "RESTART", "PANIC", "FAULT"))
+    if not is_crash:
+        return []
+    asset_id = str(event.payload.get("asset_id") or event.payload.get("plc_id") or "")
+    same_asset = _recent_same_asset(recent, asset_id) if asset_id else recent
+    crash_count = sum(
+        1 for e in same_asset
+        if any(x in e.operation.upper() for x in ("CRASH", "RESTART", "PANIC", "FAULT"))
+    )
+    if crash_count + 1 >= 3:
         return [spec.id]
     return []
 
@@ -232,10 +319,22 @@ def pred_cyclic_service_crash(
 def pred_untrusted_ip_admin(
     event: NormalizedEvent,
     _recent: list[NormalizedEvent],
-    _ctx: Any,
+    ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
+    """Untrusted IP Admin: админская операция с непроверенного IP."""
+    # Флаг-чекер (внешний SIEM уже определил)
     if event.payload.get("untrusted_ip_admin") in (True, "true", "1", 1):
+        return [spec.id]
+    # Активная детекция: src_ip не в списке доверенных админских IP
+    op = event.operation.upper()
+    if not any(x in op for x in ("ADMIN", "LOGIN", "SSH", "REMOTE_SESSION")):
+        return []
+    src_ip = str(event.payload.get("src_ip") or "")
+    if not src_ip:
+        return []
+    trusted_ips = ctx.trusted_admin_ips if hasattr(ctx, "trusted_admin_ips") and ctx.trusted_admin_ips else frozenset()
+    if trusted_ips and src_ip not in trusted_ips:
         return [spec.id]
     return []
 
@@ -289,6 +388,118 @@ def pred_lateral_movement(
     return []
 
 
+def pred_stale_data(
+    event: NormalizedEvent,
+    recent: list[NormalizedEvent],
+    ctx: Any,
+    spec: InvariantRuleSpec,
+) -> list[str]:
+    """Inv_DQ_01: замерзший датчик — одинаковые payload при долгом интервале."""
+    seq = list(recent) + [event]
+    if len(seq) < 2:
+        return []
+    snap = evaluate_stale_telemetry(seq, stale_window_seconds=ctx.stale_window_seconds)
+    if "stale_data" in snap.reasons:
+        return [spec.id]
+    return []
+
+
+def pred_telemetry_gap(
+    event: NormalizedEvent,
+    recent: list[NormalizedEvent],
+    ctx: Any,
+    spec: InvariantRuleSpec,
+) -> list[str]:
+    """Inv_DQ_02: потеря пакетов — большие разрывы между событиями источника."""
+    seq = list(recent) + [event]
+    if len(seq) < 2:
+        return []
+    snap = evaluate_sequence_gaps(seq, max_gap_seconds=ctx.max_gap_seconds)
+    if "telemetry_gap" in snap.reasons:
+        return [spec.id]
+    return []
+
+
+def pred_source_reputation_drift(
+    event: NormalizedEvent,
+    _recent: list[NormalizedEvent],
+    ctx: Any,
+    spec: InvariantRuleSpec,
+) -> list[str]:
+    """Inv_DQ_03: дрейф репутации источника — trust < 0.85."""
+    trust_map = ctx.trust_by_source or {}
+    snap = evaluate_source_reputation(
+        source_key=event.source.value,
+        trust_by_source=trust_map,
+    )
+    if "source_reputation_drift" in snap.reasons:
+        return [spec.id]
+    return []
+
+
+def pred_context_dissonance(
+    event: NormalizedEvent,
+    _recent: list[NormalizedEvent],
+    ctx: Any,
+    spec: InvariantRuleSpec,
+) -> list[str]:
+    """Критическая операция вне окна регламентных работ."""
+    if ctx.now is None:
+        return []
+    match = match_event_to_ticket(event, list(ctx.tickets), now=ctx.now)
+    if match.dissonance:
+        return [spec.id]
+    return []
+
+
+def pred_out_of_shift_access(
+    event: NormalizedEvent,
+    _recent: list[NormalizedEvent],
+    _ctx: Any,
+    spec: InvariantRuleSpec,
+) -> list[str]:
+    """Админская активность вне дневной смены (ночь/выходной)."""
+    if "admin" not in event.operation.lower():
+        return []
+    label = tag_phase(event.observed_at)
+    if phase_dissonance_admin_activity(label):
+        return [spec.id]
+    return []
+
+
+def pred_jump_server_bypass(
+    _event: NormalizedEvent,
+    _recent: list[NormalizedEvent],
+    ctx: Any,
+    spec: InvariantRuleSpec,
+) -> list[str]:
+    """Прямое обращение к ПЛК в обход jump-сервера."""
+    if not ctx.graph_edges or not ctx.jump_host:
+        return []
+    if detect_jump_server_bypass(
+        list(ctx.graph_edges),
+        ctx.jump_host,
+        ctx.plc_hosts,
+    ):
+        return [spec.id]
+    return []
+
+
+def pred_polling_period_doubling_suspect(
+    _event: NormalizedEvent,
+    _recent: list[NormalizedEvent],
+    ctx: Any,
+    spec: InvariantRuleSpec,
+) -> list[str]:
+    """Chaos Predictor: каскадное удвоение интервалов опроса (Фейгенбаум ≈ 4.669)."""
+    if not ctx.polling_intervals_us:
+        return []
+    result = predict_polling_chaos(ctx.polling_intervals_us)
+    if result and result.suggests_period_doubling_cluster:
+        return [spec.id]
+    return []
+
+
 PREDICATE_REGISTRY: dict[str, PredicateFn] = {
     "noop": pred_noop,
     InvariantId.ILLEGAL_FUNCTION_CODE.value: pred_illegal_function_code,
@@ -310,6 +521,13 @@ PREDICATE_REGISTRY: dict[str, PredicateFn] = {
     InvariantId.EXPERT_DISSONANCE.value: pred_expert_dissonance,
     InvariantId.POLLING_JITTER.value: pred_polling_jitter,
     InvariantId.LATERAL_MOVEMENT.value: pred_lateral_movement,
+    InvariantId.STALE_DATA.value: pred_stale_data,
+    InvariantId.TELEMETRY_GAP.value: pred_telemetry_gap,
+    InvariantId.SOURCE_REPUTATION_DRIFT.value: pred_source_reputation_drift,
+    InvariantId.CONTEXT_DISSONANCE.value: pred_context_dissonance,
+    InvariantId.OUT_OF_SHIFT_ACCESS.value: pred_out_of_shift_access,
+    InvariantId.JUMP_SERVER_BYPASS.value: pred_jump_server_bypass,
+    InvariantId.POLLING_PERIOD_DOUBLING_SUSPECT.value: pred_polling_period_doubling_suspect,
 }
 
 VALID_BUILTIN_PREDICATE_KEYS: frozenset[str] = frozenset(PREDICATE_REGISTRY.keys())

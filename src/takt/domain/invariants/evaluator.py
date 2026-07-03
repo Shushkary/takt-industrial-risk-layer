@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Any, Mapping, Sequence
 
 from takt.domain.entities.event import NormalizedEvent
+from takt.domain.entities.maintenance import ServiceTicket
+from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.invariants.catalog import InvariantId
 from takt.domain.invariants.rule_predicates import PREDICATE_REGISTRY
 from takt.domain.invariants.rule_spec import InvariantRuleSpec, default_extended_rule_specs
@@ -28,6 +31,18 @@ class InvariantContext:
     protocol_tier: dict[str, int] | None = None
     iec104_disallowed_type_ids: frozenset[int] | None = None
     include_experimental_invariants: bool = False
+    # --- Данные для инвариантов, детектируемых внутри предикатов ---
+    tickets: tuple[ServiceTicket, ...] = ()
+    graph_edges: tuple[GraphEdge, ...] = ()
+    jump_host: str = ""
+    plc_hosts: frozenset[str] = frozenset()
+    polling_intervals_us: tuple[float, ...] = ()
+    trust_by_source: Mapping[str, float] | None = None
+    now: datetime | None = None
+    max_gap_seconds: float = 120.0
+    stale_window_seconds: float = 90.0
+    max_rate_of_change: float = 100.0
+    trusted_admin_ips: frozenset[str] = frozenset()
 
 
 def invariant_context_from_config(cfg: Mapping[str, Any] | None) -> InvariantContext:

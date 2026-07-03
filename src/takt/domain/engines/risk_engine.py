@@ -53,9 +53,11 @@ def combine_risk(
     eps_estimate: float,
     mandel_cap: float,
     eps_soft_cap: float,
+    risk_class_thresholds: Mapping[str, float] | None = None,
 ) -> RiskAssessment:
     """
     Risk = F(R, G, C, U, DQ) с учётом деградации DQ и асимптотики EPS.
+    Пороги классов риска задаются через risk_class_thresholds (из YAML).
     """
     wsum = (
         weights["rhythm"] * vectors.rhythm
@@ -72,11 +74,15 @@ def combine_risk(
         mandel_cap,
     )
     score = _clamp(adj * trust)
-    if score >= 0.85:
+    thresholds = risk_class_thresholds or {}
+    critical = float(thresholds.get("critical", 0.85))
+    high = float(thresholds.get("high", 0.65))
+    medium = float(thresholds.get("medium", 0.4))
+    if score >= critical:
         rclass = "CRITICAL"
-    elif score >= 0.65:
+    elif score >= high:
         rclass = "HIGH"
-    elif score >= 0.4:
+    elif score >= medium:
         rclass = "MEDIUM"
     else:
         rclass = "LOW"

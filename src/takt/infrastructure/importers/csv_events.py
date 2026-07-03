@@ -38,6 +38,14 @@ def raw_row_to_normalized(
         or "UNKNOWN"
     )
     payload = dict(row)
+    operator_id = (
+        row.get("operator_id")
+        or row.get("operator")
+        or row.get("actor")
+        or row.get("username")
+        or row.get("user")
+        or ""
+    )
     ps = row.get("payload_size") or row.get("length") or "0"
     try:
         payload_size = int(ps)
@@ -51,6 +59,7 @@ def raw_row_to_normalized(
         operation=str(operation).upper(),
         payload_size=payload_size,
         payload=payload,
+        operator_id=str(operator_id).strip(),
     )
 
 

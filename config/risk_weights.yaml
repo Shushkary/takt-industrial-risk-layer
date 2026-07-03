@@ -18,6 +18,12 @@ alert_fatigue:
 # Асимптотическая отсечка при высоком EPS (нормировка весов)
 eps_soft_cap: 100000
 
+# Пороги классов риска (ранее были захардкожены в risk_engine.py)
+risk_class_thresholds:
+  critical: 0.85
+  high: 0.65
+  medium: 0.4
+
 # Топология для JumpServerBypass (граф задаётся снаружи; здесь — эталонные хосты)
 topology:
   jump_host: jump-01

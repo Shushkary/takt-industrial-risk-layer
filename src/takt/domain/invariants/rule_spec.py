@@ -29,17 +29,7 @@ class InvariantRuleSpec:
         return raw
 
 
-_IDS_NOOP: frozenset[str] = frozenset(
-    {
-        InvariantId.TELEMETRY_GAP.value,
-        InvariantId.STALE_DATA.value,
-        InvariantId.SOURCE_REPUTATION_DRIFT.value,
-        InvariantId.CONTEXT_DISSONANCE.value,
-        InvariantId.JUMP_SERVER_BYPASS.value,
-        InvariantId.OUT_OF_SHIFT_ACCESS.value,
-        InvariantId.POLLING_PERIOD_DOUBLING_SUSPECT.value,
-    }
-)
+_IDS_NOOP: frozenset[str] = frozenset()
 
 _PER_CONTEXT: dict[str, int] = {
     InvariantId.POLLING_JITTER.value: _RHYTHM,

@@ -24,6 +24,17 @@ class FinalizeAuditReportCommand:
     summary: str
 
 
+@dataclass(frozen=True, slots=True)
+class AuditEngagementReportData:
+    generated_at: str
+    engagement: AuditEngagement
+    findings_count: int
+    stages_completed: int
+    stages_total: int
+    nda_signed: bool
+    has_final_report: bool
+
+
 _DEFAULT_STAGES: tuple[tuple[str, str, str], ...] = (
     ("intake", "Intake and NDA", "1-2"),
     ("forensic_collection", "Forensic Collection and Correlation", "2-7"),
@@ -69,6 +80,22 @@ class ManageAuditEngagementUseCase:
 
     def list_all(self) -> list[AuditEngagement]:
         return [deepcopy(item) for item in self._repo.list_all()]
+
+    def export_report(self, engagement_id: str) -> AuditEngagementReportData:
+        engagement = self.get(engagement_id)
+        if engagement is None:
+            raise ValueError(f"unknown engagement {engagement_id}")
+        stages_total = len(engagement.stages)
+        stages_completed = sum(1 for stage in engagement.stages if stage.status == "completed")
+        return AuditEngagementReportData(
+            generated_at=self._clock.now_utc().isoformat(timespec="seconds"),
+            engagement=engagement,
+            findings_count=len(engagement.findings),
+            stages_completed=stages_completed,
+            stages_total=stages_total,
+            nda_signed=engagement.nda_signed,
+            has_final_report=engagement.final_report is not None,
+        )
 
     def advance_stage(self, engagement_id: str, *, note: str = "") -> AuditEngagement:
         engagement = self._repo.get(engagement_id)

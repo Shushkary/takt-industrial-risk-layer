@@ -34,3 +34,4 @@ class NormalizedEvent:
     operation: str
     payload_size: int
     payload: Mapping[str, Any]
+    operator_id: str = ""
