@@ -29,6 +29,8 @@ dev = [
   "cyclonedx-bom>=4.1.0",
   "schemathesis>=3.30.0",
   "mutmut>=2.4.5",
+  "ruff>=0.8.0",
+  "mypy>=1.13.0",
 ]
 metrics = [
   "prometheus-client>=0.21.0",
@@ -73,3 +75,28 @@ forbidden_modules = [
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-p no:cacheprovider"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["takt"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011", "SIM117"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+packages = ["takt"]
+strict = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
