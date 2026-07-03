@@ -67,7 +67,7 @@ readinessProbe:
 
 **HEAD** к тем же путям — для Docker **HEALTHCHECK** и ручных проверок без тела ответа.
 
-В репозитории есть **GitHub Actions** (`.github/workflows/ci.yml`): сборка **Docker**-образа (без push, кэш слоёв **GHA** / BuildKit); **`pytest`** + import linter на Python **3.11**–**3.14**; джоба **`frontend-ci`** (`npm ci`, lint, `npm run test:frontend`, dependency audit, Storybook build); джобы **`release-gates`** (SBOM, артефакты мониторинга, ledger verifier fixture, `pip-audit`, Schemathesis, mutation для `weights_loader.py`) и **`release-evidence-dry-run`** (полный локальный smoke, frontend evidence dry run, упаковка и verify манифеста); **Dependabot** (`.github/dependabot.yml`) — еженедельные обновления pip и actions. Подробнее: [`docs/current_operational_reference.md`](docs/current_operational_reference.md).
+В репозитории есть **GitHub Actions** (`.github/workflows/ci.yml`): сборка **Docker**-образа (без push, кэш слоёв **GHA** / BuildKit); **`pytest`** + import linter на Python **3.11**–**3.14**; джоба **`frontend-ci`** (`npm ci`, lint, `npm run test:frontend`, dependency audit, Storybook build); джобы **`release-gates`** (SBOM, артефакты мониторинга, ledger verifier fixture, `pip-audit`, Schemathesis, mutation для `weights_loader.py`) и **`release-evidence-dry-run`** (`release_finalize.py` с локальным API smoke, frontend evidence dry run с **frontend SBOM**, затем `build_release_package` + verify манифеста); **Dependabot** (`.github/dependabot.yml`) — еженедельные обновления pip и actions. Подробнее: [`docs/current_operational_reference.md`](docs/current_operational_reference.md).
 
 ## HTTP API
 
