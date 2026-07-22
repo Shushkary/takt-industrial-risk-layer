@@ -9,6 +9,9 @@ from takt.interface_adapters.api.main import create_app
 OPERATOR_KEY = "op-secret-key-32chars-long!!!!"
 AUDITOR_KEY = "aud-secret-key-32chars-long!!!"
 ADMIN_KEY = "adm-secret-key-32chars-long!!!"
+L1_KEY = "l1-secret-key-32chars-long!!!!!"
+L2_KEY = "l2-secret-key-32chars-long!!!!!"
+MANAGER_KEY = "mgr-secret-key-32chars-long!!!!"
 
 _KEYS_ENV = f"{OPERATOR_KEY}:alice:operator,{AUDITOR_KEY}:bob:auditor,{ADMIN_KEY}:carol:admin"
 
@@ -64,10 +67,21 @@ def test_rbac_table_admin_only_prefixes() -> None:
 
 
 def test_rbac_table_write_routes_default_to_operator() -> None:
-    assert required_role_for_route("POST", "/cases/abc/decision") == "operator"
+    assert required_role_for_route("POST", "/cases/abc/decision") == "analyst_l1"
     assert role_satisfies("operator", "operator")
     assert role_satisfies("admin", "operator")
     assert not role_satisfies("auditor", "operator")
+
+
+def test_soc_role_matrix_l1_l2_and_manager() -> None:
+    assert required_role_for_route("POST", "/cases/abc/findings") == "analyst_l1"
+    assert required_role_for_route("POST", "/cases/abc/merge") == "analyst_l2"
+    assert required_role_for_route("POST", "/cases/abc/events/e1/detach") == "analyst_l2"
+    assert role_satisfies("analyst_l1", "analyst_l1")
+    assert not role_satisfies("analyst_l1", "analyst_l2")
+    assert role_satisfies("analyst_l2", "analyst_l2")
+    assert not role_satisfies("manager", "analyst_l1")
+    assert role_satisfies("manager", None)
 
 
 def test_rbac_forensic_verify_is_read_equivalent() -> None:
@@ -169,3 +183,46 @@ def test_no_auth_configured_defaults_to_admin_role(monkeypatch) -> None:
             json={"cases": []},
         )
         assert r.status_code == 200
+
+
+def test_soc_roles_enforce_l1_l2_and_manager_boundaries(monkeypatch) -> None:
+    monkeypatch.setenv("TAKT_AUTH_REQUIRED", "true")
+    monkeypatch.setenv(
+        "TAKT_API_KEYS",
+        f"{L1_KEY}:lena:analyst_l1,{L2_KEY}:max:analyst_l2,{MANAGER_KEY}:maria:manager",
+    )
+    monkeypatch.delenv("TAKT_API_KEY", raising=False)
+    with TestClient(create_app()) as client:
+        first = client.post(
+            "/assess",
+            json={"observed_at": "2026-06-01T10:00:00Z", "operation": "READ", "asset_id": "role-a"},
+            headers=_headers(L1_KEY),
+        )
+        second = client.post(
+            "/assess",
+            json={"observed_at": "2026-06-01T10:00:00Z", "operation": "READ", "asset_id": "role-b"},
+            headers=_headers(L1_KEY),
+        )
+        assert first.status_code == second.status_code == 200
+        first_id, second_id = first.json()["case_id"], second.json()["case_id"]
+
+        denied_merge = client.post(
+            f"/cases/{first_id}/merge",
+            json={"source_case_id": second_id, "reason": "role test"},
+            headers=_headers(L1_KEY),
+        )
+        assert denied_merge.status_code == 403
+        allowed_merge = client.post(
+            f"/cases/{first_id}/merge",
+            json={"source_case_id": second_id, "reason": "role test"},
+            headers=_headers(L2_KEY),
+        )
+        assert allowed_merge.status_code == 200
+
+        assert client.get(f"/cases/{first_id}", headers=_headers(MANAGER_KEY)).status_code == 200
+        denied_finding = client.post(
+            f"/cases/{first_id}/findings",
+            json={"text": "manager must not write"},
+            headers=_headers(MANAGER_KEY),
+        )
+        assert denied_finding.status_code == 403

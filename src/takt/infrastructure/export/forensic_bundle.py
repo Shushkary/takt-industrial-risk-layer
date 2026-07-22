@@ -539,6 +539,30 @@ class ZipForensicBundleBuilder:
                 case_to_siem_payload(case).model_dump_json(indent=2).encode("utf-8"),
             ),
             ("audit.txt", "text/plain; charset=utf-8", "\n".join(case.audit_log).encode("utf-8")),
+            (
+                "findings.json", "application/json",
+                _json_bytes([
+                    {
+                        "finding_id": item.finding_id, "text": item.text, "author": item.author,
+                        "created_at": _utc_iso(item.created_at), "event_ids": list(item.event_ids),
+                        "artifacts": [
+                            {"type": artifact.type, "value": artifact.value, "host_id": artifact.host_id}
+                            for artifact in item.artifacts
+                        ],
+                    } for item in case.findings
+                ]),
+            ),
+            (
+                "artifacts.json", "application/json",
+                _json_bytes([
+                    {
+                        "type": item.type, "value": item.value, "host_id": item.host_id,
+                        "verification_status": item.verification_status, "source": item.source,
+                        "added_by": item.added_by,
+                        "created_at": _utc_iso(item.created_at) if item.created_at else None,
+                    } for item in case.artifacts
+                ]),
+            ),
         ]
         raw_files, raw_index = _raw_evidence_files(case)
         if raw_files:

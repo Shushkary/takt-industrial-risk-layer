@@ -11,6 +11,7 @@ class CaseStatus(StrEnum):
     CONFIRMED = "CONFIRMED"
     FALSE_POSITIVE = "FALSE_POSITIVE"
     EXPECTED_BEHAVIOR = "EXPECTED_BEHAVIOR"
+    MERGED = "MERGED"
 
 
 @dataclass(slots=True)
@@ -146,6 +147,38 @@ class RawEvidenceRef:
 
 
 @dataclass(slots=True)
+class CorrelationEvidence:
+    event_id: str
+    fingerprint: str
+    rule: str
+    fields: list[str] = field(default_factory=list)
+    manual: bool = False
+    reason: str = ""
+    request_id: str = ""
+
+
+@dataclass(slots=True)
+class CaseArtifact:
+    type: str
+    value: str
+    host_id: str = ""
+    verification_status: str = "unverified"
+    source: str = "manual"
+    added_by: str = ""
+    created_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class Finding:
+    finding_id: str
+    text: str
+    author: str
+    created_at: datetime
+    event_ids: list[str] = field(default_factory=list)
+    artifacts: list[CaseArtifact] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class Case:
     """Карточка инцидента (HITL)."""
 
@@ -159,6 +192,11 @@ class Case:
     xai_summary: str = ""
     audit_log: list[str] = field(default_factory=list)
     burst_fingerprint: str = ""
+    correlation_fingerprints: list[str] = field(default_factory=list)
+    correlation_evidence: list[CorrelationEvidence] = field(default_factory=list)
+    related_cases: list[str] = field(default_factory=list)
+    artifacts: list[CaseArtifact] = field(default_factory=list)
+    findings: list[Finding] = field(default_factory=list)
     primary_asset_id: str = ""
     trigger_operation: str = ""
     operator_id: str = ""

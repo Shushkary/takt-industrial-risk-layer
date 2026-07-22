@@ -31,7 +31,7 @@
 | `TAKT_OPENAPI_SERVER_URL` | Один или несколько абсолютных `https://…`/`http://…` через запятую — поле `servers` в `/openapi.json` и база для Try it out за reverse proxy | `openapi_servers_count` |
 | `TAKT_BUILD_REVISION` | Непустая строка (до 256 символов) — метка CI/образа | `build_revision` |
 | `TAKT_AUTH_REQUIRED` | По умолчанию включён: при старте без `TAKT_API_KEY`/`TAKT_API_KEYS` процесс завершается с ошибкой (fail-closed); отключение — `0`/`false`/`no`/`off` | `auth.mode` (`required`/`optional`/`disabled`) |
-| `TAKT_API_KEYS` | Именованные ключи с ролями: `ключ:actor_id:роль,ключ2:actor_id2:роль2` (роль — `operator`/`auditor`/`admin`). Некорректные записи (пустой ключ/actor_id, неизвестная роль, дубликат ключа) отбрасываются с предупреждением в лог, не валят процесс. См. раздел «Роли (RBAC)» ниже | `auth.roles_configured`, `auth.role_counts` |
+| `TAKT_API_KEYS` | Именованные ключи с ролями: `ключ:actor_id:роль,ключ2:actor_id2:роль2` (роль — `analyst_l1`/`analyst_l2`/`manager`/`admin`; legacy: `operator`/`auditor`). Некорректные записи отбрасываются с предупреждением. См. `docs/pt_techlab/rbac_matrix.md` | `auth.roles_configured`, `auth.role_counts` |
 | `TAKT_SECURITY_PROFILE` | `prod`/`production` — только https для SIEM webhook, фильтрация DNS на частные/loopback адреса; иначе `dev` | — |
 | `TAKT_COMPLIANCE_MODE` | `1` — маркировка режима соответствия в `GET /compliance/mode` (не добавляет активного управления, не делает продукт СКЗИ) | — |
 | `TAKT_FORENSIC_HMAC_SECRET` | MVP-подпись root hash доказательного пакета через HMAC-SHA256 | — |
@@ -54,15 +54,17 @@
 поведение не изменилось для существующих развёртываний. Для разделения ролей задайте **`TAKT_API_KEYS`**
 вместо (или в дополнение к) **`TAKT_API_KEY`**: список записей `ключ:actor_id:роль` через запятую.
 
-Роли: **`operator`**, **`auditor`**, **`admin`**. Иерархия для write-запросов: **`admin`** может всё, что
-может **`operator`**; **`auditor`** — только чтение. Матрица маршрутов (`src/takt/infrastructure/security/rbac.py`):
+Роли: **`analyst_l1`**, **`analyst_l2`**, **`manager`**, **`admin`**. `analyst_l2` включает права L1,
+`manager` работает только на чтение, `admin` имеет полный доступ. Legacy-роли: `operator` = `analyst_l2`,
+`auditor` = `manager`. Полная матрица: `docs/pt_techlab/rbac_matrix.md`.
 
 | Правило | Минимальная роль |
 |---|---|
-| Любой `GET`/`HEAD` | любая аутентифицированная роль (в т.ч. `auditor`) |
+| Любой `GET`/`HEAD` | любая аутентифицированная роль (включая `manager`) |
 | `POST /forensic-bundle/verify` | любая аутентифицированная роль (только проверяет уже сформированный пакет, не меняет состояние) |
 | `POST /cases/import/full.json`, `POST /integrations/siem/forward(/async)`, `/audit-engagements*` | `admin` |
-| Все остальные `POST`/`PUT`/`PATCH`/`DELETE` (decision, manual-permits, operator-actions, remediations, ingest: `/assess`, `/events*`, `/integrations/ingest/*`, `/backtest/fixture`) | `operator` (или `admin`) |
+| Квалификация, findings/artifacts, решения и ingest | `analyst_l1` (или L2/admin) |
+| Ручная корреляция, merge/split и углублённое реагирование | `analyst_l2` (или admin) |
 
 Несоответствие роли маршруту — **403 Forbidden** с телом `{"detail": "...", "request_id": "..."}`.
 

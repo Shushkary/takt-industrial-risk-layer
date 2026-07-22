@@ -17,6 +17,7 @@ export type ReadyResponse = Record<string, unknown>
 export type CasesQuery = {
   status?: string
   risk_class?: string
+  case_id_prefix?: string
   limit?: number
   offset?: number
   sort?: string
@@ -330,6 +331,23 @@ const BatchAssessResponseSchema = AnyObjectSchema.extend({
   results: z.array(AnyRecordSchema).catch([]),
   count: z.number().finite().catch(0),
 })
+const ArtifactSchema = AnyObjectSchema.extend({
+  type: z.string().catch(''),
+  value: z.string().catch(''),
+})
+const EventSearchItemSchema = AnyObjectSchema.extend({
+  event_id: z.string(),
+  observed_at: z.string(),
+  source: z.string().catch('unknown'),
+  protocol: z.string().catch(''),
+  operation: z.string().catch(''),
+  entities: AnyRecordSchema.nullable().catch(null),
+  artifacts: z.array(ArtifactSchema).catch([]),
+  payload_size: z.number().finite().optional(),
+  payload: AnyRecordSchema.optional(),
+  operator_id: z.string().optional(),
+  ingest_trust: z.number().finite().optional(),
+})
 
 function requestHeaders(json = false): HeadersInit {
   const headers: Record<string, string> = {}
@@ -360,6 +378,70 @@ function requireRecord(value: unknown, context: string): Record<string, unknown>
     throw invalidApiResponse(context)
   }
   return parsed.data
+}
+
+export type CaseWorkspaceEvent = {
+  event_id: string
+  observed_at: string
+  source: string
+  operation: string
+  protocol: string
+  entities: Record<string, unknown> | null
+  artifacts: Array<{ type: string; value: string }>
+}
+
+export type CaseWorkspaceResponse = {
+  case: CaseDetailResponse
+  events: CaseWorkspaceEvent[]
+  timeline: Array<{ id: string; at: string; kind: string; source?: string; label: string }>
+  graph: {
+    nodes: Array<{ id: string; type: string; value: string }>
+    edges: Array<{ source: string; target: string; type: string; event_id: string }>
+  }
+  findings: Array<{ finding_id: string; text: string; author: string }>
+  artifacts: Array<{ type: string; value: string; source: string }>
+  attack_chain: {
+    entry_point: string
+    current_state: string
+    steps: Array<{
+      order: number
+      kind: string
+      event_id: string
+      observed_at: string
+      source: string
+      from_entity: string
+      to_entity: string
+      operation: string
+    }>
+    artifacts: Array<{ type: string; value: string; event_id: string }>
+  }
+}
+
+export type EventSearchQuery = {
+  source?: string
+  observed_from?: string
+  observed_to?: string
+  host_id?: string
+  user_id?: string
+  process_id?: string
+  address?: string
+  artifact_type?: string
+  artifact_value?: string
+  text?: string
+  limit?: number
+  offset?: number
+}
+
+export type EventSearchItem = CaseWorkspaceEvent & {
+  payload_size?: number
+  payload?: Record<string, unknown>
+  operator_id?: string
+  ingest_trust?: number
+}
+
+export type EventSearchResponse = {
+  items: EventSearchItem[]
+  total: number | null
 }
 
 function requireString(value: unknown, context: string): string {
@@ -615,12 +697,76 @@ export async function fetchCases(query: CasesQuery = {}): Promise<CasesListRespo
   }
 }
 
+function parseEventSearchItem(value: unknown): EventSearchItem {
+  const record = EventSearchItemSchema.parse(value)
+  return {
+    ...record,
+    event_id: record.event_id,
+    observed_at: record.observed_at,
+    source: record.source,
+    protocol: record.protocol,
+    operation: record.operation,
+    entities: record.entities,
+    artifacts: record.artifacts,
+  }
+}
+
+export async function fetchEventSearch(query: EventSearchQuery = {}): Promise<EventSearchResponse | null> {
+  const response = await apiRequest(`/events/search${buildQuery(query)}`)
+  if (!response) {
+    return null
+  }
+  if (!response.ok) {
+    throw new Error(await errorMessage(response))
+  }
+  const body = await response.json()
+  if (!Array.isArray(body)) {
+    throw invalidApiResponse('events search')
+  }
+  try {
+    return {
+      items: body.map(parseEventSearchItem),
+      total: Number.parseInt(response.headers.get('X-Total-Count') ?? '', 10) || null,
+    }
+  } catch (error) {
+    normalizeApiValidationError(error, '/events/search')
+  }
+}
+
 export async function fetchCasesStats(): Promise<CasesStatsResponse | null> {
   return requestJson('/cases/stats', (value) => requireRecord(value, 'cases stats'))
 }
 
 export async function fetchCaseDetail(caseId: string): Promise<CaseDetailResponse | null> {
   return requestJson(`/cases/${encodeURIComponent(caseId)}`, parseCaseDetail)
+}
+
+export async function fetchCaseWorkspace(caseId: string): Promise<CaseWorkspaceResponse | null> {
+  return requestJson(`/cases/${encodeURIComponent(caseId)}/workspace`, (value) => {
+    const record = requireRecord(value, 'case workspace')
+    return record as unknown as CaseWorkspaceResponse
+  })
+}
+
+export async function addCaseFinding(
+  caseId: string,
+  text: string,
+  eventIds: string[] = [],
+): Promise<Record<string, unknown> | null> {
+  return requestJson(`/cases/${encodeURIComponent(caseId)}/findings`, (value) => requireRecord(value, 'case finding'), {
+    method: 'POST',
+    body: { text, event_ids: eventIds, artifacts: [] },
+  })
+}
+
+export async function addCaseArtifact(
+  caseId: string,
+  artifact: { type: string; value: string; host_id?: string },
+): Promise<Record<string, unknown> | null> {
+  return requestJson(`/cases/${encodeURIComponent(caseId)}/artifacts`, (value) => requireRecord(value, 'case artifact'), {
+    method: 'POST',
+    body: { ...artifact, verification_status: 'unverified' },
+  })
 }
 
 export async function submitCaseDecision(caseId: string, payload: DecisionPayload): Promise<Record<string, unknown> | null> {

@@ -26,7 +26,27 @@ _ADMIN_ONLY_PREFIXES: tuple[str, ...] = (
     "/audit-engagements",
 )
 
-ROLE_RANK: dict[str, int] = {"auditor": 0, "operator": 1, "admin": 2}
+ROLE_RANK: dict[str, int] = {
+    "manager": 0,
+    "analyst_l1": 1,
+    "analyst_l2": 2,
+    "admin": 3,
+    # Backward-compatible aliases.
+    "auditor": 0,
+    "operator": 2,
+}
+
+_L2_SUFFIXES: tuple[str, ...] = (
+    "/merge",
+    "/split",
+    "/events/attach",
+)
+
+
+def _requires_l2(path: str) -> bool:
+    if not path.startswith("/cases/"):
+        return False
+    return path.endswith(_L2_SUFFIXES) or ("/events/" in path and path.endswith("/detach"))
 
 
 def required_role_for_route(method: str, path: str) -> str | None:
@@ -37,14 +57,18 @@ def required_role_for_route(method: str, path: str) -> str | None:
         return None
     if any(path == p or path.startswith(f"{p}/") for p in _ADMIN_ONLY_PREFIXES):
         return "admin"
-    return "operator"
+    if _requires_l2(path):
+        return "analyst_l2"
+    return "analyst_l1"
 
 
 def role_satisfies(role: str, required: str | None) -> bool:
     if required is None:
         return role in ROLE_RANK
-    if required == "operator":
-        return role in ("operator", "admin")
+    if required in {"operator", "analyst_l1"}:
+        return ROLE_RANK.get(role, -1) >= ROLE_RANK["analyst_l1"]
+    if required == "analyst_l2":
+        return ROLE_RANK.get(role, -1) >= ROLE_RANK["analyst_l2"]
     if required == "admin":
         return role == "admin"
     return False

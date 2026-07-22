@@ -1,0 +1,3 @@
+event_time,record_id,device_host,subject_user,src_ip,dst_ip,rule_name,indicator_type,indicator,incident_id
+2026-06-01T09:00:15Z,siem-001,ws-17,ivanov,10.10.1.17,10.20.30.40,SUSPICIOUS_OUTBOUND,domain,evil.example,INC-001
+2026-06-01T08:50:00Z,siem-002,dc-01,svc_backup,10.10.1.10,10.10.1.20,BACKUP_SUCCESS,host,backup-01,BACKGROUND

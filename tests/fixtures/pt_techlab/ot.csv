@@ -1,0 +1,3 @@
+timestamp,event_id,asset_id,src_address,dst_address,protocol,operation,tag,payload_size,incident_id
+2026-06-01T09:01:00Z,ot-001,plc-01,10.10.2.5,10.10.2.20,IEC104,WRITE_SETPOINT,boiler.pressure,64,INC-001
+2026-06-01T08:40:00Z,ot-002,plc-02,10.10.2.6,10.10.2.21,IEC104,POLL,boiler.level,48,BACKGROUND

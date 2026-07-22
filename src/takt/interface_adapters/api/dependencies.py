@@ -19,6 +19,7 @@ class ApiContext:
     app: FastAPI
     repo: Any
     baseline: Any
+    clock: Any
     package_version: str
     root: Path
     gzip_minimum_size_bytes: int
@@ -78,6 +79,9 @@ class ApiContext:
     ipfix_ingest_body_model: Any | None = None
     event_batch_body_model: Any | None = None
     batch_assess_response_model: Any | None = None
+    manual_correlation_uc: Any | None = None
+    case_findings_uc: Any | None = None
+    decoder_service: Any | None = None
     assess_from_plc_demo_body: Callable[[Any], Any] | None = None
     assess_event_ingest_body: Callable[..., Any] | None = None
     assess_event_batch_body: Callable[..., Any] | None = None

@@ -18,6 +18,35 @@ class ObservationDetail(BaseModel):
     event_ids: list[str]
 
 
+class CorrelationEvidenceDetail(BaseModel):
+    event_id: str
+    fingerprint: str
+    rule: str
+    fields: list[str] = Field(default_factory=list)
+    manual: bool = False
+    reason: str = ""
+    request_id: str = ""
+
+
+class CaseArtifactDetail(BaseModel):
+    type: str
+    value: str
+    host_id: str = ""
+    verification_status: str = "unverified"
+    source: str = "manual"
+    added_by: str = ""
+    created_at: str | None = None
+
+
+class FindingDetail(BaseModel):
+    finding_id: str
+    text: str
+    author: str
+    created_at: str
+    event_ids: list[str] = Field(default_factory=list)
+    artifacts: list[CaseArtifactDetail] = Field(default_factory=list)
+
+
 class InvariantHitRecordDetail(BaseModel):
     invariant_id: str
     event_ref: str
@@ -141,6 +170,11 @@ class CaseDetail(BaseModel):
     invariant_hits: list[str]
     invariant_details: list[InvariantHitDetail]
     observations: list[ObservationDetail] = Field(default_factory=list)
+    correlation_fingerprints: list[str] = Field(default_factory=list)
+    correlation_evidence: list[CorrelationEvidenceDetail] = Field(default_factory=list)
+    related_cases: list[str] = Field(default_factory=list)
+    artifacts: list[CaseArtifactDetail] = Field(default_factory=list)
+    findings: list[FindingDetail] = Field(default_factory=list)
     manual_permits: list[ManualPermitDetail] = Field(default_factory=list)
     formal_verdict: CaseForensicVerdictDetail | None = None
     formal_verdict_records: list[FormalVerdictRecordDetail] = Field(default_factory=list)

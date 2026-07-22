@@ -189,6 +189,39 @@ describe('taktApi runtime validation', () => {
     expect(result).toEqual({ results: [{ case_id: 'case-1' }], count: 1 })
   })
 
+  it('searches events with entity filters and preserves total count', async () => {
+    let hostId = ''
+    server.use(
+      http.get('http://takt.test/events/search', ({ request }) => {
+        const url = new URL(request.url)
+        hostId = url.searchParams.get('host_id') ?? ''
+        return HttpResponse.json(
+          [
+            {
+              event_id: 'event-1',
+              observed_at: '2026-05-25T00:00:00Z',
+              source: 'edr',
+              protocol: 'process',
+              operation: 'spawn',
+              entities: { host_id: 'host-1', process_id: 'proc-1' },
+              artifacts: [{ type: 'hash', value: 'abc' }],
+              payload: { command_line: 'cmd.exe' },
+              ingest_trust: 0.9,
+            },
+          ],
+          { headers: { 'X-Total-Count': '7' } },
+        )
+      }),
+    )
+
+    const { fetchEventSearch } = await import('./taktApi')
+    const result = await fetchEventSearch({ host_id: 'host-1', limit: 10 })
+
+    expect(hostId).toBe('host-1')
+    expect(result?.total).toBe(7)
+    expect(result?.items[0]).toMatchObject({ event_id: 'event-1', source: 'edr', entities: { host_id: 'host-1' } })
+  })
+
   it('drops invalid event batch result records while preserving count', async () => {
     server.use(http.post('http://takt.test/events/batch', () => HttpResponse.json({ results: ['bad'], count: 1 })))
 

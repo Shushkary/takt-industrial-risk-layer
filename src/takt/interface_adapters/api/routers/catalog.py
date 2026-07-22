@@ -42,9 +42,20 @@ def register_catalog_routes(ctx: ApiContext) -> None:
     @app.get("/catalog/event-sources", response_model=list[EventSourceCatalogItem], tags=["Catalog"])
     def event_sources_catalog():
         tbs = app.state.trust_by_source or {}
+        store = getattr(app.state, "recent_event_store", None)
+        counts = store.event_counts_by_source() if store is not None else {}
+        names = {
+            EventSource.EDR: "Endpoint Detection and Response",
+            EventSource.SIEM: "SIEM",
+            EventSource.NDR: "Network Detection and Response",
+            EventSource.OT: "Промышленная телеметрия / PT ISIM",
+        }
         return [
             EventSourceCatalogItem(
                 id=s.value,
+                source_class=s.value,
+                display_name=names.get(s, s.value.replace("_", " ").title()),
+                event_count=counts.get(s.value, 0),
                 ingest_trust=(float(tbs[s.value]) if s.value in tbs else None),
             )
             for s in EventSource

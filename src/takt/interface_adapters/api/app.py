@@ -1,22 +1,20 @@
 ﻿from __future__ import annotations
 
-import logging
 import json
+import logging
 import os
 import socket
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
-from fastapi import FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import JSONResponse
-from pydantic import ValidationError
+from fastapi import FastAPI, HTTPException, Request
 from starlette.middleware.gzip import GZipMiddleware
 
+from takt.application.system_defaults import default_clock, default_id_provider
 from takt.application.use_cases.assess_risk import AssessRiskUseCase
 from takt.application.use_cases.audit_engagement import ManageAuditEngagementUseCase
 from takt.application.use_cases.audit_ledger_facade import AuditLedgerFacade
@@ -24,6 +22,7 @@ from takt.application.use_cases.backtest import RunBacktestUseCase
 from takt.application.use_cases.build_forensic_bundle import BuildForensicBundleUseCase
 from takt.application.use_cases.case_actions_facade import CaseActionsFacade
 from takt.application.use_cases.case_decision import SubmitCaseDecisionUseCase
+from takt.application.use_cases.case_findings import CaseFindingsUseCase
 from takt.application.use_cases.cases_query_service import CASE_LIST_SORT_KEYS, CasesQueryService
 from takt.application.use_cases.compliance_facade import ComplianceFacade
 from takt.application.use_cases.compliance_report import (
@@ -31,20 +30,20 @@ from takt.application.use_cases.compliance_report import (
     BuildComplianceDataQualityReportUseCase,
     BuildForensicReadinessReportUseCase,
 )
-from takt.application.use_cases.formal_verdict_confirmation import ConfirmFormalVerdictUseCase
+from takt.application.use_cases.enrichment import LocalDecoderService
 from takt.application.use_cases.export_facade import ExportFacade
 from takt.application.use_cases.forensic_export_facade import ForensicExportFacade
+from takt.application.use_cases.formal_verdict_confirmation import ConfirmFormalVerdictUseCase
 from takt.application.use_cases.ingest_facade import IngestAssessmentFacade
 from takt.application.use_cases.manual_permit import AttachManualPermitUseCase
+from takt.application.use_cases.manual_correlation import ManualCorrelationUseCase
 from takt.application.use_cases.process_event import ProcessEventUseCase
 from takt.application.use_cases.remediation import (
     ListRemediationAttemptsUseCase,
     RecordRemediationAttemptUseCase,
 )
 from takt.application.use_cases.verify_forensic_bundle import VerifyForensicBundleUseCase
-from takt.application.system_defaults import default_clock, default_id_provider
 from takt.domain.entities.case import Case
-from takt.domain.engines.causal_mesh import GraphEdge, detect_jump_server_bypass
 from takt.domain.entities.event import EventSource, NormalizedEvent
 from takt.domain.invariants.evaluator import invariant_context_from_config
 from takt.infrastructure.config.invariant_catalog_yaml import (
@@ -53,7 +52,6 @@ from takt.infrastructure.config.invariant_catalog_yaml import (
     catalog_rule_specs,
     load_invariant_catalog_from_dir,
 )
-from takt.infrastructure.config.weights_loader import load_risk_weights
 from takt.infrastructure.config.settings_helpers import (
     apply_storage_env_overrides,
     case_repository_from_weights,
@@ -64,15 +62,9 @@ from takt.infrastructure.config.settings_helpers import (
     topology_from_weights,
     trust_by_source_from_weights,
 )
-from takt.infrastructure.stores.memory import InMemoryAuditEngagementStore, InMemoryIdempotencyStore
-from takt.infrastructure.stores.sqlite_store import (
-    SqliteAuditEngagementStore,
-    SqliteCaseStore,
-    sqlite_busy_timeout_ms_from_env,
-)
-from takt.infrastructure.stores.sqlite_recent_events import SqliteRecentEventStore
-from takt.infrastructure.export.case_pdf import render_case_pdf
+from takt.infrastructure.config.weights_loader import load_risk_weights
 from takt.infrastructure.export.forensic_bundle import ZipForensicBundleBuilder, ZipForensicBundleVerifier
+from takt.infrastructure.export.case_pdf import render_case_pdf
 from takt.infrastructure.export.gossopka import (
     case_to_gossopka_card,
     case_to_gossopka_official_card,
@@ -80,55 +72,44 @@ from takt.infrastructure.export.gossopka import (
     case_to_gossopka_transport_payload,
 )
 from takt.infrastructure.export.siem_webhook import (
-    SiemCaseExportPayload,
     case_to_siem_payload,
     post_case_to_webhook,
     post_case_to_webhook_sync,
 )
-from takt.infrastructure.security.webhook_allowlist import require_allowed_siem_url
-from takt.infrastructure.http.cors_from_env import add_cors_middleware_if_configured, cors_middleware_enabled_from_env
-from takt.infrastructure.http.rate_limit_middleware import (
-    InMemoryRateLimitMiddleware,
-    rate_limit_ip_header_from_env,
-    rate_limit_max_tracked_ips_from_env,
-    rate_limit_per_minute_from_env,
-    rate_limit_proxy_mode_for_health,
-)
-from takt.infrastructure.http.idempotency import idempotency_record_success, idempotent_json_response_or_none
-from takt.infrastructure.http.request_body_limit_middleware import (
-    RequestBodySizeLimitMiddleware,
-    max_request_body_bytes_from_env,
-)
-from takt.infrastructure.http.request_id_middleware import RequestIdMiddleware, request_id_alternate_header_from_env
-from takt.infrastructure.http.security_log_middleware import SecurityLogMiddleware
 from takt.infrastructure.http.cache_control_middleware import (
     CasesPrivateNoStoreMiddleware,
     CatalogCacheControlMiddleware,
-    catalog_cache_max_age_sec,
 )
-from takt.infrastructure.http.prometheus_metrics import metrics_enabled_from_env
+from takt.infrastructure.http.cors_from_env import add_cors_middleware_if_configured
 from takt.infrastructure.http.prometheus_metrics import record_business_assessment
+from takt.infrastructure.http.rate_limit_middleware import (
+    InMemoryRateLimitMiddleware,
+)
+from takt.infrastructure.http.request_body_limit_middleware import (
+    RequestBodySizeLimitMiddleware,
+)
+from takt.infrastructure.http.request_id_middleware import RequestIdMiddleware
 from takt.infrastructure.http.security_headers import (
     SecurityHeadersMiddleware,
-    hsts_enabled_from_env,
-    hsts_preload_enabled_from_env,
 )
-from takt.infrastructure.http.timing_middleware import ProcessTimeMiddleware, slow_log_threshold_seconds
-from takt.infrastructure.importers.csv_events import load_normalized_from_csv, raw_row_to_normalized
+from takt.infrastructure.http.security_log_middleware import SecurityLogMiddleware
+from takt.infrastructure.http.timing_middleware import ProcessTimeMiddleware
+from takt.infrastructure.importers.csv_events import raw_row_to_normalized
 from takt.infrastructure.security.api_key_middleware import OptionalApiKeyMiddleware
 from takt.infrastructure.security.auth_env import (
-    auth_mode_for_health,
     validate_startup_auth_or_raise,
 )
-from takt.infrastructure.security.request_actor import security_actor_from_request
 from takt.infrastructure.security.security_log_service import SecurityLogService, security_log_file_path_from_env
 from takt.infrastructure.security.startup_audit import security_startup_config_snapshot
 from takt.infrastructure.security.webhook_allowlist import (
     require_allowed_siem_url,
-    siem_allowlist_mode_label,
-    takt_security_profile_from_env,
 )
-from takt.infrastructure.security.trusted_proxies import trusted_proxy_networks_from_env
+from takt.infrastructure.stores.memory import InMemoryAuditEngagementStore, InMemoryIdempotencyStore
+from takt.infrastructure.stores.sqlite_recent_events import SqliteRecentEventStore
+from takt.infrastructure.stores.sqlite_store import (
+    SqliteAuditEngagementStore,
+    SqliteCaseStore,
+)
 from takt.interface_adapters.api.config_paths import (
     ensure_explicit_takt_config_under_project,
     invariant_catalog_dir_for_config,
@@ -136,6 +117,7 @@ from takt.interface_adapters.api.config_paths import (
 )
 from takt.interface_adapters.api.dependencies import ApiContext
 from takt.interface_adapters.api.event_sources import coerce_event_source
+from takt.interface_adapters.api.lifecycle import build_app_lifespan
 from takt.interface_adapters.api.mappers.cases import (
     case_to_detail,
     domain_case_from_detail,
@@ -144,29 +126,37 @@ from takt.interface_adapters.api.mappers.cases import (
     manual_permit_to_detail,
     parse_import_created_at,
 )
-from takt.interface_adapters.api.lifecycle import build_app_lifespan
 from takt.interface_adapters.api.metrics import register_prometheus_if_enabled
-from takt.interface_adapters.api.pagination import offset_limit_link_header
 from takt.interface_adapters.api.openapi import (
     attach_custom_openapi,
     is_openapi_public_path,
     openapi_api_key_configured,
-    openapi_server_entries_from_env as _openapi_server_entries_from_env,
     patch_openapi_servers,
     patch_openapi_with_takt_api_key,
 )
+from takt.interface_adapters.api.openapi import (
+    openapi_server_entries_from_env as _openapi_server_entries_from_env,
+)
+from takt.interface_adapters.api.pagination import offset_limit_link_header
+from takt.interface_adapters.api.routers.analytics import register_analytics_routes
+from takt.interface_adapters.api.routers.attack_chain import register_attack_chain_routes
 from takt.interface_adapters.api.routers.audit_engagements import register_audit_engagement_routes
 from takt.interface_adapters.api.routers.audit_ledger import register_audit_ledger_routes
-from takt.interface_adapters.api.routers.analytics import register_analytics_routes
 from takt.interface_adapters.api.routers.case_actions import register_case_action_routes
 from takt.interface_adapters.api.routers.cases import register_case_routes
 from takt.interface_adapters.api.routers.catalog import register_catalog_routes
+from takt.interface_adapters.api.routers.correlation import register_correlation_routes
 from takt.interface_adapters.api.routers.compliance import register_compliance_routes
+from takt.interface_adapters.api.routers.events import register_event_routes
+from takt.interface_adapters.api.routers.entities import register_entity_routes
+from takt.interface_adapters.api.routers.enrichment import register_enrichment_routes
 from takt.interface_adapters.api.routers.export import register_export_routes
+from takt.interface_adapters.api.routers.findings import register_finding_routes
 from takt.interface_adapters.api.routers.forensic import register_forensic_routes
-from takt.interface_adapters.api.routers.integrations import register_integration_routes
 from takt.interface_adapters.api.routers.ingest import register_ingest_routes
+from takt.interface_adapters.api.routers.integrations import register_integration_routes
 from takt.interface_adapters.api.routers.system import register_system_routes
+from takt.interface_adapters.api.routers.workspace import register_workspace_routes
 from takt.interface_adapters.api.schemas.case_actions import (
     CaseDecisionResponse,
     DecisionBody,
@@ -177,11 +167,11 @@ from takt.interface_adapters.api.schemas.case_actions import (
 from takt.interface_adapters.api.schemas.cases import (
     AssessResponse,
     CaseDetail,
-    CaseSummary,
     CasesFullExportResponse,
     CasesImportBody,
     CasesImportResponse,
     CasesStatsResponse,
+    CaseSummary,
 )
 from takt.interface_adapters.api.schemas.errors import MIDDLEWARE_ERROR_OPENAPI
 from takt.interface_adapters.api.schemas.ingest import (
@@ -368,7 +358,7 @@ def create_app() -> FastAPI:
         responses=MIDDLEWARE_ERROR_OPENAPI,
     )
     app.state.prometheus_metrics_active = False
-    app.state.booted_at_utc = datetime.now(timezone.utc)
+    app.state.booted_at_utc = datetime.now(UTC)
     app.state.boot_monotonic = time.monotonic()
     app.state.rate_limit_lock = threading.Lock()
     app.state.rate_limit_buckets = {}
@@ -426,6 +416,9 @@ def create_app() -> FastAPI:
     )
     forensic_verify_uc = VerifyForensicBundleUseCase(ZipForensicBundleVerifier())
     manual_permit_uc = AttachManualPermitUseCase(repo, default_clock, default_id_provider)
+    manual_correlation_uc = ManualCorrelationUseCase(repo)
+    case_findings_uc = CaseFindingsUseCase(repo)
+    decoder_service = LocalDecoderService()
     formal_verdict_confirmation_uc = ConfirmFormalVerdictUseCase(repo, default_clock)
     remediation_uc = RecordRemediationAttemptUseCase(repo, default_clock, default_id_provider)
     remediation_list_uc = ListRemediationAttemptsUseCase(repo)
@@ -444,6 +437,7 @@ def create_app() -> FastAPI:
     app.state.ingest_recent_for_context = process.recent_context_event_count
 
     app.state.repo = repo
+    app.state.ingest_facade = ingest_facade
     app.state.recent_event_store = recent_event_store
     app.state.idempotency_store = repo if isinstance(repo, SqliteCaseStore) else InMemoryIdempotencyStore()
     app.state.baseline = baseline
@@ -512,7 +506,7 @@ def create_app() -> FastAPI:
         try:
             latency_seconds = max(
                 0.0,
-                (datetime.now(timezone.utc) - ev.observed_at.astimezone(timezone.utc)).total_seconds(),
+                (datetime.now(UTC) - ev.observed_at.astimezone(UTC)).total_seconds(),
             )
         except Exception:
             latency_seconds = None
@@ -652,6 +646,7 @@ def create_app() -> FastAPI:
         app=app,
         repo=repo,
         baseline=baseline,
+        clock=default_clock,
         package_version=_PACKAGE_VERSION,
         root=_ROOT,
         gzip_minimum_size_bytes=_GZIP_MINIMUM_SIZE_BYTES,
@@ -711,6 +706,9 @@ def create_app() -> FastAPI:
         ipfix_ingest_body_model=IpfixIngestBody,
         event_batch_body_model=EventBatchBody,
         batch_assess_response_model=BatchAssessResponse,
+        manual_correlation_uc=manual_correlation_uc,
+        case_findings_uc=case_findings_uc,
+        decoder_service=decoder_service,
         assess_from_plc_demo_body=_assess_from_plc_demo_body,
         assess_event_ingest_body=_assess_event_ingest_body,
         assess_event_batch_body=_assess_event_batch_body,
@@ -721,6 +719,8 @@ def create_app() -> FastAPI:
     )
     register_system_routes(api_ctx)
     register_catalog_routes(api_ctx)
+    register_event_routes(api_ctx)
+    register_entity_routes(api_ctx)
     register_audit_ledger_routes(api_ctx)
     register_export_routes(api_ctx)
     register_integration_routes(api_ctx)
@@ -729,7 +729,12 @@ def create_app() -> FastAPI:
     register_audit_engagement_routes(api_ctx)
     register_compliance_routes(api_ctx)
     register_case_routes(api_ctx)
+    register_attack_chain_routes(api_ctx)
+    register_workspace_routes(api_ctx)
+    register_enrichment_routes(api_ctx)
     register_case_action_routes(api_ctx)
+    register_correlation_routes(api_ctx)
+    register_finding_routes(api_ctx)
     register_ingest_routes(api_ctx)
 
     _register_prometheus_if_enabled(app)

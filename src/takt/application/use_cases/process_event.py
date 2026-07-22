@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from takt.application.use_cases.assess_risk import AssessRiskUseCase, AssessmentResult
+from takt.application.use_cases.assess_risk import AssessmentResult, AssessRiskUseCase
 from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.engines.risk_engine import worst_risk_class
-from takt.domain.entities.case import Case, InvariantHitRecord, Observation
+from takt.domain.entities.case import Case, CorrelationEvidence, InvariantHitRecord, Observation
 from takt.domain.entities.event import NormalizedEvent
 from takt.domain.entities.maintenance import ServiceTicket
 from takt.domain.ports.case_repository import CaseRepositoryPort
@@ -95,7 +96,16 @@ class ProcessEventUseCase:
         )
         new_case = assessment.suggested_case
         fp = new_case.burst_fingerprint
-        existing = self._repo.find_open_by_fingerprint(fp)
+        candidates = new_case.correlation_fingerprints
+        candidate_matches: list[tuple[Case, str]] = []
+        seen_case_ids: set[str] = set()
+        for candidate in candidates:
+            found = self._repo.find_open_by_fingerprints([candidate])
+            if found is not None and found[0].case_id not in seen_case_ids:
+                candidate_matches.append(found)
+                seen_case_ids.add(found[0].case_id)
+        match = candidate_matches[0] if candidate_matches else None
+        existing = match[0] if match is not None else self._repo.find_open_by_fingerprint(fp)
         if existing is not None:
             if not persist:
                 existing = deepcopy(existing)
@@ -126,6 +136,26 @@ class ProcessEventUseCase:
                 existing.primary_asset_id = new_case.primary_asset_id
             _merge_observation(existing, event, t_new)
             _append_hit_records(existing, new_case.invariant_hit_records)
+            if match is not None:
+                matched_fingerprint = match[1]
+                existing.correlation_evidence.append(
+                    CorrelationEvidence(
+                        event_id=event.event_id,
+                        fingerprint=matched_fingerprint,
+                        rule=matched_fingerprint.split(":", 2)[1],
+                    )
+                )
+                existing.correlation_fingerprints = list(
+                    dict.fromkeys([*existing.correlation_fingerprints, *candidates])
+                )
+                for related, related_fingerprint in candidate_matches[1:]:
+                    existing.related_cases = list(dict.fromkeys([*existing.related_cases, related.case_id]))
+                    related.related_cases = list(dict.fromkeys([*related.related_cases, existing.case_id]))
+                    related.append_audit(
+                        f"correlation overlap with case {existing.case_id} by {related_fingerprint}", clock
+                    )
+                    if persist:
+                        self._repo.save(related)
             existing.append_audit(f"merged burst fingerprint {fp}", clock)
             if persist:
                 self._repo.save(existing)

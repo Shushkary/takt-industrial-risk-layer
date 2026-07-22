@@ -16,3 +16,7 @@ class CaseRepositoryPort(Protocol):
     def find_open_by_fingerprint(self, fingerprint: str) -> Case | None:
         """Открытый кейс с тем же burst_fingerprint (NEW/TRIAGE)."""
         ...
+
+    def find_open_by_fingerprints(self, fingerprints: list[str]) -> tuple[Case, str] | None:
+        """First open case matching candidates in their priority order."""
+        ...

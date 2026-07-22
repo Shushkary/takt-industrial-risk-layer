@@ -103,7 +103,7 @@ readinessProbe:
 
 ## Дальнейшая разработка
 
-Добавить оставшиеся инварианты из ТЗ, полноценный разбор IEC-104 (сейчас — нормализация полей и подсказки), async back-test на 100k+ событий, стенд Astra/Baikal.
+Добавить оставшиеся инварианты из ТЗ, полноценный разбор IEC-104 (сейчас — нормализация полей и подсказки), стенд Astra/Baikal. Потоковый бэктест на 100k+ событий (без материализации всего набора в память) и baseline true positive / false positive — см. [`docs/detection_quality.md`](docs/detection_quality.md).
 
 План спринтов v0.7 (промпты, DoD, зависимости): [`docs/sprint_prompts_checklists.md`](docs/sprint_prompts_checklists.md).
 Аудит и статус ремедиации: [`AUDIT_REPORT.md`](AUDIT_REPORT.md), [`docs/backend_remediation_sprint_plan.md`](docs/backend_remediation_sprint_plan.md), [`docs/frontend_api_alignment_sprint_plan.md`](docs/frontend_api_alignment_sprint_plan.md).

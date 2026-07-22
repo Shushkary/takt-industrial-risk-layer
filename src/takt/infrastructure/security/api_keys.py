@@ -21,7 +21,9 @@ from takt.infrastructure.security.auth_env import takt_api_key_value
 
 _log = logging.getLogger("takt.auth")
 
-VALID_ROLES: frozenset[str] = frozenset({"operator", "auditor", "admin"})
+VALID_ROLES: frozenset[str] = frozenset(
+    {"analyst_l1", "analyst_l2", "manager", "admin", "operator", "auditor"}
+)
 
 _LEGACY_ACTOR_ID = "legacy-api-key"
 _LEGACY_ROLE = "admin"

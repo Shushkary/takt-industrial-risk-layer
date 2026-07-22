@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from takt.application.system_defaults import default_clock, default_id_provider
-from takt.domain.engines.alert_fatigue import compute_burst_fingerprint
+from takt.domain.engines.alert_fatigue import (
+    compute_burst_fingerprint,
+    correlation_fingerprints,
+    correlation_rules_from_config,
+)
 from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.engines.chaos_predictor import predict_polling_chaos
 from takt.domain.engines.context_matcher import match_event_to_ticket
@@ -89,6 +94,12 @@ class AssessRiskUseCase:
                 bucket_sec = 300
             return mode, bucket_sec
         return "bucketed", 300
+
+    def _correlation_candidates(self, event: NormalizedEvent) -> list[str]:
+        raw = self._w.get("correlation")
+        if not isinstance(raw, Mapping) or str(raw.get("mode", "legacy")).strip().lower() == "legacy":
+            return []
+        return correlation_fingerprints(event, correlation_rules_from_config(raw))
 
     def execute(
         self,
@@ -205,6 +216,9 @@ class AssessRiskUseCase:
         cid = self._ids.new_case_id_short()
         af_mode, af_bucket = self._alert_fatigue_options()
         fp = compute_burst_fingerprint(event, mode=af_mode, bucket_sec=af_bucket)
+        correlation_keys = self._correlation_candidates(event)
+        if correlation_keys:
+            fp = correlation_keys[0]
         trust_val = float(trust.get(event.source.value, 1.0))
         hit_records = [
             InvariantHitRecord(
@@ -229,6 +243,7 @@ class AssessRiskUseCase:
             normalized_event_ids=[event.event_id],
             xai_summary=f"{xai.what} | {xai.why_unusual}",
             burst_fingerprint=fp,
+            correlation_fingerprints=correlation_keys,
             primary_asset_id=asset_id,
             trigger_operation=event.operation,
             operator_id=event.operator_id,

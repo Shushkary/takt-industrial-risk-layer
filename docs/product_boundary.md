@@ -70,7 +70,7 @@
 - описание границ продукта;
 - модель угроз и ограничений: [`docs/threat_model.md`](threat_model.md);
 - матрица 26 инвариантов: [`docs/invariant_matrix.md`](invariant_matrix.md);
-- тесты true positive / false positive;
+- тесты true positive / false positive: [`docs/detection_quality.md`](detection_quality.md);
 - описание аудиторского следа;
 - описание `partial_observability`;
 - описание доказательного пакета;

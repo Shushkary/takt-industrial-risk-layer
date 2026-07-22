@@ -6,6 +6,7 @@ import { CaseDetail } from './pages/CaseDetail'
 import { InvariantLibrary } from './pages/InvariantLibrary'
 import { TopologyMap } from './pages/TopologyMap'
 import { SettingsAudit } from './pages/SettingsAudit'
+import { UnifiedSearch } from './pages/UnifiedSearch'
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         <Route index element={<SegmentOverview />} />
         <Route path="incidents" element={<IncidentQueue />} />
         <Route path="cases/:id" element={<CaseDetail />} />
+        <Route path="search" element={<UnifiedSearch />} />
         <Route path="invariants" element={<InvariantLibrary />} />
         <Route path="topology" element={<TopologyMap />} />
         <Route path="settings" element={<SettingsAudit />} />

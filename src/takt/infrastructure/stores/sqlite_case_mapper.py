@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.domain.entities.case import (
     Case,
     CaseDecisionRecord,
     CaseStatus,
+    CaseArtifact,
+    CorrelationEvidence,
+    Finding,
     FormalVerdictRecord,
     InvariantHitRecord,
     ManualPermit,
@@ -15,7 +18,9 @@ from takt.domain.entities.case import (
     RawEvidenceRef,
     RemediationAttempt,
 )
-from takt.infrastructure.stores.sqlite_connection import dt_from_sql as _dt_from_sql, dt_to_sql as _dt_to_sql
+from takt.infrastructure.stores.sqlite_connection import dt_from_sql as _dt_from_sql
+from takt.infrastructure.stores.sqlite_connection import dt_to_sql as _dt_to_sql
+
 
 def _serialize_observations(obs: list[Observation]) -> str:
     payload = [{"source": o.source, "ingest_trust": o.ingest_trust, "event_ids": list(o.event_ids)} for o in obs]
@@ -66,7 +71,7 @@ def _deserialize_hit_records(raw: str) -> list[InvariantHitRecord]:
         if not isinstance(item, dict):
             continue
         ts_raw = str(item.get("ts", ""))
-        ts_parsed = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        ts_parsed = datetime(1970, 1, 1, tzinfo=UTC)
         if ts_raw:
             ts_parsed = _dt_from_sql(ts_raw)
         out.append(
@@ -122,7 +127,7 @@ def _deserialize_manual_permits(raw: str) -> list[ManualPermit]:
         if not isinstance(item, dict):
             continue
         ts_raw = str(item.get("created_at", ""))
-        ts_parsed = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        ts_parsed = datetime(1970, 1, 1, tzinfo=UTC)
         if ts_raw:
             ts_parsed = _dt_from_sql(ts_raw)
         out.append(
@@ -177,7 +182,7 @@ def _deserialize_decision_records(raw: str) -> list[CaseDecisionRecord]:
         if not isinstance(item, dict):
             continue
         ts_raw = str(item.get("ts", ""))
-        ts_parsed = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        ts_parsed = datetime(1970, 1, 1, tzinfo=UTC)
         if ts_raw:
             ts_parsed = _dt_from_sql(ts_raw)
         out.append(
@@ -220,7 +225,7 @@ def _deserialize_formal_verdict_records(raw: str) -> list[FormalVerdictRecord]:
         if not isinstance(item, dict):
             continue
         ts_raw = str(item.get("ts", ""))
-        ts_parsed = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        ts_parsed = datetime(1970, 1, 1, tzinfo=UTC)
         if ts_raw:
             ts_parsed = _dt_from_sql(ts_raw)
         out.append(
@@ -269,7 +274,7 @@ def _deserialize_remediation_attempts(raw: str) -> list[RemediationAttempt]:
         if not isinstance(item, dict):
             continue
         ts_raw = str(item.get("created_at", ""))
-        ts_parsed = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        ts_parsed = datetime(1970, 1, 1, tzinfo=UTC)
         if ts_raw:
             ts_parsed = _dt_from_sql(ts_raw)
         out.append(
@@ -319,7 +324,7 @@ def _deserialize_raw_evidence_refs(raw: str) -> list[RawEvidenceRef]:
         if not isinstance(item, dict):
             continue
         ts_raw = str(item.get("captured_at", ""))
-        ts_parsed = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        ts_parsed = datetime(1970, 1, 1, tzinfo=UTC)
         if ts_raw:
             ts_parsed = _dt_from_sql(ts_raw)
         out.append(
@@ -346,6 +351,20 @@ def _row_to_case(row: sqlite3.Row) -> Case:
     decisions_raw = str(row["decision_records"] if "decision_records" in row.keys() else "[]")
     remediation_raw = str(row["remediation_attempts"] if "remediation_attempts" in row.keys() else "[]")
     raw_evidence_refs = str(row["raw_evidence_refs"] if "raw_evidence_refs" in row.keys() else "[]")
+    correlation_evidence_raw = json.loads(
+        row["correlation_evidence"] if "correlation_evidence" in row.keys() else "[]"
+    )
+    artifacts_raw = json.loads(row["artifacts"] if "artifacts" in row.keys() else "[]")
+    findings_raw = json.loads(row["findings"] if "findings" in row.keys() else "[]")
+    artifacts = [
+        CaseArtifact(
+            type=str(item.get("type", "")), value=str(item.get("value", "")),
+            host_id=str(item.get("host_id", "")), verification_status=str(item.get("verification_status", "unverified")),
+            source=str(item.get("source", "manual")), added_by=str(item.get("added_by", "")),
+            created_at=_dt_from_sql(item["created_at"]) if item.get("created_at") else None,
+        )
+        for item in artifacts_raw if isinstance(item, dict)
+    ]
     return Case(
         case_id=str(row["case_id"]),
         status=CaseStatus(str(row["status"])),
@@ -357,6 +376,40 @@ def _row_to_case(row: sqlite3.Row) -> Case:
         xai_summary=str(row["xai_summary"] or ""),
         audit_log=list(json.loads(row["audit_log"] or "[]")),
         burst_fingerprint=str(row["burst_fingerprint"] or ""),
+        correlation_fingerprints=list(
+            json.loads(row["correlation_fingerprints"] if "correlation_fingerprints" in row.keys() else "[]")
+        ),
+        correlation_evidence=[
+            CorrelationEvidence(
+                event_id=str(item.get("event_id", "")),
+                fingerprint=str(item.get("fingerprint", "")),
+                rule=str(item.get("rule", "")),
+                fields=list(item.get("fields", [])),
+                manual=bool(item.get("manual", False)),
+                reason=str(item.get("reason", "")),
+                request_id=str(item.get("request_id", "")),
+            )
+            for item in correlation_evidence_raw
+            if isinstance(item, dict)
+        ],
+        related_cases=list(json.loads(row["related_cases"] if "related_cases" in row.keys() else "[]")),
+        artifacts=artifacts,
+        findings=[
+            Finding(
+                finding_id=str(item.get("finding_id", "")), text=str(item.get("text", "")),
+                author=str(item.get("author", "")), created_at=_dt_from_sql(str(item["created_at"])),
+                event_ids=list(item.get("event_ids", [])),
+                artifacts=[
+                    CaseArtifact(
+                        type=str(artifact.get("type", "")), value=str(artifact.get("value", "")),
+                        host_id=str(artifact.get("host_id", "")),
+                        verification_status=str(artifact.get("verification_status", "unverified")),
+                        source=str(artifact.get("source", "manual")), added_by=str(artifact.get("added_by", "")),
+                        created_at=_dt_from_sql(artifact["created_at"]) if artifact.get("created_at") else None,
+                    ) for artifact in item.get("artifacts", []) if isinstance(artifact, dict)
+                ],
+            ) for item in findings_raw if isinstance(item, dict)
+        ],
         primary_asset_id=str(row["primary_asset_id"] or ""),
         trigger_operation=str(row["trigger_operation"] or ""),
         operator_id=str(row["operator_id"] if "operator_id" in row.keys() else ""),
@@ -375,5 +428,3 @@ def _row_to_case(row: sqlite3.Row) -> Case:
         pdf_last_sha256=str(row["pdf_last_sha256"] if "pdf_last_sha256" in row.keys() else ""),
         pdf_last_generated_at=str(row["pdf_last_generated_at"] if "pdf_last_generated_at" in row.keys() else ""),
     )
-
-

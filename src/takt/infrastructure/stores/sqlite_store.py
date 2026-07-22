@@ -5,7 +5,8 @@ import sqlite3
 import threading
 from collections.abc import Sequence
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 from takt.domain.entities.case import (
@@ -13,17 +14,14 @@ from takt.domain.entities.case import (
     CaseStatus,
 )
 from takt.domain.ports.case_repository import CaseRepositoryPort
-from takt.infrastructure.stores.sqlite_audit_engagement_store import SqliteAuditEngagementStore
-from takt.infrastructure.stores.sqlite_connection import (
-    checkpoint_wal_best_effort as _checkpoint_wal_best_effort,
-    configure_sqlite_connection as _configure_sqlite_connection,
-    dt_to_sql as _dt_to_sql,
-    sqlite_busy_timeout_ms_from_env,
-)
 from takt.infrastructure.stores.sqlite_audit_ledger import (
     append_case_audit_ledger_line,
-    record_operation_event as _record_operation_event,
     verify_case_audit_ledger,
+)
+from takt.infrastructure.stores.sqlite_audit_ledger import (
+    record_operation_event as _record_operation_event,
+)
+from takt.infrastructure.stores.sqlite_audit_ledger import (
     verify_operation_ledger as _verify_operation_ledger,
 )
 from takt.infrastructure.stores.sqlite_case_mapper import (
@@ -36,8 +34,19 @@ from takt.infrastructure.stores.sqlite_case_mapper import (
     _serialize_raw_evidence_refs,
     _serialize_remediation_attempts,
 )
-from takt.infrastructure.stores.sqlite_expected_behavior import SqliteExpectedBehavior
+from takt.infrastructure.stores.sqlite_connection import (
+    checkpoint_wal_best_effort as _checkpoint_wal_best_effort,
+)
+from takt.infrastructure.stores.sqlite_connection import (
+    configure_sqlite_connection as _configure_sqlite_connection,
+)
+from takt.infrastructure.stores.sqlite_connection import (
+    dt_to_sql as _dt_to_sql,
+)
 from takt.infrastructure.stores.sqlite_schema import ensure_case_schema
+from takt.infrastructure.stores.sqlite_connection import sqlite_busy_timeout_ms_from_env  # noqa: F401
+from takt.infrastructure.stores.sqlite_expected_behavior import SqliteExpectedBehavior  # noqa: F401
+from takt.infrastructure.stores.sqlite_audit_engagement_store import SqliteAuditEngagementStore  # noqa: F401
 
 # Р’РµСЂСЃРёСЏ СЃС…РµРјС‹ Р‘Р” РєРµР№СЃРѕРІ (РјРµС‚Р°РґР°РЅРЅС‹Рµ `app_metadata`); РїСЂРё РјРёРіСЂР°С†РёСЏС… СѓРІРµР»РёС‡РёРІР°С‚СЊ.
 CURRENT_DB_SCHEMA_VERSION = 8
@@ -119,10 +128,11 @@ class SqliteCaseStore(CaseRepositoryPort):
                 INSERT INTO cases (
                   case_id, status, title, risk_class, risk_score, created_at,
                   normalized_event_ids, xai_summary, audit_log, burst_fingerprint,
+                  correlation_fingerprints, correlation_evidence, related_cases, artifacts, findings,
                   primary_asset_id, trigger_operation, operator_id, invariant_hits,
                   observations, invariant_hit_records, manual_permits, formal_verdict_records, decision_records, remediation_attempts,
                   dq_score, dq_partial, dq_reasons, last_event_source, raw_evidence_refs, pdf_last_sha256, pdf_last_generated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(case_id) DO UPDATE SET
                   status = excluded.status,
                   title = excluded.title,
@@ -133,6 +143,11 @@ class SqliteCaseStore(CaseRepositoryPort):
                   xai_summary = excluded.xai_summary,
                   audit_log = excluded.audit_log,
                   burst_fingerprint = excluded.burst_fingerprint,
+                  correlation_fingerprints = excluded.correlation_fingerprints,
+                  correlation_evidence = excluded.correlation_evidence,
+                  related_cases = excluded.related_cases,
+                  artifacts = excluded.artifacts,
+                  findings = excluded.findings,
                   primary_asset_id = excluded.primary_asset_id,
                   trigger_operation = excluded.trigger_operation,
                   operator_id = excluded.operator_id,
@@ -162,6 +177,11 @@ class SqliteCaseStore(CaseRepositoryPort):
                     case.xai_summary,
                     json.dumps(case.audit_log, ensure_ascii=False),
                     case.burst_fingerprint,
+                    json.dumps(case.correlation_fingerprints, ensure_ascii=False),
+                    json.dumps([asdict(item) for item in case.correlation_evidence], ensure_ascii=False),
+                    json.dumps(case.related_cases, ensure_ascii=False),
+                    json.dumps([asdict(item) for item in case.artifacts], ensure_ascii=False, default=str),
+                    json.dumps([asdict(item) for item in case.findings], ensure_ascii=False, default=str),
                     case.primary_asset_id,
                     case.trigger_operation,
                     case.operator_id,
@@ -181,10 +201,17 @@ class SqliteCaseStore(CaseRepositoryPort):
                     case.pdf_last_generated_at,
                 ),
             )
+            self._conn.execute("DELETE FROM case_correlation_keys WHERE case_id = ?", (case.case_id,))
+            for fingerprint in dict.fromkeys([case.burst_fingerprint, *case.correlation_fingerprints]):
+                if fingerprint:
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO case_correlation_keys (fingerprint, case_id) VALUES (?, ?)",
+                        (fingerprint, case.case_id),
+                    )
             old_audit = existing.audit_log if existing is not None else []
             if len(case.audit_log) > len(old_audit):
                 for line in case.audit_log[len(old_audit) :]:
-                    created_at = line.split(" | ", 1)[0] if " | " in line else _dt_to_sql(datetime.now(timezone.utc))
+                    created_at = line.split(" | ", 1)[0] if " | " in line else _dt_to_sql(datetime.now(UTC))
                     self._append_audit_ledger_line(case.case_id, line, created_at)
 
     def delete_cases_by_id(self, case_ids: Sequence[str]) -> int:
@@ -237,7 +264,7 @@ class SqliteCaseStore(CaseRepositoryPort):
             return [_row_to_case(r) for r in cur.fetchall()]
 
     def idempotency_delete_expired(self) -> None:
-        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         with self._lock:
             self._conn.execute("DELETE FROM idempotency_keys WHERE expires_at < ?", (now,))
 
@@ -250,7 +277,7 @@ class SqliteCaseStore(CaseRepositoryPort):
             row = cur.fetchone()
             if row is None:
                 return None
-            now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
             if str(row[2]) < now:
                 self._conn.execute("DELETE FROM idempotency_keys WHERE idem_key = ?", (key,))
                 return None
@@ -284,6 +311,22 @@ class SqliteCaseStore(CaseRepositoryPort):
             )
             row = cur.fetchone()
             return None if row is None else _row_to_case(row)
+
+    def find_open_by_fingerprints(self, fingerprints: list[str]) -> tuple[Case, str] | None:
+        with self._lock:
+            for fingerprint in fingerprints:
+                row = self._conn.execute(
+                    """
+                    SELECT c.* FROM case_correlation_keys k
+                    JOIN cases c ON c.case_id = k.case_id
+                    WHERE k.fingerprint = ? AND c.status IN (?, ?)
+                    ORDER BY c.created_at DESC LIMIT 1
+                    """,
+                    (fingerprint, CaseStatus.NEW.value, CaseStatus.TRIAGE.value),
+                ).fetchone()
+                if row is not None:
+                    return _row_to_case(row), fingerprint
+        return None
 
     def verify_audit_ledger(self, case_id: str) -> dict[str, object]:
         with self._lock:

@@ -5,10 +5,13 @@ import { Button } from '../components/ui/Button'
 import { RiskBadge } from '../components/ui/RiskBadge'
 import { formatRisk } from '../app/format'
 import {
+  addCaseArtifact,
+  addCaseFinding,
   attachManualPermit,
   downloadForensicBundle,
   fetchCaseEvidenceChecklist,
   fetchCaseDetail,
+  fetchCaseWorkspace,
   fetchCaseRemediations,
   fetchCaseRemediationRecheckHistory,
   fetchForensicBundleManifest,
@@ -22,6 +25,7 @@ import {
   taktApiConfigured,
   verifyForensicBundle,
   type CaseDetailResponse,
+  type CaseWorkspaceResponse,
   type ComplianceRemediationsResponse,
   type DecisionPayload,
   type EvidenceChecklistResponse,
@@ -125,6 +129,14 @@ export function CaseDetail() {
   const incident = useMemo(() => demoIncidents.find((item) => item.id === decodedId) ?? demoIncidents[0], [decodedId])
   const apiCaseId = decodedId ?? incident.id
   const [caseDetail, setCaseDetail] = useState<CaseDetailResponse | null>(null)
+  const [workspace, setWorkspace] = useState<CaseWorkspaceResponse | null>(null)
+  const [workspaceState, setWorkspaceState] = useState<'local' | 'loading' | 'loaded' | 'error'>(
+    taktApiConfigured() ? 'loading' : 'local',
+  )
+  const [workspaceView, setWorkspaceView] = useState<'graph' | 'timeline' | 'chain'>('graph')
+  const [timelineKind, setTimelineKind] = useState('all')
+  const [selectedEntity, setSelectedEntity] = useState('')
+  const [quickActionState, setQuickActionState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [loadState, setLoadState] = useState<'local' | 'loading' | 'loaded' | 'error'>(
     taktApiConfigured() ? 'loading' : 'local',
   )
@@ -191,6 +203,13 @@ export function CaseDetail() {
   const localLinks = localTopology.links.slice(0, 4)
   const localNodeIds = new Set(localLinks.flatMap((link) => [link.from, link.to]))
   const localNodes = localTopology.nodes.filter((node) => localNodeIds.has(node.id)).slice(0, 6)
+  const workspaceEvents = workspace?.events ?? []
+  const workspaceNodes = workspace?.graph.nodes ?? localNodes.map((node) => ({ id: node.id, type: 'asset', value: node.label }))
+  const workspaceEdges = workspace?.graph.edges ?? localLinks.map((link) => ({
+    source: link.from, target: link.to, type: link.label, event_id: link.id,
+  }))
+  const timeline = (workspace?.timeline ?? []).filter((item) => timelineKind === 'all' || item.kind === timelineKind)
+  const timelineKinds = Array.from(new Set((workspace?.timeline ?? []).map((item) => item.kind)))
   const visibleRecords = records.length > 0 ? records : [...(caseDetail?.formal_verdict_records ?? [])].reverse()
   const operatorHistoryEntries = recordArray(operatorHistory, 'entries')
   const evidenceItems = recordArray(evidenceChecklist, 'items')
@@ -206,6 +225,12 @@ export function CaseDetail() {
 
   useEffect(() => {
     setStatus(incident.status)
+    setWorkspace(null)
+    setWorkspaceState(taktApiConfigured() ? 'loading' : 'local')
+    setWorkspaceView('graph')
+    setTimelineKind('all')
+    setSelectedEntity('')
+    setQuickActionState('idle')
     setReason('')
     setFormalVerdict('неопределённое')
     setFormalReason('')
@@ -261,6 +286,30 @@ export function CaseDetail() {
       .catch(() => {
         if (!cancelled) {
           setLoadState('error')
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [apiCaseId])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!taktApiConfigured()) {
+      setWorkspaceState('local')
+      return
+    }
+    setWorkspaceState('loading')
+    fetchCaseWorkspace(apiCaseId)
+      .then((result) => {
+        if (!cancelled) {
+          setWorkspace(result)
+          setWorkspaceState(result ? 'loaded' : 'local')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWorkspaceState('error')
         }
       })
     return () => {
@@ -656,6 +705,53 @@ export function CaseDetail() {
     }
   }
 
+  async function refreshWorkspace() {
+    const result = await fetchCaseWorkspace(apiCaseId)
+    setWorkspace(result)
+  }
+
+  async function handleQuickFinding() {
+    const event = workspaceEvents[0]
+    const text = selectedEntity
+      ? `Требует проверки сущность ${selectedEntity} в кейсе ${displayCaseId}`
+      : `Требует проверки событие ${event?.event_id ?? displayCaseId}`
+    if (!taktApiConfigured()) {
+      setLocalAudit((current) => [`${new Date().toLocaleTimeString('ru-RU')} finding: ${text}`, ...current])
+      setQuickActionState('saved')
+      return
+    }
+    setQuickActionState('saving')
+    try {
+      await addCaseFinding(apiCaseId, text, event ? [event.event_id] : [])
+      await refreshWorkspace()
+      setQuickActionState('saved')
+    } catch {
+      setQuickActionState('error')
+    }
+  }
+
+  async function handleQuickArtifact() {
+    const eventArtifact = workspaceEvents.flatMap((item) => item.artifacts)[0]
+    const artifact = eventArtifact ?? (selectedEntity ? { type: 'entity', value: selectedEntity } : null)
+    if (!artifact) {
+      setQuickActionState('error')
+      return
+    }
+    if (!taktApiConfigured()) {
+      setLocalAudit((current) => [`${new Date().toLocaleTimeString('ru-RU')} artifact: ${artifact.type}:${artifact.value}`, ...current])
+      setQuickActionState('saved')
+      return
+    }
+    setQuickActionState('saving')
+    try {
+      await addCaseArtifact(apiCaseId, artifact)
+      await refreshWorkspace()
+      setQuickActionState('saved')
+    } catch {
+      setQuickActionState('error')
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -707,31 +803,106 @@ export function CaseDetail() {
         ))}
       </div>
 
-      <section className="takt-card p-4">
-        <h2 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Локальный граф инцидента</h2>
-        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="rounded-takt border border-[var(--line)] bg-[var(--bg-0)] p-3">
-            <div className="text-[12px] text-[var(--fg-3)]">Ближайшие узлы</div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {localNodes.map((node) => (
-                <span key={node.id} className="rounded-takt border border-[var(--line)] bg-[var(--bg-1)] px-2 py-1 text-[12px] text-[var(--fg-2)]">
-                  {node.label}
-                </span>
-              ))}
-              {localNodes.length === 0 ? <span className="text-[12px] text-[var(--fg-3)]">Узлы не найдены</span> : null}
-            </div>
+      <section className="takt-card overflow-hidden" data-testid="case-workspace">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] p-3">
+          <div>
+            <h2 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Рабочее пространство расследования</h2>
+            <p className="mt-1 text-[12px] text-[var(--fg-3)]">Источник: {workspaceState === 'loaded' ? 'case workspace API' : 'локальный контекст'}</p>
           </div>
-          <div className="rounded-takt border border-[var(--line)] bg-[var(--bg-0)] p-3">
-            <div className="text-[12px] text-[var(--fg-3)]">Связи до двух переходов</div>
-            <div className="mt-2 flex flex-col gap-2">
-              {localLinks.map((link) => (
-                <p key={link.id} className="text-[12px] text-[var(--fg-2)]">
-                  <b className="text-[var(--fg-1)]">{link.label}</b> · {link.detail}
-                </p>
-              ))}
-              {localLinks.length === 0 ? <span className="text-[12px] text-[var(--fg-3)]">Связи не найдены</span> : null}
-            </div>
+          <div className="flex gap-2" role="group" aria-label="Представление расследования">
+            {(['graph', 'timeline', 'chain'] as const).map((view) => (
+              <Button key={view} variant={workspaceView === view ? 'primary' : 'ghost'} onClick={() => setWorkspaceView(view)}>
+                {view === 'graph' ? 'Граф' : view === 'timeline' ? 'Таймлайн' : 'Цепочка атаки'}
+              </Button>
+            ))}
           </div>
+        </div>
+
+        <div className="grid min-h-[380px] xl:grid-cols-[280px_minmax(0,1fr)_300px]">
+          <aside className="border-b border-[var(--line)] p-3 xl:border-b-0 xl:border-r">
+            <h3 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Поток событий</h3>
+            <ol className="mt-3 max-h-[440px] space-y-2 overflow-auto">
+              {workspaceEvents.map((event) => (
+                <li key={event.event_id} className="rounded-takt border border-[var(--line)] bg-[var(--bg-0)] p-2 text-[12px]">
+                  <div className="font-mono text-[var(--fg-1)]">{event.operation}</div>
+                  <div className="mt-1 text-[var(--fg-3)]">{event.source} · {new Date(event.observed_at).toLocaleString('ru-RU')}</div>
+                  <div className="truncate font-mono text-[var(--fg-3)]">{event.event_id}</div>
+                </li>
+              ))}
+              {workspaceEvents.length === 0 ? <li className="text-[12px] text-[var(--fg-3)]">События кейса пока не загружены.</li> : null}
+            </ol>
+          </aside>
+
+          <div className="border-b border-[var(--line)] p-3 xl:border-b-0 xl:border-r">
+            {workspaceView === 'graph' ? (
+              <div>
+                <h3 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Сущности и связи</h3>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {workspaceNodes.map((node) => (
+                    <button
+                      key={node.id}
+                      type="button"
+                      onClick={() => setSelectedEntity(node.value)}
+                      className={`rounded-takt border p-3 text-left takt-focus-ring ${selectedEntity === node.value ? 'border-[var(--teal-1)] bg-[var(--bg-2)]' : 'border-[var(--line)] bg-[var(--bg-0)]'}`}
+                    >
+                      <span className="block text-[10px] uppercase text-[var(--fg-3)]">{node.type}</span>
+                      <span className="font-mono text-[12px] text-[var(--fg-1)]">{node.value}</span>
+                    </button>
+                  ))}
+                </div>
+                <ol className="mt-4 space-y-2 text-[12px] text-[var(--fg-2)]">
+                  {workspaceEdges.map((edge) => <li key={`${edge.event_id}-${edge.type}`}>{edge.source} → <b>{edge.type}</b> → {edge.target}</li>)}
+                </ol>
+              </div>
+            ) : workspaceView === 'timeline' ? (
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Единый таймлайн</h3>
+                  <select value={timelineKind} onChange={(event) => setTimelineKind(event.target.value)} className="rounded-takt border border-[var(--line)] bg-[var(--bg-0)] px-2 py-1 text-[12px]">
+                    <option value="all">Все типы</option>
+                    {timelineKinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
+                  </select>
+                </div>
+                <ol className="mt-4 space-y-3 border-l border-[var(--line)] pl-4">
+                  {timeline.map((item) => (
+                    <li key={item.id} className="relative text-[12px] text-[var(--fg-2)]">
+                      <span className="absolute -left-[19px] top-1 h-2 w-2 rounded-full bg-[var(--teal-1)]" />
+                      <div className="font-mono text-[var(--fg-3)]">{item.at}</div><div>{item.label}</div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : (
+              <div>
+                <h3 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Реконструкция цепочки атаки</h3>
+                <p className="mt-2 text-[12px] text-[var(--fg-3)]">Точка входа: <span className="font-mono text-[var(--fg-1)]">{workspace?.attack_chain.entry_point || 'не определена'}</span></p>
+                <ol className="mt-4 space-y-2">
+                  {(workspace?.attack_chain.steps ?? []).map((step) => (
+                    <li key={`${step.order}-${step.event_id}`} className="rounded-takt border border-[var(--line)] bg-[var(--bg-0)] p-3 text-[12px] text-[var(--fg-2)]">
+                      <span className="font-mono text-[var(--teal-1)]">{step.order}.</span> {step.from_entity} → {step.to_entity}
+                      <div className="mt-1 text-[var(--fg-3)]">{step.operation} · {step.kind}</div>
+                    </li>
+                  ))}
+                  {(workspace?.attack_chain.steps.length ?? 0) === 0 ? <li className="text-[12px] text-[var(--fg-3)]">Цепочка ещё не восстановлена.</li> : null}
+                </ol>
+              </div>
+            )}
+          </div>
+
+          <aside className="p-3">
+            <h3 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Findings и артефакты</h3>
+            {selectedEntity ? <p className="mt-2 rounded-takt bg-[var(--bg-2)] p-2 font-mono text-[12px] text-[var(--fg-1)]">{selectedEntity}</p> : null}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Button disabled={quickActionState === 'saving'} onClick={() => void handleQuickFinding()}>+ Finding</Button>
+              <Button disabled={quickActionState === 'saving'} variant="ghost" onClick={() => void handleQuickArtifact()}>+ Артефакт</Button>
+            </div>
+            {quickActionState === 'saved' ? <p className="mt-2 text-[12px] text-[var(--teal-1)]">Сохранено в кейсе.</p> : null}
+            {quickActionState === 'error' ? <p className="mt-2 text-[12px] text-[var(--risk-high)]">Не удалось сохранить.</p> : null}
+            <ul className="mt-4 space-y-2 text-[12px] text-[var(--fg-2)]">
+              {(workspace?.findings ?? []).map((finding) => <li key={finding.finding_id} className="rounded-takt border border-[var(--line)] p-2">{finding.text}<div className="text-[var(--fg-3)]">{finding.author}</div></li>)}
+              {(workspace?.artifacts ?? []).map((artifact) => <li key={`${artifact.type}-${artifact.value}`} className="rounded-takt border border-[var(--line)] p-2"><span className="text-[var(--fg-3)]">{artifact.type}</span><div className="break-all font-mono">{artifact.value}</div></li>)}
+            </ul>
+          </aside>
         </div>
       </section>
 

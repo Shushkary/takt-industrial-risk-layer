@@ -1,0 +1,9 @@
+[
+  {"event_id":"edr-a1","source":"edr","incident_id":"INC-A","observed_at":"2026-06-01T09:00:00Z","host_id":"ws-17","hash":"aaa"},
+  {"event_id":"ndr-a2","source":"ndr","incident_id":"INC-A","observed_at":"2026-06-01T09:02:00Z","host_id":"ws-17"},
+  {"event_id":"siem-a3","source":"siem","incident_id":"INC-A","observed_at":"2026-06-01T09:03:00Z","host_id":"soc-alias","hash":"aaa"},
+  {"event_id":"edr-b1","source":"edr","incident_id":"INC-B","observed_at":"2026-06-01T09:01:00Z","host_id":"ws-22","hash":"bbb"},
+  {"event_id":"ndr-b2","source":"ndr","incident_id":"INC-B","observed_at":"2026-06-01T09:04:00Z","host_id":"ws-22"},
+  {"event_id":"ot-c1","source":"ot","incident_id":"INC-C","observed_at":"2026-06-01T09:05:00Z","host_id":"plc-01"},
+  {"event_id":"siem-bg1","source":"siem","incident_id":"BACKGROUND-1","observed_at":"2026-06-01T09:06:00Z","host_id":"dc-01"}
+]

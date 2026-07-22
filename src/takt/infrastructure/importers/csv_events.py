@@ -88,3 +88,16 @@ def iter_raw_events(path: str | Path, *, source: EventSource):
                 received_at=_parse_ts(ts_raw),
                 payload=dict(row),
             )
+
+
+def iter_normalized_from_csv(path: str | Path, *, source: EventSource):
+    """Потоковый вариант `load_normalized_from_csv`: одна строка CSV в памяти за раз.
+
+    Для больших файлов (100k+ строк) позволяет прогонять бэктест без
+    материализации всего набора событий в список.
+    """
+    p = Path(path)
+    with p.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            yield raw_row_to_normalized(row, source=source)

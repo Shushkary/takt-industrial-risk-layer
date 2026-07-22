@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
+from types import SimpleNamespace
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import pytest
@@ -22,7 +22,7 @@ def _case() -> Case:
         title="Risk HIGH: WRITE_COIL",
         risk_class="HIGH",
         risk_score=0.81,
-        created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 5, 5, 10, 0, tzinfo=UTC),
         normalized_event_ids=["ev-1"],
         xai_summary="why",
         audit_log=["2026-05-05T10:00:00+00:00 | case created"],
@@ -41,7 +41,7 @@ def test_zip_forensic_bundle_contains_manifest_and_evidence() -> None:
     builder = ZipForensicBundleBuilder()
     meta, raw = builder.build_case_bundle(
         _case(),
-        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
     )
     assert raw[:2] == b"PK"
     assert meta.signature_status == "unsigned_mvp"
@@ -51,7 +51,10 @@ def test_zip_forensic_bundle_contains_manifest_and_evidence() -> None:
 
     with ZipFile(BytesIO(raw)) as zf:
         names = set(zf.namelist())
-        assert names == {"manifest.json", "case.json", "siem.json", "gossopka-card.json", "audit.txt"}
+        assert names == {
+            "manifest.json", "case.json", "siem.json", "gossopka-card.json", "audit.txt",
+            "findings.json", "artifacts.json",
+        }
         manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
         case_payload = json.loads(zf.read("case.json").decode("utf-8"))
         gossopka = json.loads(zf.read("gossopka-card.json").decode("utf-8"))
@@ -68,7 +71,9 @@ def test_zip_forensic_bundle_contains_manifest_and_evidence() -> None:
     assert checks["organizational_context_checksum"]["ok"] is False
     assert checks["aggregate_checksum"]["ok"] is True
     assert checks["signature"]["ok"] is False
-    assert [item["path"] for item in manifest["items"]] == ["case.json", "siem.json", "gossopka-card.json", "audit.txt"]
+    assert [item["path"] for item in manifest["items"]] == [
+        "case.json", "siem.json", "gossopka-card.json", "audit.txt", "findings.json", "artifacts.json"
+    ]
     assert manifest["items"][0]["element_type"] == "дело"
     assert manifest["items"][0]["source"] == "реестр дел ТАКТ"
     assert manifest["items"][0]["role"] == "основная карточка дела"
@@ -229,19 +234,19 @@ def test_api_gossopka_export() -> None:
 def test_zip_forensic_bundle_verifier_accepts_valid_archive() -> None:
     _meta, raw = ZipForensicBundleBuilder().build_case_bundle(
         _case(),
-        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
     )
     result = ZipForensicBundleVerifier().verify_bundle(raw)
     assert result.ok is True
     assert result.case_id == "fb-1"
-    assert result.checked_items == 4
+    assert result.checked_items == 6
     assert result.issues == ()
 
 
 def test_zip_forensic_bundle_verifier_rejects_tampered_archive() -> None:
     _meta, raw = ZipForensicBundleBuilder().build_case_bundle(
         _case(),
-        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
     )
     out = BytesIO()
     with ZipFile(BytesIO(raw)) as src, ZipFile(out, "w") as dst:
@@ -329,7 +334,7 @@ def test_api_forensic_bundle_verify_endpoint() -> None:
     body = verify.json()
     assert body["ok"] is True
     assert body["case_id"] == case_id
-    assert body["checked_items"] == 7
+    assert body["checked_items"] == 9
 
 
 def test_forensic_bundle_contains_raw_evidence_from_events_ingest() -> None:
@@ -467,7 +472,7 @@ def test_forensic_bundle_hmac_signature_when_secret_is_set(monkeypatch) -> None:
     monkeypatch.setenv("TAKT_FORENSIC_HMAC_SECRET", "test-secret")
     meta, raw = ZipForensicBundleBuilder().build_case_bundle(
         _case(),
-        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
     )
     assert meta.signature_status == "hmac_sha256_mvp"
     assert meta.suitability_label == "условно пригоден"
@@ -511,7 +516,7 @@ def test_api_forensic_manifest_reports_hmac_signature(monkeypatch) -> None:
 def test_gossopka_transport_payload_contract() -> None:
     payload = case_to_gossopka_transport_payload(
         _case(),
-        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
         exchange_mode="smev_like_push",
     )
     assert payload["contract"] == "TAKT-GosSOPKA-Transport"
@@ -526,7 +531,7 @@ def test_gossopka_signature_status_defaults_to_gost_in_strict_mode(monkeypatch) 
     monkeypatch.delenv("TAKT_GOSSOPKA_SIGNATURE_STATUS", raising=False)
     payload = case_to_gossopka_card(
         _case(),
-        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
     )
     assert payload["legal_context"]["signature_status"] == "external_gost2012_detached"
 
@@ -538,13 +543,13 @@ def test_gossopka_signature_status_does_not_fallback_to_hmac_in_strict_mode(monk
     monkeypatch.delenv("TAKT_GOSSOPKA_SIGNATURE_STATUS", raising=False)
     payload = case_to_gossopka_card(
         _case(),
-        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
     )
     assert payload["legal_context"]["signature_status"] == "unsigned_mvp"
 
 
 def test_forensic_bundle_external_signature_adapter_roundtrip(monkeypatch) -> None:
-    def _fake_post(url, json, timeout):  # noqa: ANN001
+    def _fake_post(url, json, timeout):
         if str(url).endswith("/sign"):
             return SimpleNamespace(
                 raise_for_status=lambda: None,
@@ -567,7 +572,7 @@ def test_forensic_bundle_external_signature_adapter_roundtrip(monkeypatch) -> No
     monkeypatch.setattr("takt.infrastructure.security.root_hash_signature.httpx.post", _fake_post)
     meta, raw = ZipForensicBundleBuilder().build_case_bundle(
         _case(),
-        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
     )
     assert meta.signature_status == "external_qualified_detached"
     assert meta.process_suitability == "qualified_signature_attached_for_procedural_actions"
@@ -577,7 +582,7 @@ def test_forensic_bundle_external_signature_adapter_roundtrip(monkeypatch) -> No
 
 
 def test_forensic_bundle_external_signature_requires_verify_endpoint(monkeypatch) -> None:
-    def _fake_post(url, json, timeout):  # noqa: ANN001
+    def _fake_post(url, json, timeout):
         return SimpleNamespace(
             raise_for_status=lambda: None,
             json=lambda: {
@@ -592,7 +597,7 @@ def test_forensic_bundle_external_signature_requires_verify_endpoint(monkeypatch
     monkeypatch.setattr("takt.infrastructure.security.root_hash_signature.httpx.post", _fake_post)
     _meta, raw = ZipForensicBundleBuilder().build_case_bundle(
         _case(),
-        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
     )
     result = ZipForensicBundleVerifier().verify_bundle(raw)
     assert result.ok is False
@@ -600,7 +605,7 @@ def test_forensic_bundle_external_signature_requires_verify_endpoint(monkeypatch
 
 
 def test_forensic_bundle_strict_mode_requires_gost_signature(monkeypatch) -> None:
-    def _fake_post(url, json, timeout):  # noqa: ANN001
+    def _fake_post(url, json, timeout):
         if str(url).endswith("/sign"):
             return SimpleNamespace(
                 raise_for_status=lambda: None,
@@ -620,7 +625,7 @@ def test_forensic_bundle_strict_mode_requires_gost_signature(monkeypatch) -> Non
     monkeypatch.setattr("takt.infrastructure.security.root_hash_signature.httpx.post", _fake_post)
     meta, raw = ZipForensicBundleBuilder().build_case_bundle(
         _case(),
-        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
     )
     assert meta.signature_status == "external_gost2012_detached"
     assert meta.suitability_label == "пригоден"
@@ -629,7 +634,7 @@ def test_forensic_bundle_strict_mode_requires_gost_signature(monkeypatch) -> Non
 
 
 def test_forensic_bundle_strict_mode_does_not_fallback_when_signer_fails(monkeypatch) -> None:
-    def _fake_post(url, json, timeout):  # noqa: ANN001
+    def _fake_post(url, json, timeout):
         if str(url).endswith("/sign"):
             raise RuntimeError("signer unavailable")
         raise AssertionError("unexpected URL")
@@ -641,12 +646,12 @@ def test_forensic_bundle_strict_mode_does_not_fallback_when_signer_fails(monkeyp
     with pytest.raises(RuntimeError, match="strict crypto mode requires successful external signer response"):
         ZipForensicBundleBuilder().build_case_bundle(
             _case(),
-            generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+            generated_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
         )
 
 
 def test_api_forensic_bundle_strict_mode_returns_503_when_signer_fails(monkeypatch) -> None:
-    def _fake_post(url, json, timeout):  # noqa: ANN001
+    def _fake_post(url, json, timeout):
         if str(url).endswith("/sign"):
             raise RuntimeError("signer unavailable")
         raise AssertionError("unexpected URL")

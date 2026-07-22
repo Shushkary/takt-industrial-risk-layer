@@ -1,0 +1,3 @@
+start_time,flow_id,src_host,src_ip,dst_ip,app_protocol,verdict,dns_query,bytes,incident_id
+2026-06-01T09:00:10Z,ndr-001,ws-17,10.10.1.17,10.20.30.40,DNS,C2_SUSPECT,evil.example,211,INC-001
+2026-06-01T08:55:00Z,ndr-002,ws-22,10.10.1.22,10.10.1.53,DNS,ALLOWED,intranet.local,98,BACKGROUND

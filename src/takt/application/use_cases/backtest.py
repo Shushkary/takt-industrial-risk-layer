@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, deque
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from typing import Iterable, Mapping
 
 from takt.application.use_cases.process_event import ProcessEventUseCase
 from takt.domain.engines.causal_mesh import GraphEdge
@@ -19,14 +19,21 @@ class BacktestReport:
 
 
 class RunBacktestUseCase:
-    """Пакетный прогон истории (MVP — последовательно, без реального графа)."""
+    """
+    Пакетный прогон истории (MVP — последовательно, без реального графа).
+
+    `events` — любой `Iterable`, в т.ч. генератор (например,
+    `takt.infrastructure.importers.csv_events.iter_normalized_from_csv`):
+    входной набор не материализуется целиком в памяти, в памяти держится
+    только скользящее окно последних `recent_context_event_count` событий.
+    """
 
     def __init__(self, process: ProcessEventUseCase) -> None:
         self._process = process
 
     def execute(
         self,
-        events: Sequence[NormalizedEvent],
+        events: Iterable[NormalizedEvent],
         *,
         graph_edges: list[GraphEdge] | None = None,
         polling_intervals_us: list[float] | None = None,
@@ -35,14 +42,15 @@ class RunBacktestUseCase:
         hist: Counter[str] = Counter()
         merges = 0
         created = 0
-        window: list[NormalizedEvent] = []
+        processed = 0
+        n = self._process.recent_context_event_count
+        window: deque[NormalizedEvent] = deque(maxlen=n)
         edges = graph_edges or []
         intervals = polling_intervals_us or [1000.0, 1000.0, 4670.0, 21_800.0]
         tickets: list[ServiceTicket] = []
-        for i, ev in enumerate(events):
+        for ev in events:
             clock = ev.observed_at
-            n = self._process.recent_context_event_count
-            recent = window[-n:] if len(window) > n else window[:]
+            recent = list(window)
             out = self._process.execute(
                 ev,
                 recent_events=recent,
@@ -58,8 +66,9 @@ class RunBacktestUseCase:
                 created += 1
             hist[out.assessment.risk_class] += 1
             window.append(ev)
+            processed += 1
         return BacktestReport(
-            events_processed=len(events),
+            events_processed=processed,
             cases_created=created,
             merges=merges,
             risk_class_histogram=dict(hist),

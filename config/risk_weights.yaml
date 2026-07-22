@@ -15,6 +15,23 @@ alert_fatigue:
   mode: bucketed
   bucket_sec: 300
 
+# SOC-корреляция. Пока mode=legacy сохраняет byte-to-byte поведение OT-конвейера;
+# правила используются новым обобщённым коррелятором в порядке priority.
+correlation:
+  mode: legacy
+  keys:
+    - name: host_window
+      fields: [host_id]
+      bucket_sec: 600
+      priority: 10
+    - name: user_destination
+      fields: [user_id, dst_address]
+      bucket_sec: 300
+      priority: 20
+    - name: file_hash
+      fields: ["artifact:hash"]
+      priority: 30
+
 # Асимптотическая отсечка при высоком EPS (нормировка весов)
 eps_soft_cap: 100000
 

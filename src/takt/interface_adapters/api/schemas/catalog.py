@@ -26,4 +26,7 @@ class InvariantCatalogItem(BaseModel):
 
 class EventSourceCatalogItem(BaseModel):
     id: str
+    source_class: str
+    display_name: str
+    event_count: int = 0
     ingest_trust: float | None = None

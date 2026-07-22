@@ -19,6 +19,11 @@ def ensure_case_schema(conn: sqlite3.Connection, schema_version: int) -> None:
           xai_summary TEXT NOT NULL,
           audit_log TEXT NOT NULL,
           burst_fingerprint TEXT NOT NULL,
+          correlation_fingerprints TEXT NOT NULL DEFAULT '[]',
+          correlation_evidence TEXT NOT NULL DEFAULT '[]',
+          related_cases TEXT NOT NULL DEFAULT '[]',
+          artifacts TEXT NOT NULL DEFAULT '[]',
+          findings TEXT NOT NULL DEFAULT '[]',
           primary_asset_id TEXT NOT NULL,
           trigger_operation TEXT NOT NULL,
           operator_id TEXT NOT NULL DEFAULT '',
@@ -39,6 +44,13 @@ def ensure_case_schema(conn: sqlite3.Connection, schema_version: int) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_cases_fp_status
           ON cases (burst_fingerprint, status);
+        CREATE TABLE IF NOT EXISTS case_correlation_keys (
+          fingerprint TEXT NOT NULL,
+          case_id TEXT NOT NULL,
+          PRIMARY KEY (fingerprint, case_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_case_correlation_keys_fp
+          ON case_correlation_keys (fingerprint);
         CREATE TABLE IF NOT EXISTS idempotency_keys (
           idem_key TEXT PRIMARY KEY NOT NULL,
           body_hash TEXT NOT NULL,
@@ -145,6 +157,50 @@ def ensure_recent_events_schema(conn: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_recent_events_seq
           ON recent_events (seq DESC);
+        CREATE TABLE IF NOT EXISTS events (
+          event_id TEXT PRIMARY KEY NOT NULL,
+          observed_at TEXT NOT NULL,
+          source TEXT NOT NULL,
+          protocol TEXT NOT NULL,
+          operation TEXT NOT NULL,
+          payload_size INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          operator_id TEXT NOT NULL DEFAULT '',
+          host_id TEXT,
+          user_id TEXT,
+          process_id TEXT,
+          parent_process_id TEXT,
+          src_address TEXT,
+          dst_address TEXT,
+          artifacts_json TEXT NOT NULL DEFAULT '[]',
+          ingest_trust REAL NOT NULL DEFAULT 1.0,
+          inserted_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_events_source_time ON events (source, observed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_events_host_time ON events (host_id, observed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_events_user_time ON events (user_id, observed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_events_process_time ON events (process_id, observed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_events_src_address ON events (src_address);
+        CREATE INDEX IF NOT EXISTS idx_events_dst_address ON events (dst_address);
+        CREATE TABLE IF NOT EXISTS entity_registry (
+          entity_type TEXT NOT NULL,
+          entity_id TEXT NOT NULL,
+          first_seen TEXT NOT NULL,
+          last_seen TEXT NOT NULL,
+          sources_json TEXT NOT NULL DEFAULT '[]',
+          event_count INTEGER NOT NULL DEFAULT 0,
+          attributes_json TEXT NOT NULL DEFAULT '{}',
+          PRIMARY KEY (entity_type, entity_id)
+        );
+        CREATE TABLE IF NOT EXISTS entity_activity (
+          entity_type TEXT NOT NULL,
+          entity_id TEXT NOT NULL,
+          bucket_hour TEXT NOT NULL,
+          event_count INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (entity_type, entity_id, bucket_hour)
+        );
+        CREATE INDEX IF NOT EXISTS idx_entity_activity_lookup
+          ON entity_activity (entity_type, entity_id, bucket_hour DESC);
         """
     )
 
@@ -183,6 +239,11 @@ def _add_missing_case_columns(conn: sqlite3.Connection, cols: set[str]) -> None:
         "pdf_last_sha256": "ALTER TABLE cases ADD COLUMN pdf_last_sha256 TEXT NOT NULL DEFAULT ''",
         "pdf_last_generated_at": "ALTER TABLE cases ADD COLUMN pdf_last_generated_at TEXT NOT NULL DEFAULT ''",
         "raw_evidence_refs": "ALTER TABLE cases ADD COLUMN raw_evidence_refs TEXT NOT NULL DEFAULT '[]'",
+        "correlation_fingerprints": "ALTER TABLE cases ADD COLUMN correlation_fingerprints TEXT NOT NULL DEFAULT '[]'",
+        "correlation_evidence": "ALTER TABLE cases ADD COLUMN correlation_evidence TEXT NOT NULL DEFAULT '[]'",
+        "related_cases": "ALTER TABLE cases ADD COLUMN related_cases TEXT NOT NULL DEFAULT '[]'",
+        "artifacts": "ALTER TABLE cases ADD COLUMN artifacts TEXT NOT NULL DEFAULT '[]'",
+        "findings": "ALTER TABLE cases ADD COLUMN findings TEXT NOT NULL DEFAULT '[]'",
     }
     for column, sql in migrations.items():
         if column not in cols:

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.domain.entities.case import (
     Case,
+    CaseArtifact,
     CaseDecisionRecord,
     CaseStatus,
+    CorrelationEvidence,
+    Finding,
     FormalVerdictRecord,
     InvariantHitRecord,
     ManualPermit,
@@ -15,10 +18,13 @@ from takt.domain.entities.case import (
 from takt.domain.invariants.catalog import invariant_titles_by_id
 from takt.domain.services.forensic_verdict import case_forensic_verdict
 from takt.interface_adapters.api.schemas.cases import (
+    CaseArtifactDetail,
     CaseDecisionRecordDetail,
     CaseDetail,
     CaseForensicVerdictDetail,
     ContextMatchDetail,
+    CorrelationEvidenceDetail,
+    FindingDetail,
     FormalVerdictRecordDetail,
     InvariantHitDetail,
     InvariantHitRecordDetail,
@@ -34,8 +40,8 @@ def parse_import_created_at(raw: str) -> datetime:
         s = s[:-1] + "+00:00"
     dt = datetime.fromisoformat(s)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def invariant_details_for_hits(hits: list[str]) -> list[InvariantHitDetail]:
@@ -49,7 +55,7 @@ def manual_permit_to_detail(p: ManualPermit) -> ManualPermitDetail:
         case_id=p.case_id,
         work_order_number=p.work_order_number,
         actor=p.actor,
-        created_at=p.created_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        created_at=p.created_at.astimezone(UTC).isoformat(timespec="seconds"),
         asset_id=p.asset_id,
         operation=p.operation,
         action_class=p.action_class,
@@ -70,7 +76,7 @@ def manual_permit_to_detail(p: ManualPermit) -> ManualPermitDetail:
 
 def decision_record_to_detail(r: CaseDecisionRecord) -> CaseDecisionRecordDetail:
     return CaseDecisionRecordDetail(
-        ts=r.ts.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        ts=r.ts.astimezone(UTC).isoformat(timespec="seconds"),
         actor=r.actor,
         prev_status=r.prev_status,
         next_status=r.next_status,
@@ -81,7 +87,7 @@ def decision_record_to_detail(r: CaseDecisionRecord) -> CaseDecisionRecordDetail
 
 def formal_verdict_record_to_detail(r: FormalVerdictRecord) -> FormalVerdictRecordDetail:
     return FormalVerdictRecordDetail(
-        ts=r.ts.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        ts=r.ts.astimezone(UTC).isoformat(timespec="seconds"),
         actor=r.actor,
         prev=r.prev,
         next=r.next,
@@ -114,7 +120,7 @@ def remediation_attempt_to_detail(a: RemediationAttempt) -> RemediationAttemptDe
         kind=a.kind,
         status=a.status,
         actor=a.actor,
-        created_at=a.created_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        created_at=a.created_at.astimezone(UTC).isoformat(timespec="seconds"),
         action=a.action,
         result=a.result,
         readiness_before=a.readiness_before,
@@ -222,6 +228,38 @@ def domain_case_from_detail(d: CaseDetail) -> Case:
         xai_summary=d.xai_summary,
         audit_log=list(d.audit_log),
         burst_fingerprint=d.fingerprint,
+        correlation_fingerprints=list(d.correlation_fingerprints),
+        correlation_evidence=[
+            CorrelationEvidence(
+                event_id=item.event_id, fingerprint=item.fingerprint, rule=item.rule,
+                fields=list(item.fields), manual=item.manual, reason=item.reason,
+                request_id=item.request_id,
+            )
+            for item in d.correlation_evidence
+        ],
+        related_cases=list(d.related_cases),
+        artifacts=[
+            CaseArtifact(
+                type=item.type, value=item.value, host_id=item.host_id,
+                verification_status=item.verification_status, source=item.source,
+                added_by=item.added_by,
+                created_at=parse_import_created_at(item.created_at) if item.created_at else None,
+            ) for item in d.artifacts
+        ],
+        findings=[
+            Finding(
+                finding_id=item.finding_id, text=item.text, author=item.author,
+                created_at=parse_import_created_at(item.created_at), event_ids=list(item.event_ids),
+                artifacts=[
+                    CaseArtifact(
+                        type=artifact.type, value=artifact.value, host_id=artifact.host_id,
+                        verification_status=artifact.verification_status, source=artifact.source,
+                        added_by=artifact.added_by,
+                        created_at=parse_import_created_at(artifact.created_at) if artifact.created_at else None,
+                    ) for artifact in item.artifacts
+                ],
+            ) for item in d.findings
+        ],
         primary_asset_id=d.primary_asset_id,
         trigger_operation=d.trigger_operation,
         operator_id=d.operator_id,
@@ -251,7 +289,7 @@ def case_to_detail(c: Case) -> CaseDetail:
         InvariantHitRecordDetail(
             invariant_id=r.invariant_id,
             event_ref=r.event_ref,
-            ts=r.ts.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            ts=r.ts.astimezone(UTC).isoformat(timespec="seconds"),
             score_contribution=r.score_contribution,
             dq_score=r.dq_score,
             dq_partial=r.dq_partial,
@@ -269,6 +307,37 @@ def case_to_detail(c: Case) -> CaseDetail:
         invariant_hits=hits,
         invariant_details=invariant_details_for_hits(hits),
         observations=obs_out,
+        correlation_fingerprints=list(c.correlation_fingerprints),
+        correlation_evidence=[
+            CorrelationEvidenceDetail(
+                event_id=item.event_id, fingerprint=item.fingerprint, rule=item.rule,
+                fields=list(item.fields), manual=item.manual, reason=item.reason,
+                request_id=item.request_id,
+            )
+            for item in c.correlation_evidence
+        ],
+        related_cases=list(c.related_cases),
+        artifacts=[
+            CaseArtifactDetail(
+                type=item.type, value=item.value, host_id=item.host_id,
+                verification_status=item.verification_status, source=item.source,
+                added_by=item.added_by, created_at=item.created_at.isoformat() if item.created_at else None,
+            ) for item in c.artifacts
+        ],
+        findings=[
+            FindingDetail(
+                finding_id=item.finding_id, text=item.text, author=item.author,
+                created_at=item.created_at.isoformat(), event_ids=list(item.event_ids),
+                artifacts=[
+                    CaseArtifactDetail(
+                        type=artifact.type, value=artifact.value, host_id=artifact.host_id,
+                        verification_status=artifact.verification_status, source=artifact.source,
+                        added_by=artifact.added_by,
+                        created_at=artifact.created_at.isoformat() if artifact.created_at else None,
+                    ) for artifact in item.artifacts
+                ],
+            ) for item in c.findings
+        ],
         manual_permits=[manual_permit_to_detail(p) for p in c.manual_permits],
         formal_verdict=case_forensic_verdict_to_detail(c),
         formal_verdict_records=[formal_verdict_record_to_detail(r) for r in c.formal_verdict_records],
@@ -282,7 +351,7 @@ def case_to_detail(c: Case) -> CaseDetail:
         trigger_operation=c.trigger_operation,
         operator_id=c.operator_id,
         last_event_source=c.last_event_source,
-        created_at=c.created_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        created_at=c.created_at.astimezone(UTC).isoformat(timespec="seconds"),
         dq_score=c.dq_score,
         dq_partial=c.dq_partial,
         dq_reasons=list(c.dq_reasons),
