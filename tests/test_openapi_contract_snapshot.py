@@ -64,6 +64,7 @@ EXPECTED_ROUTE_CONTRACTS = [
     ("GET", "/data-quality", ("System",), "DataQualityResponse"),
     ("POST", "/events", ("Ingest",), "AssessResponse"),
     ("POST", "/events/batch", ("Ingest",), "BatchAssessResponse"),
+    ("POST", "/enrichment/decode", ("Enrichment",), "DecodeResponse"),
     ("GET", "/entities/{entity_type}/{entity_id}/card", ("Entities",), None),
     ("GET", "/events/search", ("Events",), None),
     ("POST", "/forensic-bundle/verify", ("Export",), None),
