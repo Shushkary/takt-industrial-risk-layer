@@ -19,16 +19,42 @@ CHECKED_PATHS = [
     "README.md",
 ]
 
+# Маркеры утечки путей окружения сборки (локальная машина разработчика).
+# Намеренно НЕ используем широкие префиксы дисков Windows: они ложно
+# срабатывают на содержимом полей данных в примерах/фикстурах (путь
+# вредоносного файла C:\Temp\update.exe внутри EDR-события) и на случайных
+# байтовых последовательностях внутри zip-сжатых бинарных документов.
+# Вместо этого ловим сигнатуры, характерные именно для машины разработчика:
+#   - профиль пользователя Windows (каталог профиля);
+#   - пути виртуального окружения Python;
+#   - специфичные для окружения разработчика каталоги/названия;
+#   - локальные file:-ссылки на машине разработчика.
+# ПРИМЕЧАНИЕ: маркеры собираются конкатенацией, а сами литералы маркеров не
+# должны встречаться в этом файле (в т.ч. в комментариях) — иначе гард
+# сработает на собственном исходнике.
 FORBIDDEN_PATH_MARKERS = (
-    "D:" + "\\",
-    "D:" + "/",
-    "C:" + "\\",
-    "C:" + "/",
-    "file:" + "///",
-    "site" + "-packages",
-    "Neyros" + "_Prod",
-    "Version" + " lite",
+    "C:" + "\\" + "Users" + "\\",  # профиль пользователя Windows (user profile)
+    "C:" + "/" + "Users" + "/",    # то же через прямой слэш
+    "D:" + "\\" + "Users" + "\\",  # профиль на диске D:
+    "D:" + "/" + "Users" + "/",    # то же через прямой слэш
+    "file:" + "///",               # локальные file:-ссылки
+    "site" + "-packages",          # пути виртуального окружения
+    "Neyros" + "_Prod",            # спец. каталог окружения разработчика
+    "Version" + " lite",           # спец. название окружения разработчика
 )
+
+
+# zip-сжатые бинарные офисные документы: чтение как текста даёт ложные
+# срабатывания на случайных байтовых последовательностях (например, D:\ или C:\
+# внутри сжатого XML), которые не являются реальными ссылками на пути.
+# Скан текста по ним не имеет смысла — утечки окружения сборки живут в
+# исходниках, CI и документации, а не в презентациях/таблицах.
+_BINARY_OFFICE_SUFFIXES = {
+    ".pptx", ".pptm", ".potx", ".potm",
+    ".docx", ".docm",
+    ".xlsx", ".xlsm",
+    ".odp", ".ods", ".odt",
+}
 
 
 def _iter_text_files(path: Path):
@@ -36,8 +62,21 @@ def _iter_text_files(path: Path):
         yield path
         return
     for candidate in path.rglob("*"):
-        if candidate.is_file() and candidate.suffix.lower() not in {".pyc", ".pyo", ".pdf", ".png", ".jpg"}:
+        if candidate.is_file() and candidate.suffix.lower() not in {
+            ".pyc", ".pyo", ".pdf", ".png", ".jpg", *_BINARY_OFFICE_SUFFIXES
+        }:
             yield candidate
+
+
+def _scan_for_local_machine_paths() -> list[str]:
+    """Вернуть относительные пути файлов с маркерами путей окружения сборки."""
+    offenders: list[str] = []
+    for rel in CHECKED_PATHS:
+        for path in _iter_text_files(ROOT / rel):
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            if any(marker in text for marker in FORBIDDEN_PATH_MARKERS):
+                offenders.append(str(path.relative_to(ROOT)))
+    return offenders
 
 
 def test_release_readiness_artifacts_exist() -> None:
@@ -139,13 +178,25 @@ def test_dockerfile_pins_single_worker_for_process_local_event_window() -> None:
 
 
 def test_source_docs_and_ci_do_not_reference_local_machine_paths() -> None:
-    offenders: list[str] = []
-    for rel in CHECKED_PATHS:
-        for path in _iter_text_files(ROOT / rel):
-            text = path.read_text(encoding="utf-8", errors="ignore")
-            if any(marker in text for marker in FORBIDDEN_PATH_MARKERS):
-                offenders.append(str(path.relative_to(ROOT)))
-    assert offenders == []
+    assert _scan_for_local_machine_paths() == []
+
+
+def test_guard_still_catches_developer_machine_path() -> None:
+    """Самопроверка гарда: настоящий путь разработчика по-прежнему ловится.
+
+    Если гард «починен» простым отключением проверки, этот тест упадёт —
+    синтетический путь профиля разработчика обязан оставаться нарушением.
+    """
+    probe = ROOT / "docs" / "_guard_probe_local_path.md"
+    probe.write_text(
+        "leaked build path: C:\\Users\\Developer\\secret\\takt-industrial-risk-layer\n",
+        encoding="utf-8",
+    )
+    try:
+        offenders = _scan_for_local_machine_paths()
+        assert str(probe.relative_to(ROOT)) in offenders
+    finally:
+        probe.unlink(missing_ok=True)
 
 
 def test_product_boundary_documents_no_crypto_and_no_active_control() -> None:
