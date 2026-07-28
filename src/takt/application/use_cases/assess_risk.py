@@ -11,6 +11,7 @@ from takt.domain.engines.alert_fatigue import (
     correlation_fingerprints,
     correlation_rules_from_config,
 )
+from takt.infrastructure.security.sha256_hasher import Sha256HasherAdapter
 from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.engines.chaos_predictor import predict_polling_chaos
 from takt.domain.engines.context_matcher import match_event_to_ticket
@@ -66,6 +67,7 @@ class AssessRiskUseCase:
         rule_overrides: InvariantRuleOverrides | None = None,
         experimental_invariant_ids: frozenset[str] = frozenset(),
         rule_specs: tuple[InvariantRuleSpec, ...] | None = None,
+        hasher: Sha256HasherAdapter | None = None,
     ) -> None:
         self._w = weights
         self._jump = jump_host
@@ -77,6 +79,7 @@ class AssessRiskUseCase:
         self._rule_overrides = rule_overrides
         self._experimental_ids = frozenset(experimental_invariant_ids)
         self._rule_specs = rule_specs
+        self._hasher = Sha256HasherAdapter() if hasher is None else hasher
 
     @property
     def recent_context_event_count(self) -> int:
@@ -99,7 +102,7 @@ class AssessRiskUseCase:
         raw = self._w.get("correlation")
         if not isinstance(raw, Mapping) or str(raw.get("mode", "legacy")).strip().lower() == "legacy":
             return []
-        return correlation_fingerprints(event, correlation_rules_from_config(raw))
+        return correlation_fingerprints(event, correlation_rules_from_config(raw), hasher=self._hasher)
 
     def execute(
         self,
