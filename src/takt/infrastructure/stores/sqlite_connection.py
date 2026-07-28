@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, UTC
 
 
 def sqlite_busy_timeout_ms_from_env() -> int:
@@ -40,6 +40,10 @@ def dt_to_sql(dt: datetime) -> str:
     if dt.tzinfo is None:
         return dt.isoformat(timespec="seconds")
     return dt.astimezone().isoformat(timespec="seconds")
+
+
+def _now_utc() -> datetime:
+    return datetime.now(UTC)
 
 
 def dt_from_sql(raw: str) -> datetime:

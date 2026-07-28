@@ -6,7 +6,6 @@ import threading
 from collections.abc import Sequence
 from contextlib import contextmanager
 from dataclasses import asdict
-from datetime import UTC, datetime
 from pathlib import Path
 
 from takt.domain.entities.case import (
@@ -42,13 +41,19 @@ from takt.infrastructure.stores.sqlite_connection import (
 )
 from takt.infrastructure.stores.sqlite_connection import (
     dt_to_sql as _dt_to_sql,
+    _now_utc as _now_utc
 )
 from takt.infrastructure.stores.sqlite_schema import ensure_case_schema
 from takt.infrastructure.stores.sqlite_connection import sqlite_busy_timeout_ms_from_env  # noqa: F401
 from takt.infrastructure.stores.sqlite_expected_behavior import SqliteExpectedBehavior  # noqa: F401
 from takt.infrastructure.stores.sqlite_audit_engagement_store import SqliteAuditEngagementStore  # noqa: F401
+from takt.infrastructure.stores.sqlite_idempotency import (  # noqa: F401
+    idempotency_delete_expired as _idempotency_delete_expired,
+    idempotency_get as _idempotency_get,
+    idempotency_put as _idempotency_put,
+)
 
-# Р’РµСЂСЃРёСЏ СЃС…РµРјС‹ Р‘Р” РєРµР№СЃРѕРІ (РјРµС‚Р°РґР°РЅРЅС‹Рµ `app_metadata`); РїСЂРё РјРёРіСЂР°С†РёСЏС… СѓРІРµР»РёС‡РёРІР°С‚СЊ.
+# Версия схемы БД кейсов (метаданные `app_metadata`); при миграциях увеличивать.
 CURRENT_DB_SCHEMA_VERSION = 8
 
 
@@ -211,7 +216,7 @@ class SqliteCaseStore(CaseRepositoryPort):
             old_audit = existing.audit_log if existing is not None else []
             if len(case.audit_log) > len(old_audit):
                 for line in case.audit_log[len(old_audit) :]:
-                    created_at = line.split(" | ", 1)[0] if " | " in line else _dt_to_sql(datetime.now(UTC))
+                    created_at = line.split(" | ", 1)[0] if " | " in line else _dt_to_sql(_now_utc())
                     self._append_audit_ledger_line(case.case_id, line, created_at)
 
     def delete_cases_by_id(self, case_ids: Sequence[str]) -> int:
@@ -264,38 +269,16 @@ class SqliteCaseStore(CaseRepositoryPort):
             return [_row_to_case(r) for r in cur.fetchall()]
 
     def idempotency_delete_expired(self) -> None:
-        now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         with self._lock:
-            self._conn.execute("DELETE FROM idempotency_keys WHERE expires_at < ?", (now,))
+            _idempotency_delete_expired(self._conn)
 
     def idempotency_get(self, key: str) -> tuple[str, str] | None:
         with self._lock:
-            cur = self._conn.execute(
-                "SELECT body_hash, response_json, expires_at FROM idempotency_keys WHERE idem_key = ?",
-                (key,),
-            )
-            row = cur.fetchone()
-            if row is None:
-                return None
-            now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-            if str(row[2]) < now:
-                self._conn.execute("DELETE FROM idempotency_keys WHERE idem_key = ?", (key,))
-                return None
-            return str(row[0]), str(row[1])
+            return _idempotency_get(self._conn, key)
 
     def idempotency_put(self, key: str, body_hash: str, response_json: str, expires_at_iso: str) -> None:
         with self._lock:
-            self._conn.execute(
-                """
-                INSERT INTO idempotency_keys (idem_key, body_hash, response_json, expires_at)
-                VALUES (?,?,?,?)
-                ON CONFLICT(idem_key) DO UPDATE SET
-                  body_hash = excluded.body_hash,
-                  response_json = excluded.response_json,
-                  expires_at = excluded.expires_at
-                """,
-                (key, body_hash, response_json, expires_at_iso),
-            )
+            _idempotency_put(self._conn, key, body_hash, response_json, expires_at_iso)
 
     def find_open_by_fingerprint(self, fingerprint: str) -> Case | None:
         with self._lock:
