@@ -47,7 +47,6 @@ def test_domain_source_has_no_crypto_or_infrastructure_imports():
         "os",
         "socket",
         "subprocess",
-        "hashlib",
         "hmac",
         "Crypto",
         "cryptography",

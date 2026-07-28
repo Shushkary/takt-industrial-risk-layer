@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import hashlib
 import json
+from takt.domain.ports.hasher import HasherPort
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -64,6 +64,7 @@ def correlation_rules_from_config(raw: object) -> tuple[CorrelationRule, ...]:
 def correlation_fingerprints(
     event: NormalizedEvent,
     rules: Sequence[CorrelationRule],
+    hasher: HasherPort,
 ) -> list[str]:
     """Return candidate keys for rules whose every field is present on the event."""
     fingerprints: list[str] = []
@@ -74,9 +75,9 @@ def correlation_fingerprints(
         material: dict[str, Any] = {field: value for field, value in zip(rule.fields, values, strict=True)}
         if rule.bucket_sec is not None:
             material["bucket"] = int(event.observed_at.timestamp() // rule.bucket_sec)
-        digest = hashlib.sha256(
-            json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()[:24]
+        digest = hasher.hash_bytes(
+            json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(", ", ": ")).encode("utf-8")
+        )[:24]
         fingerprints.append(f"corr:{rule.name}:{digest}")
     return fingerprints
 
