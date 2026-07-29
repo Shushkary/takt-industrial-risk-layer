@@ -58,6 +58,7 @@ class _GossopkaManualPermit(BaseModel):
     confidence: float
     rationale: str
     counterfactual: str
+    counterfactual_struct: dict[str, object] | None = None
     note: str
 
 
@@ -184,6 +185,7 @@ def _manual_permit_payload(permit) -> dict[str, object]:  # noqa: ANN001
         "confidence": permit.confidence,
         "rationale": permit.rationale,
         "counterfactual": permit.counterfactual,
+        "counterfactual_struct": permit.counterfactual_struct,
         "organizational_context_sha256": permit.organizational_context_sha256,
         "organizational_context": _organizational_document_payload(permit),
         "note": permit.note,

@@ -54,6 +54,69 @@ class OrganizationalContextDocument:
 
 
 @dataclass(slots=True)
+class VerdictCounterfactual:
+    """Машиночитаемый контрфакт вердикта легитимности наряда.
+
+    Строится в ``manual_permit._verdict`` из уже вычисленных несоответствий
+    (``unmet_conditions`` — нехватка организационного контекста,
+    ``mismatches`` — расхождения наряда с делом). Текстовые поля
+    ``rationale``/``counterfactual`` собираются из этого же объекта, а не
+    параллельно ему; новых правил сверки не вводит.
+
+    ВНИМАНИЕ: не путать с ``takt.domain.xai._CF_MAP``. ``_CF_MAP`` служит
+    объяснению оценки РИСКА (risk explanation) и лежит в доменном слое;
+    данный класс служит объяснению ВЕРДИКТА легитимности наряда и лежит
+    в слое применения. При рефакторинге не объединять их — разные источники
+    и назначения. См. PROMPT_FIX_pt_techlab.md, Задача 5.
+    """
+
+    verdict: str = ""
+    unmet_conditions: tuple[str, ...] = ()
+    mismatches: tuple[dict[str, str], ...] = ()
+    required_document: str | None = None
+    sanctioning_party: str | None = None
+    admissible_window: str | None = None
+    asset: str | None = None
+    operation: str | None = None
+    action_class: str | None = None
+    executor: str | None = None
+    restrictions_present: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "verdict": self.verdict,
+            "unmet_conditions": list(self.unmet_conditions),
+            "mismatches": [dict(m) for m in self.mismatches],
+            "required_document": self.required_document,
+            "sanctioning_party": self.sanctioning_party,
+            "admissible_window": self.admissible_window,
+            "asset": self.asset,
+            "operation": self.operation,
+            "action_class": self.action_class,
+            "executor": self.executor,
+            "restrictions_present": self.restrictions_present,
+        }
+
+    @classmethod
+    def from_dict(cls, data: object) -> "VerdictCounterfactual":
+        if not isinstance(data, dict):
+            return cls()
+        return cls(
+            verdict=str(data.get("verdict", "")),
+            unmet_conditions=tuple(str(c) for c in data.get("unmet_conditions", []) if isinstance(c, str)),
+            mismatches=tuple(dict(m) for m in data.get("mismatches", []) if isinstance(m, dict)),
+            required_document=data.get("required_document"),
+            sanctioning_party=data.get("sanctioning_party"),
+            admissible_window=data.get("admissible_window"),
+            asset=data.get("asset"),
+            operation=data.get("operation"),
+            action_class=data.get("action_class"),
+            executor=data.get("executor"),
+            restrictions_present=data.get("restrictions_present"),
+        )
+
+
+@dataclass(slots=True)
 class ManualPermit:
     permit_id: str
     case_id: str
@@ -75,6 +138,7 @@ class ManualPermit:
     restrictions: str = ""
     organizational_context_sha256: str = ""
     note: str = ""
+    counterfactual_struct: dict[str, object] = field(default_factory=dict)
 
     def organizational_document(self) -> OrganizationalContextDocument:
         return OrganizationalContextDocument(

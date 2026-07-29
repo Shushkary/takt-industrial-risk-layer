@@ -4,8 +4,9 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import NamedTuple
 
-from takt.domain.entities.case import FormalVerdictRecord, ManualPermit
+from takt.domain.entities.case import FormalVerdictRecord, ManualPermit, VerdictCounterfactual
 from takt.domain.ports.case_repository import CaseRepositoryPort
 from takt.domain.services.forensic_verdict import case_forensic_verdict
 from takt.domain.ports.system_ports import IdProviderPort, SystemClockPort
@@ -26,6 +27,30 @@ class AttachManualPermitCommand:
     document_status: str = ""
     restrictions: str = ""
     note: str = ""
+
+
+class _PermitVerdict(NamedTuple):
+    verdict: str
+    confidence: float
+    rationale: str
+    counterfactual: str
+    counterfactual_struct: dict[str, object]
+
+
+_MISMATCH_TEXT = {
+    "asset": "актив наряда {actual!r} не совпадает с активом дела {expected!r}",
+    "operation": "операция наряда {actual!r} не совпадает с операцией дела {expected!r}",
+    "action_class": "класс действия наряда {actual!r} не совпадает с классом действия дела {expected!r}",
+    "executor": "исполнитель наряда {actual!r} не совпадает с исполнителем события {expected!r}",
+}
+
+
+def _mismatch_text(m: dict[str, str]) -> str:
+    template = _MISMATCH_TEXT.get(
+        m["field"],
+        "{field} наряда {actual!r} не совпадает с {field} дела {expected!r}",
+    )
+    return template.format(field=m["field"], actual=m["actual"], expected=m["expected"])
 
 
 class AttachManualPermitUseCase:
@@ -49,7 +74,7 @@ class AttachManualPermitUseCase:
         document_status = cmd.document_status.strip() or "не указан"
         restrictions = cmd.restrictions.strip()
         previous_formal_verdict = case_forensic_verdict(case).value
-        verdict, confidence, rationale, counterfactual = self._verdict(
+        verdict_result = self._verdict(
             case_asset=case.primary_asset_id,
             case_operation=case.trigger_operation,
             case_action_class=_action_class(case.trigger_operation),
@@ -64,6 +89,7 @@ class AttachManualPermitUseCase:
             valid_to=cmd.valid_to.strip(),
             document_status=document_status,
             restrictions=restrictions,
+            work_order_number=work_order,
         )
         permit = ManualPermit(
             permit_id=self._ids.new_case_id_short(),
@@ -73,10 +99,11 @@ class AttachManualPermitUseCase:
             created_at=self._clock.now_utc(),
             asset_id=asset,
             operation=operation,
-            verdict=verdict,
-            confidence=confidence,
-            rationale=rationale,
-            counterfactual=counterfactual,
+            verdict=verdict_result.verdict,
+            confidence=verdict_result.confidence,
+            rationale=verdict_result.rationale,
+            counterfactual=verdict_result.counterfactual,
+            counterfactual_struct=verdict_result.counterfactual_struct,
             action_class=action_class,
             executor=cmd.executor.strip(),
             approver=cmd.approver.strip(),
@@ -106,14 +133,14 @@ class AttachManualPermitUseCase:
                 actor=permit.actor,
                 prev=previous_formal_verdict,
                 next=next_formal_verdict,
-                score=confidence,
+                score=verdict_result.confidence,
                 source="manual_permit",
                 permit_id=permit.permit_id,
-                reason=rationale,
+                reason=verdict_result.rationale,
             )
         )
         case.append_audit(
-            f"manual permit {work_order} attached verdict={verdict} confidence={confidence:.2f}",
+            f"manual permit {work_order} attached verdict={verdict_result.verdict} confidence={verdict_result.confidence:.2f}",
             permit.created_at,
             actor=permit.actor,
         )
@@ -121,7 +148,7 @@ class AttachManualPermitUseCase:
             (
                 "formal verdict change "
                 f"prev={previous_formal_verdict} next={next_formal_verdict} "
-                f"score={confidence:.2f} source=manual_permit permit_id={permit.permit_id}"
+                f"score={verdict_result.confidence:.2f} source=manual_permit permit_id={permit.permit_id}"
             ),
             permit.created_at,
             actor=permit.actor,
@@ -169,13 +196,25 @@ class AttachManualPermitUseCase:
         valid_to: str = "",
         document_status: str = "",
         restrictions: str = "",
-    ) -> tuple[str, float, str, str]:
+        work_order_number: str = "",
+    ) -> _PermitVerdict:
         if not permit_asset and not permit_operation and not permit_action_class:
-            return (
-                "undetermined",
-                0.5,
-                "Наряд указан без привязки к активу и операции; сверка с делом невозможна.",
-                "Вывод стал бы легитимным при совпадении актива и операции наряда с делом.",
+            # Наряд не привязан к активу/операции — сверка с делом невозможна.
+            # Структура несёт только факты самого наряда (текста-объяснения нет).
+            cf = VerdictCounterfactual(
+                verdict="undetermined",
+                asset=permit_asset or None,
+                operation=permit_operation or None,
+                action_class=permit_action_class or None,
+                executor=executor or None,
+                required_document=work_order_number or None,
+            )
+            return _PermitVerdict(
+                verdict="undetermined",
+                confidence=0.5,
+                rationale="Наряд указан без привязки к активу и операции; сверка с делом невозможна.",
+                counterfactual="Вывод стал бы легитимным при совпадении актива и операции наряда с делом.",
+                counterfactual_struct=cf.to_dict(),
             )
 
         asset_ok = not permit_asset or permit_asset.strip().lower() == case_asset.strip().lower()
@@ -197,50 +236,103 @@ class AttachManualPermitUseCase:
         )
 
         if asset_ok and op_ok and class_ok and executor_ok and org_context_complete:
-            return (
-                "legitimate",
-                0.95,
-                "Актив, операция, исполнитель, утверждающий, окно работ и статус наряда совпадают с делом либо не противоречат ему.",
-                "Вывод стал бы нелегитимным при расхождении актива, операции, исполнителя, окна работ, утверждающего или при наличии ограничений.",
+            admissible_window = f"{valid_from}..{valid_to}" if (valid_from and valid_to) else None
+            cf = VerdictCounterfactual(
+                verdict="legitimate",
+                asset=permit_asset or None,
+                operation=permit_operation or None,
+                action_class=permit_action_class or None,
+                executor=executor or None,
+                sanctioning_party=approver or None,
+                admissible_window=admissible_window,
+                required_document=work_order_number or None,
+            )
+            return _PermitVerdict(
+                verdict="legitimate",
+                confidence=0.95,
+                rationale=(
+                    "Актив, операция, исполнитель, утверждающий, окно работ и статус наряда "
+                    "совпадают с делом либо не противоречат ему."
+                ),
+                counterfactual=(
+                    "Вывод стал бы нелегитимным при расхождении актива, операции, исполнителя, "
+                    "окна работ, утверждающего или при наличии ограничений."
+                ),
+                counterfactual_struct=cf.to_dict(),
             )
 
         if asset_ok and op_ok and class_ok and executor_ok:
-            missing = []
+            # Актив/операция/исполнитель совпали, но не хватает организационного контекста.
+            # Структура = список конкретно не выполненных условий; текст строится из неё.
+            unmet: list[str] = []
             if not executor:
-                missing.append("исполнитель")
+                unmet.append("исполнитель")
             if not approver:
-                missing.append("утверждающий")
+                unmet.append("утверждающий")
             if not valid_from or not valid_to:
-                missing.append("окно работ")
+                unmet.append("окно работ")
             elif not window_ok:
-                missing.append(window_reason)
+                unmet.append(window_reason)
             if not status_ok:
-                missing.append("действующий статус документа")
+                unmet.append("действующий статус документа")
             if restrictions:
-                missing.append("отсутствие ограничений")
-            return (
-                "undetermined",
-                0.7,
-                "Актив и операция совпадают, но организационный контекст неполный: " + ", ".join(missing) + ".",
-                "Вывод стал бы легитимным при полном наряде с исполнителем, утверждающим, действующим окном работ, действующим статусом и отсутствием ограничений.",
+                unmet.append("отсутствие ограничений")
+            if valid_from and valid_to and not window_ok:
+                admissible_window = window_reason
+            elif valid_from and valid_to:
+                admissible_window = f"{valid_from}..{valid_to}"
+            else:
+                admissible_window = None
+            cf = VerdictCounterfactual(
+                verdict="undetermined",
+                unmet_conditions=tuple(unmet),
+                asset=permit_asset or None,
+                operation=permit_operation or None,
+                action_class=permit_action_class or None,
+                executor=executor or None,
+                sanctioning_party=approver or None,
+                admissible_window=admissible_window,
+                required_document=work_order_number or None,
+                restrictions_present=restrictions or None,
+            )
+            rationale = "Актив и операция совпадают, но организационный контекст неполный: " + ", ".join(unmet) + "."
+            counterfactual = "Вывод стал бы легитимным при полном наряде с " + ", ".join(unmet) + "."
+            return _PermitVerdict(
+                verdict="undetermined",
+                confidence=0.7,
+                rationale=rationale,
+                counterfactual=counterfactual,
+                counterfactual_struct=cf.to_dict(),
             )
 
-        mismatches: list[str] = []
+        # Несовпадение с делом — расхождения по конкретным полям.
+        mismatches: list[dict[str, str]] = []
         if not asset_ok:
-            mismatches.append(f"актив наряда {permit_asset!r} не совпадает с активом дела {case_asset!r}")
+            mismatches.append({"field": "asset", "expected": case_asset or "", "actual": permit_asset})
         if not op_ok:
-            mismatches.append(f"операция наряда {permit_operation!r} не совпадает с операцией дела {case_operation!r}")
+            mismatches.append({"field": "operation", "expected": case_operation or "", "actual": permit_operation})
         if not class_ok:
-            mismatches.append(
-                f"класс действия наряда {permit_action_class!r} не совпадает с классом действия дела {case_action_class!r}"
-            )
+            mismatches.append({"field": "action_class", "expected": case_action_class or "", "actual": permit_action_class})
         if not executor_ok:
-            mismatches.append(f"исполнитель наряда {executor!r} не совпадает с исполнителем события {case_operator_id!r}")
-        return (
-            "illegitimate",
-            0.65,
-            "; ".join(mismatches),
-            "Вывод стал бы легитимным при совпадении актива и операции наряда с делом.",
+            mismatches.append({"field": "executor", "expected": case_operator_id or "", "actual": executor})
+        cf = VerdictCounterfactual(
+            verdict="illegitimate",
+            mismatches=tuple(mismatches),
+            asset=permit_asset or None,
+            operation=permit_operation or None,
+            action_class=permit_action_class or None,
+            executor=executor or None,
+            required_document=work_order_number or None,
+        )
+        mismatch_texts = [_mismatch_text(m) for m in mismatches]
+        rationale = "; ".join(mismatch_texts)
+        counterfactual = "Вывод стал бы легитимным при совпадении актива и операции наряда с делом."
+        return _PermitVerdict(
+            verdict="illegitimate",
+            confidence=0.65,
+            rationale=rationale,
+            counterfactual=counterfactual,
+            counterfactual_struct=cf.to_dict(),
         )
 
 

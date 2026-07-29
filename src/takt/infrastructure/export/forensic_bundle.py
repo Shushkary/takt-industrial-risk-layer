@@ -185,6 +185,7 @@ def _manual_permit_payload(permit) -> dict[str, object]:  # noqa: ANN001
         "confidence": permit.confidence,
         "rationale": permit.rationale,
         "counterfactual": permit.counterfactual,
+        "counterfactual_struct": permit.counterfactual_struct,
         "organizational_context_sha256": permit.organizational_context_sha256,
         "organizational_context": _organizational_document_payload(permit),
         "note": permit.note,
@@ -640,7 +641,7 @@ class ZipForensicBundleBuilder:
         )
         manifest = {
             "format": "TAKT Forensic Bundle",
-            "format_version": "0.1",
+            "format_version": "0.2",
             "package_id": meta.package_id,
             "case_id": meta.case_id,
             "generated_at": _utc_iso(meta.generated_at),
