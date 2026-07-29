@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Прогон стенда «два источника»: загрузка двух CSV-потоков в общий SQLite,
-проверки через HTTP-контракт и отчёт для отладки.
+Прогон стенда SOC: загрузка нескольких CSV-потоков (2–4 класса источников)
+в общий SQLite, проверки через HTTP-контракт и отчёт для отладки.
 
 Что делает:
 
 1. фиксирует окружение стенда (`TAKT_CONFIG`, `TAKT_STORAGE=sqlite`, `TAKT_SQLITE_PATH`);
-2. читает оба CSV мапперами `soc_csv.py` и подаёт события **в хронологическом слиянии**
-   (как приходят два независимых фида), а не файл за файлом;
+2. читает все CSV мапперами `soc_csv.py` и подаёт события **в хронологическом слиянии**
+   (как приходят независимые фиды), а не файл за файлом;
 3. снимает метрики через тот же HTTP API, которым пользуется АРМ (`TestClient`);
 4. сверяет фактическую группировку по кейсам с `ground_truth.json`
    (pairwise precision/recall) и считает покрытие правил корреляции по источникам;
@@ -50,25 +50,25 @@ def prepare_environment(*, config: Path, db_path: Path) -> None:
     os.environ.setdefault("TAKT_LOG_LEVEL", "WARNING")
 
 
-def _merged_stream(dataset: Path, pair: tuple[str, str], trust_by_source: dict[str, float]) -> Iterator[object]:
-    """Слияние двух источников по observed_at (ленивое, без материализации набора)."""
+def _merged_stream(dataset: Path, sources: tuple[str, ...], trust_by_source: dict[str, float]) -> Iterator[object]:
+    """Слияние всех источников по observed_at (ленивое, без материализации набора)."""
     from takt.infrastructure.importers.soc_csv import CsvEventSourceReader, map_edr, map_ndr, map_ot, map_siem
 
     mappers = {"edr": map_edr, "siem": map_siem, "ndr": map_ndr, "ot": map_ot}
     streams = [
         CsvEventSourceReader(dataset / f"{source}.csv", mappers[source],
                              ingest_trust=float(trust_by_source.get(source, 1.0)))
-        for source in pair
+        for source in sources
     ]
     return heapq.merge(*streams, key=lambda event: event.observed_at)
 
 
-def load_sources(app, dataset: Path, pair: tuple[str, str]) -> dict[str, object]:
+def load_sources(app, dataset: Path, sources: tuple[str, ...]) -> dict[str, object]:
     trust_by_source = dict(getattr(app.state, "trust_by_source", None) or {})
     processed: Counter[str] = Counter()
     failed: list[dict[str, str]] = []
     started = time.perf_counter()
-    for event in _merged_stream(dataset, pair, trust_by_source):
+    for event in _merged_stream(dataset, sources, trust_by_source):
         try:
             app.state.ingest_facade.assess_normalized_event(event, trust_by_source=trust_by_source)
             processed[event.source.value] += 1
@@ -83,7 +83,7 @@ def load_sources(app, dataset: Path, pair: tuple[str, str]) -> dict[str, object]
         "failed_sample": failed[:10],
         "elapsed_sec": round(elapsed, 3),
         "events_per_sec": round(total / elapsed, 1),
-        "ingest_trust_by_source": {source: trust_by_source.get(source) for source in pair},
+        "ingest_trust_by_source": {source: trust_by_source.get(source) for source in sources},
     }
 
 
@@ -109,8 +109,8 @@ def _all_events(client) -> list[dict]:
         offset += 1000
 
 
-def rule_coverage(events: list[dict], config_path: Path) -> dict[str, object]:
-    """Сколько событий каждого источника вообще получают отпечаток по каждому правилу."""
+def correlation_rules(config_path: Path) -> tuple[str, tuple]:
+    """Режим и разобранные правила корреляции из конфига стенда."""
     import yaml
 
     from takt.domain.engines.alert_fatigue import correlation_rules_from_config
@@ -118,20 +118,30 @@ def rule_coverage(events: list[dict], config_path: Path) -> dict[str, object]:
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     correlation = raw.get("correlation") if isinstance(raw, dict) else None
     mode = str((correlation or {}).get("mode", "legacy")).strip().lower()
-    rules = correlation_rules_from_config(correlation or {})
+    return mode, correlation_rules_from_config(correlation or {})
 
+
+def _rule_values(event: dict, rule) -> tuple[str, ...] | None:
+    """Значения полей правила для события; None — правило к событию неприменимо."""
+    entities = event.get("entities") or {}
+    artifacts = {item["type"]: item["value"] for item in event.get("artifacts") or []}
+    values = []
+    for field in rule.fields:
+        value = artifacts.get(field.split(":", 1)[1]) if field.startswith("artifact:") else entities.get(field)
+        if not value:
+            return None
+        values.append(str(value).strip().lower())
+    return tuple(values)
+
+
+def rule_coverage(events: list[dict], mode: str, rules: tuple) -> dict[str, object]:
+    """Сколько событий каждого источника вообще получают отпечаток по каждому правилу."""
     by_source: Counter[str] = Counter(event["source"] for event in events)
     coverage: list[dict[str, object]] = []
     for rule in rules:
         hits: Counter[str] = Counter()
         for event in events:
-            entities = event.get("entities") or {}
-            artifacts = {item["type"]: item["value"] for item in event.get("artifacts") or []}
-            values = [
-                artifacts.get(field.split(":", 1)[1]) if field.startswith("artifact:") else entities.get(field)
-                for field in rule.fields
-            ]
-            if all(value for value in values):
+            if _rule_values(event, rule) is not None:
                 hits[event["source"]] += 1
         coverage.append({
             "rule": rule.name,
@@ -143,26 +153,42 @@ def rule_coverage(events: list[dict], config_path: Path) -> dict[str, object]:
     return {"mode": mode, "generalized_enabled": mode != "legacy", "rules": coverage}
 
 
-def _split_reason(members: list[str], events_by_id: dict[str, dict], bucket_sec: int = 600) -> str:
-    """Почему события одного инцидента разъехались по разным кейсам."""
-    hosts, buckets = set(), set()
-    for event_id in members:
-        event = events_by_id.get(event_id)
-        if event is None:
+def _split_reason(members: list[str], events_by_id: dict[str, dict], rules: tuple) -> str:
+    """
+    Почему события одного инцидента разъехались по разным кейсам.
+
+    Диагноз строится по фактическим правилам конфига, а не по зашитым допущениям:
+    для каждого правила видно, применимо ли оно ко всем событиям цепочки, совпадают ли
+    значения полей и попали ли события в одно временно́е окно.
+    """
+    events = [events_by_id[event_id] for event_id in members if event_id in events_by_id]
+    if not events:
+        return "события инцидента не найдены в хранилище"
+    reasons: list[str] = []
+    for rule in rules:
+        applicable = [event for event in events if _rule_values(event, rule) is not None]
+        if len(applicable) < 2:
+            skipped = len(events) - len(applicable)
+            reasons.append(f"`{rule.name}`: неприменимо, полей нет у {skipped} из {len(events)} событий")
             continue
-        hosts.add(((event.get("entities") or {}).get("host_id")) or "—")
-        moment = datetime.fromisoformat(event["observed_at"])
-        buckets.add(int(moment.timestamp()) // bucket_sec)
-    reasons = []
-    if len(hosts) > 1:
-        reasons.append(f"разные host_id ({', '.join(sorted(hosts))}) — правило host_window не связывает")
-    if len(buckets) > 1:
-        reasons.append(f"события попали в разные окна bucket_sec={bucket_sec} (границу окна пересекает цепочка)")
+        distinct = {_rule_values(event, rule) for event in applicable}
+        if len(distinct) > 1:
+            shown = ", ".join("/".join(item) for item in sorted(distinct)[:3])
+            reasons.append(f"`{rule.name}`: различаются значения полей ({shown})")
+            continue
+        if rule.bucket_sec is None:
+            continue  # правило без окна связало бы события — расхождение объяснит другое правило
+        windows = {
+            int(datetime.fromisoformat(event["observed_at"]).timestamp()) // rule.bucket_sec
+            for event in applicable
+        }
+        if len(windows) > 1:
+            reasons.append(f"`{rule.name}`: цепочка пересекает границу окна bucket_sec={rule.bucket_sec}")
     return "; ".join(reasons) or "нет общего значения ни по одному правилу корреляции"
 
 
 def correlation_metrics(cases: list[dict], client, ground_truth: dict,
-                        events_by_id: dict[str, dict]) -> dict[str, object]:
+                        events_by_id: dict[str, dict], rules: tuple) -> dict[str, object]:
     from takt.domain.engines.correlation_quality import pairwise_correlation_metrics
 
     expected: dict[str, str] = dict(ground_truth.get("events") or {})
@@ -205,7 +231,7 @@ def correlation_metrics(cases: list[dict], client, ground_truth: dict,
             "incident_id": incident_id, "pivot_host": incident.get("pivot_host"),
             "events": len(members), "case_groups": len(groups), "sources": recovered_sources,
             "fully_merged": len(groups) == 1,
-            "split_reason": "" if len(groups) == 1 else _split_reason(members, events_by_id),
+            "split_reason": "" if len(groups) == 1 else _split_reason(members, events_by_id, rules),
         })
 
     return {
@@ -218,13 +244,20 @@ def correlation_metrics(cases: list[dict], client, ground_truth: dict,
         },
         "cross_source_cases": sorted(cross_source_cases, key=lambda item: item["case_id"]),
         "cross_source_case_count": len(cross_source_cases),
+        # Сколько кейсов собрало 2, 3, 4 источника — при четырёх классах одного
+        # счётчика «больше одного» мало, чтобы увидеть глубину связывания.
+        "cases_by_source_count": dict(sorted(Counter(
+            len(item["sources"]) for item in cross_source_cases
+        ).items())),
+        "max_sources_in_case": max((len(item["sources"]) for item in cross_source_cases), default=0),
         "incident_recovery": incident_recovery,
         "incidents_fully_merged": sum(1 for item in incident_recovery if item["fully_merged"]),
     }
 
 
-def collect_report(client, *, dataset: Path, pair: tuple[str, str], ingest: dict,
+def collect_report(client, *, dataset: Path, sources: tuple[str, ...], ingest: dict,
                    ground_truth: dict, config_path: Path) -> dict[str, object]:
+    mode, rules = correlation_rules(config_path)
     health = client.get("/health").json()
     stats = client.get("/cases/stats").json()
     data_quality = client.get("/data-quality").json()
@@ -249,7 +282,7 @@ def collect_report(client, *, dataset: Path, pair: tuple[str, str], ingest: dict
     return {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "stand": {
-            "pair": list(pair),
+            "sources": list(sources),
             "dataset": str(dataset.relative_to(ROOT)) if dataset.is_relative_to(ROOT) else str(dataset),
             "config": str(config_path.relative_to(ROOT)) if config_path.is_relative_to(ROOT) else str(config_path),
             "build_revision": health.get("build_revision"),
@@ -269,8 +302,8 @@ def collect_report(client, *, dataset: Path, pair: tuple[str, str], ingest: dict
         "invariant_hits_top": dict(invariants.most_common(15)),
         "data_quality": data_quality,
         "correlation": correlation_metrics(cases, client, ground_truth,
-                                           {event["event_id"]: event for event in events}),
-        "rule_coverage": rule_coverage(events, config_path),
+                                           {event["event_id"]: event for event in events}, rules),
+        "rule_coverage": rule_coverage(events, mode, rules),
         "attack_chain_sample": attack_chain,
     }
 
@@ -284,11 +317,11 @@ def render_markdown(report: dict) -> str:
     pairwise = correlation["pairwise"]
 
     lines = [
-        "# Отчёт стенда «два источника»",
+        "# Отчёт стенда SOC",
         "",
         f"Сгенерировано `scripts/stand_run.py` {report['generated_at']}.",
         "",
-        f"- пара источников: **{' + '.join(stand['pair'])}**",
+        f"- источники ({len(stand['sources'])}): **{' + '.join(stand['sources'])}**",
         f"- датасет: `{stand['dataset']}`",
         f"- конфиг: `{stand['config']}`",
         f"- режим корреляции: **{coverage['mode']}** "
@@ -323,7 +356,9 @@ def render_markdown(report: dict) -> str:
         f"| pairwise precision | {pairwise['precision']} |",
         f"| pairwise recall | {pairwise['recall']} |",
         f"| TP / FP / FN | {pairwise['true_positive']} / {pairwise['false_positive']} / {pairwise['false_negative']} |",
-        f"| Кейсов с двумя источниками | {correlation['cross_source_case_count']} |",
+        f"| Кейсов более чем с одним источником | {correlation['cross_source_case_count']} |",
+        f"| Кейсов по числу источников | {correlation['cases_by_source_count']} |",
+        f"| Максимум источников в одном кейсе | {correlation['max_sources_in_case']} из {len(stand['sources'])} |",
         f"| Инцидентов собрано в один кейс | {correlation['incidents_fully_merged']} из {len(correlation['incident_recovery'])} |",
         "",
         "Фон в ground truth размечен как отдельная группа на каждое событие: связывание двух",
@@ -378,11 +413,11 @@ def run(*, dataset: Path, db_path: Path, report_dir: Path, config: Path, reset: 
         print(f"error: нет {ground_truth_path}; сначала запустите scripts/stand_dataset.py", file=sys.stderr)
         return 2
     ground_truth = json.loads(ground_truth_path.read_text(encoding="utf-8"))
-    pair = tuple(ground_truth.get("pair") or ())
-    if len(pair) != 2:
-        print("error: ground_truth.json без корректного поля pair", file=sys.stderr)
+    sources = tuple(ground_truth.get("sources") or ground_truth.get("pair") or ())
+    if len(sources) < 2:
+        print("error: ground_truth.json без корректного поля sources", file=sys.stderr)
         return 2
-    missing = [source for source in pair if not (dataset / f"{source}.csv").is_file()]
+    missing = [source for source in sources if not (dataset / f"{source}.csv").is_file()]
     if missing:
         print(f"error: в датасете нет CSV для: {', '.join(missing)}", file=sys.stderr)
         return 2
@@ -404,14 +439,14 @@ def run(*, dataset: Path, db_path: Path, report_dir: Path, config: Path, reset: 
     from takt.interface_adapters.api.main import create_app
 
     app = create_app()
-    ingest = load_sources(app, dataset, pair)  # type: ignore[arg-type]
+    ingest = load_sources(app, dataset, sources)
     for attr in ("recent_event_store", "repo", "baseline", "audit_engagement_store"):
         close = getattr(getattr(app.state, attr, None), "close", None)
         if callable(close):
             close()
 
     with TestClient(create_app()) as client:
-        report = collect_report(client, dataset=dataset, pair=pair, ingest=ingest,  # type: ignore[arg-type]
+        report = collect_report(client, dataset=dataset, sources=sources, ingest=ingest,
                                 ground_truth=ground_truth, config_path=config)
 
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -422,10 +457,11 @@ def run(*, dataset: Path, db_path: Path, report_dir: Path, config: Path, reset: 
 
     pairwise = report["correlation"]["pairwise"]
     print(
-        f"stand complete pair={','.join(pair)} events={ingest['processed_total']} "
+        f"stand complete sources={','.join(sources)} events={ingest['processed_total']} "
         f"failed={ingest['failed_total']} cases={report['store']['cases_total']} "
         f"precision={pairwise['precision']} recall={pairwise['recall']} "
-        f"cross_source_cases={report['correlation']['cross_source_case_count']}"
+        f"cross_source_cases={report['correlation']['cross_source_case_count']} "
+        f"max_sources_in_case={report['correlation']['max_sources_in_case']}"
     )
     print(f"report {report_dir / 'report.md'}")
     return 0 if ingest["failed_total"] == 0 else 1

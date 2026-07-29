@@ -48,9 +48,9 @@ services:
       TAKT_PROFILE: dev
       TAKT_AUTH_REQUIRED: "0"
       TAKT_LOG_LEVEL: WARNING
-      STAND_PAIR: ${STAND_PAIR:-edr,ot}
+      STAND_SOURCES: ${STAND_SOURCES:-edr,siem,ndr,ot}
       STAND_INCIDENTS: ${STAND_INCIDENTS:-6}
-      STAND_NOISE: ${STAND_NOISE:-300}
+      STAND_NOISE: ${STAND_NOISE:-400}
     volumes:
       - ../../deploy/stand:/app/deploy/stand:ro
       - ../../scripts:/app/scripts:ro
@@ -59,6 +59,6 @@ services:
       - /bin/sh
       - -c
       - >
-        python scripts/stand_dataset.py --pair "$${STAND_PAIR}"
+        python scripts/stand_dataset.py --sources "$${STAND_SOURCES}"
         --incidents "$${STAND_INCIDENTS}" --noise "$${STAND_NOISE}" &&
         python scripts/stand_run.py --reset

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-Генератор датасета стенда «два источника» с размеченной истиной (ground truth).
+Генератор датасета стенда SOC с размеченной истиной (ground truth).
 
-Формирует по одному CSV на каждый класс источника в формате
-`docs/pt_techlab/data_contract.md` и файл `ground_truth.json`
+Формирует по одному CSV на каждый выбранный класс источника (`edr`, `siem`, `ndr`, `ot`
+из ADR-001) в формате `docs/pt_techlab/data_contract.md` и файл `ground_truth.json`
 (event_id → incident_id), по которому `scripts/stand_run.py` считает
 pairwise precision/recall корреляции.
 
 Модель стенда:
 
-* фон (`BACKGROUND-*`) — независимые события каждого источника: рабочие станции,
+* фон (`BACKGROUND`) — независимые события каждого источника: рабочие станции,
   штатный опрос PLC, разрешённый DNS, успешные правила SIEM;
-* инцидент (`INC-<n>`) — цепочка, наблюдаемая обоими источниками на **общем узле-пивоте**
-  (инженерная станция / АРМ), укладывающаяся в окно правила `host_window` (600 с).
+* инцидент (`INC-<n>`) — цепочка, наблюдаемая **всеми** выбранными источниками
+  на общем узле-пивоте (инженерная станция / АРМ), укладывающаяся в окно
+  правила `host_window` (600 с).
 
 Связок между IT и OT две: общий `host_id` узла-пивота (правило `host_window`) и пара
 «оператор + адрес назначения» (правило `user_destination`) — OT-строки несут колонку
@@ -20,7 +21,7 @@ pairwise precision/recall корреляции.
 отчёта; стенд показывает разрывы, а не маскирует их.
 
 Usage:
-    python scripts/stand_dataset.py --pair edr,ot --incidents 6 --noise 300 --seed 7
+    python scripts/stand_dataset.py --sources edr,siem,ndr,ot --incidents 6 --noise 400 --seed 7
 """
 
 from __future__ import annotations
@@ -167,6 +168,12 @@ def _incident_rows(source: str, rng: random.Random, number: int, start: datetime
                 device_host=pivot, subject_user=user, src_ip=pivot_ip, dst_ip=plc_ip,
                 rule_name="OT_PROTOCOL_FROM_WORKSTATION", indicator_type="address", indicator=plc_ip,
                 incident_id=incident),
+            # Алерт с индикатором-хешем: без него правило file_hash в конфиге не может
+            # быть проверено ни одним источником, кроме EDR, и стенд его не покрывает.
+            Row("siem", event_time=_ts(start + timedelta(seconds=170)), record_id=f"siem-{incident}-3",
+                device_host=pivot, subject_user=user, src_ip=pivot_ip, dst_ip="203.0.113.10",
+                rule_name="MALWARE_HASH_MATCH", indicator_type="hash", indicator=malware_hash,
+                incident_id=incident),
         ]
     if source == "ndr":
         return [
@@ -189,14 +196,14 @@ def _incident_rows(source: str, rng: random.Random, number: int, start: datetime
     ]
 
 
-def build_dataset(*, pair: tuple[str, str], incidents: int, noise: int, seed: int,
+def build_dataset(*, sources: tuple[str, ...], incidents: int, noise: int, seed: int,
                   minutes: int) -> tuple[dict[str, list[Row]], dict[str, object]]:
     rng = random.Random(seed)
-    rows: dict[str, list[Row]] = {source: [] for source in pair}
+    rows: dict[str, list[Row]] = {source: [] for source in sources}
 
     span = timedelta(minutes=minutes)
     for index in range(noise):
-        source = pair[index % len(pair)]
+        source = sources[index % len(sources)]
         moment = BASE_TIME + timedelta(seconds=rng.randrange(int(span.total_seconds())))
         rows[source].append(NOISE[source](rng, index, moment))
 
@@ -209,7 +216,7 @@ def build_dataset(*, pair: tuple[str, str], incidents: int, noise: int, seed: in
         domain = C2_DOMAINS[number % len(C2_DOMAINS)]
         malware_hash = _sha256(f"dropper-{seed}-{number}")
         produced: list[str] = []
-        for source in pair:
+        for source in sources:
             chain = _incident_rows(source, rng, number, start, pivot, plc, user, domain, malware_hash)
             rows[source].extend(chain)
             produced.extend(row.event_id for row in chain)
@@ -218,24 +225,24 @@ def build_dataset(*, pair: tuple[str, str], incidents: int, noise: int, seed: in
             "c2_domain": domain, "started_at": _ts(start), "event_ids": produced,
         })
 
-    for source in pair:
+    for source in sources:
         rows[source].sort(key=lambda row: row[HEADERS[row.source][0]])
 
     ground_truth = {
-        "pair": list(pair),
+        "sources": list(sources),
         "seed": seed,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "counts": {source: len(rows[source]) for source in pair},
+        "counts": {source: len(rows[source]) for source in sources},
         "incidents": incident_specs,
         # Фон в CSV помечен одним литералом BACKGROUND ради читаемости, но для
         # pairwise-метрик каждое фоновое событие — отдельная группа: связывать их
         # между собой корреляция не обязана и не должна.
         "events": {
             row.event_id: (row.incident_id if row.incident_id.startswith("INC-") else f"BACKGROUND:{row.event_id}")
-            for source in pair
+            for source in sources
             for row in rows[source]
         },
-        "source_by_event": {row.event_id: source for source in pair for row in rows[source]},
+        "source_by_event": {row.event_id: source for source in sources for row in rows[source]},
     }
     return rows, ground_truth
 
@@ -253,24 +260,26 @@ def write_dataset(out_dir: Path, rows: dict[str, list[Row]], ground_truth: dict[
     )
 
 
-def parse_pair(raw: str) -> tuple[str, str]:
+def parse_sources(raw: str) -> tuple[str, ...]:
+    """Список классов источников: от двух (минимум для корреляции) до всех четырёх."""
     parts = tuple(item.strip().lower() for item in raw.split(",") if item.strip())
-    if len(parts) != 2:
-        raise argparse.ArgumentTypeError("--pair ожидает ровно два источника, например edr,ot")
+    if len(parts) < 2:
+        raise argparse.ArgumentTypeError("нужно минимум два источника, например edr,ot")
     unknown = [item for item in parts if item not in SOURCES]
     if unknown:
         raise argparse.ArgumentTypeError(f"неизвестные источники: {', '.join(unknown)}; допустимы {', '.join(SOURCES)}")
-    if parts[0] == parts[1]:
-        raise argparse.ArgumentTypeError("источники в паре должны различаться")
-    return parts  # type: ignore[return-value]
+    if len(set(parts)) != len(parts):
+        raise argparse.ArgumentTypeError("источники не должны повторяться")
+    # порядок канонизируем по SOURCES, чтобы датасет не зависел от порядка в аргументе
+    return tuple(source for source in SOURCES if source in parts)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Датасет стенда двух источников с ground truth")
-    parser.add_argument("--pair", type=parse_pair, default=("edr", "ot"),
-                        help="пара классов источников, по умолчанию edr,ot")
+    parser.add_argument("--sources", type=parse_sources, default=SOURCES,
+                        help="классы источников через запятую (минимум два), по умолчанию все четыре")
     parser.add_argument("--incidents", type=int, default=6, help="число размеченных цепочек")
-    parser.add_argument("--noise", type=int, default=300, help="число фоновых событий (делится между источниками)")
+    parser.add_argument("--noise", type=int, default=400, help="число фоновых событий (делится между источниками)")
     parser.add_argument("--minutes", type=int, default=180, help="длительность окна наблюдения")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--out", type=Path, default=ROOT / "data" / "stand" / "dataset")
@@ -282,11 +291,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     if args.incidents < 0 or args.noise < 0:
         print("error: --incidents и --noise не могут быть отрицательными")
         return 2
-    rows, ground_truth = build_dataset(pair=args.pair, incidents=args.incidents, noise=args.noise,
+    rows, ground_truth = build_dataset(sources=args.sources, incidents=args.incidents, noise=args.noise,
                                        seed=args.seed, minutes=args.minutes)
     write_dataset(args.out, rows, ground_truth)
     counts = ", ".join(f"{source}={len(items)}" for source, items in rows.items())
-    print(f"dataset out={args.out} pair={','.join(args.pair)} incidents={args.incidents} {counts}")
+    print(f"dataset out={args.out} sources={','.join(args.sources)} incidents={args.incidents} {counts}")
     return 0
 
 

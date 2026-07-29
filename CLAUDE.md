@@ -29,17 +29,18 @@ uvicorn takt.interface_adapters.api.main:app --host 127.0.0.1 --port 8090
 `bucket_sec` в правилах корреляции режет по абсолютной сетке времени. Перекрытие соседних окон
 пробовали — оно делает связывание транзитивным и рушит precision, замеры в `deploy/stand/README.md`.
 
-## Стенд двух источников
+## Стенд SOC
 
-Отладочный стенд «два источника → один кейс»: `deploy/stand/README.md`.
+Отладочный стенд «несколько источников → один кейс»: `deploy/stand/README.md`.
+По умолчанию все четыре класса ADR-001; `--sources` принимает от двух до четырёх.
 
 ```bash
-python scripts/stand_dataset.py --pair edr,ot --incidents 6 --noise 300
+python scripts/stand_dataset.py --sources edr,siem,ndr,ot --incidents 6 --noise 400
 python scripts/stand_run.py --reset
 ```
 
 Отчёт: `data/stand/report/report.md` + `report.json`. Живой API на данных стенда:
-`docker compose -f deploy/stand/docker-compose.stand.yml up`.
+`docker compose -f deploy/stand/docker-compose.stand.yml up`. Регрессия — `tests/test_stand_sources.py`.
 
 ## Инфраструктура
 
