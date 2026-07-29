@@ -47,6 +47,11 @@ def test_domain_source_has_no_crypto_or_infrastructure_imports():
         "os",
         "socket",
         "subprocess",
+        # hashlib — криптографический импорт. Допустим ТОЛЬКО в infrastructure
+        # через HasherPort (вариант А): в domain запрещён, чтобы слой оставался
+        # чистым и «в продукте не было собственной криптографии». Регрессия
+        # (возврат `import hashlib` в domain) должна ловиться этим гардом.
+        "hashlib",
         "hmac",
         "Crypto",
         "cryptography",
