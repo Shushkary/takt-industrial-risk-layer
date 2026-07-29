@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from takt.domain.ports.hasher import HasherPort
 from takt.domain.ports.system_ports import IdProviderPort, SystemClockPort
 
 
@@ -22,5 +24,15 @@ class _UuidShortCaseIds(IdProviderPort):
         return str(uuid4())[:8]
 
 
+class _Sha256Hasher(HasherPort):
+    """SHA-256 из hashlib. Домен остаётся чистым: hashlib живёт в L2, а не в L1."""
+
+    __slots__ = ()
+
+    def hash_bytes(self, data: bytes) -> str:
+        return hashlib.sha256(data).hexdigest()
+
+
 default_clock: SystemClockPort = _UtcClock()
 default_id_provider: IdProviderPort = _UuidShortCaseIds()
+default_hasher: HasherPort = _Sha256Hasher()

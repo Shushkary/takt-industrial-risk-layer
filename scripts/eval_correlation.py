@@ -8,9 +8,9 @@ from pathlib import Path
 from takt.domain.engines.alert_fatigue import correlation_fingerprints, correlation_rules_from_config
 from takt.domain.engines.correlation_quality import connected_groups, pairwise_correlation_metrics
 from takt.domain.entities.event import ArtifactType, EventArtifact, EventEntities, EventSource, NormalizedEvent
-from takt.infrastructure.security.sha256_hasher import Sha256HasherAdapter
+from takt.application.system_defaults import default_hasher
 
-_hasher = Sha256HasherAdapter()
+_hasher = default_hasher
 
 DEFAULT_RULES = correlation_rules_from_config({"keys": [
     {"name": "host", "fields": ["host_id"], "bucket_sec": 600, "priority": 10},

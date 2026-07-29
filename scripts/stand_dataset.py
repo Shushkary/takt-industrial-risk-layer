@@ -14,10 +14,10 @@ pairwise precision/recall корреляции.
 * инцидент (`INC-<n>`) — цепочка, наблюдаемая обоими источниками на **общем узле-пивоте**
   (инженерная станция / АРМ), укладывающаяся в окно правила `host_window` (600 с).
 
-Пивот — единственный признак, по которому текущие мапперы (`soc_csv.py`) и правила
-корреляции способны связать IT- и OT-событие: `map_ot` не заполняет `user_id`, поэтому
-правило `user_destination` для OT никогда не срабатывает. Стенд намеренно это показывает
-(см. `rule_coverage` в отчёте), а не маскирует.
+Связок между IT и OT две: общий `host_id` узла-пивота (правило `host_window`) и пара
+«оператор + адрес назначения» (правило `user_destination`) — OT-строки несут колонку
+`operator_id` из контракта. Что из этого реально сработало, видно в `rule_coverage`
+отчёта; стенд показывает разрывы, а не маскирует их.
 
 Usage:
     python scripts/stand_dataset.py --pair edr,ot --incidents 6 --noise 300 --seed 7
@@ -45,8 +45,8 @@ HEADERS: dict[str, tuple[str, ...]] = {
              "rule_name", "indicator_type", "indicator", "incident_id"),
     "ndr": ("start_time", "flow_id", "src_host", "src_ip", "dst_ip", "app_protocol", "verdict",
             "dns_query", "bytes", "incident_id"),
-    "ot": ("timestamp", "event_id", "asset_id", "src_address", "dst_address", "protocol",
-           "operation", "tag", "payload_size", "incident_id"),
+    "ot": ("timestamp", "event_id", "asset_id", "operator_id", "src_address", "dst_address",
+           "protocol", "operation", "tag", "payload_size", "incident_id"),
 }
 
 # Узлы-пивоты: наблюдаются и IT-, и OT-источником (АРМ инженера, HMI шкафа).
@@ -125,6 +125,7 @@ def _noise_ot(rng: random.Random, index: int, moment: datetime) -> Row:
     asset = rng.choice(PLC_HOSTS)
     return Row("ot",
                timestamp=_ts(moment), event_id=f"ot-bg-{index:05d}", asset_id=asset,
+               operator_id=rng.choice(USERS),
                src_address=f"10.10.2.{rng.randrange(2, 40)}", dst_address=f"10.10.2.{rng.randrange(40, 90)}",
                protocol="IEC104", operation="POLL", tag=rng.choice(OT_TAGS),
                payload_size=rng.randrange(32, 96), incident_id="BACKGROUND")
@@ -180,10 +181,10 @@ def _incident_rows(source: str, rng: random.Random, number: int, start: datetime
     # и на самом PLC; вторая строка корреляционно «сирота» — это ожидаемый разрыв.
     return [
         Row("ot", timestamp=_ts(start + timedelta(seconds=210)), event_id=f"ot-{incident}-1",
-            asset_id=pivot, src_address=pivot_ip, dst_address=plc_ip, protocol="IEC104",
+            asset_id=pivot, operator_id=user, src_address=pivot_ip, dst_address=plc_ip, protocol="IEC104",
             operation="WRITE_SETPOINT", tag=rng.choice(OT_TAGS), payload_size=64, incident_id=incident),
         Row("ot", timestamp=_ts(start + timedelta(seconds=240)), event_id=f"ot-{incident}-2",
-            asset_id=plc, src_address=pivot_ip, dst_address=plc_ip, protocol="IEC104",
+            asset_id=plc, operator_id=user, src_address=pivot_ip, dst_address=plc_ip, protocol="IEC104",
             operation="ADMIN_LOGIN", tag=rng.choice(OT_TAGS), payload_size=128, incident_id=incident),
     ]
 

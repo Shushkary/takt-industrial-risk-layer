@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from takt.application.system_defaults import default_hasher
 from takt.domain.engines.alert_fatigue import correlation_fingerprints, correlation_rules_from_config
-from takt.infrastructure.security.sha256_hasher import Sha256HasherAdapter
-
-_hasher = Sha256HasherAdapter()
 from takt.domain.entities.event import (
     ArtifactType,
     EventArtifact,
@@ -13,6 +11,8 @@ from takt.domain.entities.event import (
     EventSource,
     NormalizedEvent,
 )
+
+_hasher = default_hasher
 
 
 def _event(*, source: EventSource, host: str, hash_value: str, minute: int = 1) -> NormalizedEvent:

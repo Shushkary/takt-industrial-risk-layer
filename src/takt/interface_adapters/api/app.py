@@ -220,6 +220,27 @@ _TAKT_LOG_LEVEL_MAP: dict[str, int] = {
 _TAKT_BUILD_REVISION_MAX_LEN = 256
 
 
+def _warn_if_correlation_rules_are_inert(weights: object) -> None:
+    """
+    При `correlation.mode: legacy` обобщённый коррелятор выключен целиком
+    (`AssessRisk._correlation_candidates` возвращает пустой список), и настроенные
+    правила не работают. Раньше это происходило молча — теперь видно в логе старта.
+    """
+    raw = weights.get("correlation") if isinstance(weights, dict) else None
+    if not isinstance(raw, dict):
+        return
+    mode = str(raw.get("mode", "legacy")).strip().lower()
+    keys = raw.get("keys")
+    rule_count = len(keys) if isinstance(keys, list) else 0
+    if mode == "legacy" and rule_count:
+        _LOGGER.warning(
+            "correlation.mode=legacy: обобщённый коррелятор отключён, "
+            "настроенные правила (%d) не применяются; для кросс-источниковой корреляции "
+            "задайте correlation.mode=generalized",
+            rule_count,
+        )
+
+
 def build_revision_from_env() -> str | None:
     """РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РјРµС‚РєР° СЃР±РѕСЂРєРё РёР· **`TAKT_BUILD_REVISION`** РґР»СЏ **`GET /health`**: **`build_revision`** (РґРѕ **256** СЃРёРјРІРѕР»РѕРІ); РїСѓСЃС‚Р°СЏ вЂ” **`None`**."""
     raw = os.environ.get("TAKT_BUILD_REVISION", "").strip()
@@ -377,6 +398,7 @@ def create_app() -> FastAPI:
     app.state.invariant_catalog = inv_catalog
     inv_rule_overrides = catalog_rule_overrides(inv_catalog)
     inv_profile = invariant_context_from_config(weights)
+    _warn_if_correlation_rules_are_inert(weights)
     assess = AssessRiskUseCase(
         weights,
         jump_host=jump_host,

@@ -104,11 +104,12 @@ def test_stand_run_produces_report_with_cross_source_case(work_dir: Path) -> Non
     assert report["rule_coverage"]["generalized_enabled"] is True
     assert report["correlation"]["cross_source_case_count"] >= 1
 
-    # известный разрыв контракта: OT не даёт ни user_id, ни артефакт hash
+    # map_ot переносит operator_id в user_id, поэтому OT участвует в user_destination;
+    # артефакта hash у OT нет и не должно быть — file_hash для него слеп by design
     blind = {rule["rule"]: rule["blind_sources"] for rule in report["rule_coverage"]["rules"]}
-    assert blind["user_destination"] == ["ot"]
-    assert blind["file_hash"] == ["ot"]
     assert blind["host_window"] == []
+    assert blind["user_destination"] == []
+    assert blind["file_hash"] == ["ot"]
 
     # несобранные цепочки обязаны нести объяснение, иначе отчёт бесполезен для отладки
     for item in report["correlation"]["incident_recovery"]:

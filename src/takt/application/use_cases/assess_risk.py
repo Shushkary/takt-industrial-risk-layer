@@ -5,13 +5,12 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
-from takt.application.system_defaults import default_clock, default_id_provider
+from takt.application.system_defaults import default_clock, default_hasher, default_id_provider
 from takt.domain.engines.alert_fatigue import (
     compute_burst_fingerprint,
     correlation_fingerprints,
     correlation_rules_from_config,
 )
-from takt.infrastructure.security.sha256_hasher import Sha256HasherAdapter
 from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.engines.chaos_predictor import predict_polling_chaos
 from takt.domain.engines.context_matcher import match_event_to_ticket
@@ -38,6 +37,7 @@ from takt.domain.invariants.evaluator import (
 )
 from takt.domain.invariants.rule_spec import InvariantRuleSpec, default_extended_rule_specs, max_rule_context_window
 from takt.domain.ports.baseline import ExpectedBehaviorPort
+from takt.domain.ports.hasher import HasherPort
 from takt.domain.ports.system_ports import IdProviderPort, SystemClockPort
 
 
@@ -67,7 +67,7 @@ class AssessRiskUseCase:
         rule_overrides: InvariantRuleOverrides | None = None,
         experimental_invariant_ids: frozenset[str] = frozenset(),
         rule_specs: tuple[InvariantRuleSpec, ...] | None = None,
-        hasher: Sha256HasherAdapter | None = None,
+        hasher: HasherPort | None = None,
     ) -> None:
         self._w = weights
         self._jump = jump_host
@@ -79,7 +79,7 @@ class AssessRiskUseCase:
         self._rule_overrides = rule_overrides
         self._experimental_ids = frozenset(experimental_invariant_ids)
         self._rule_specs = rule_specs
-        self._hasher = Sha256HasherAdapter() if hasher is None else hasher
+        self._hasher = default_hasher if hasher is None else hasher
 
     @property
     def recent_context_event_count(self) -> int:
