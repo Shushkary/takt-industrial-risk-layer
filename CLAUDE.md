@@ -42,6 +42,10 @@ python scripts/stand_run.py --reset
 Отчёт: `data/stand/report/report.md` + `report.json`. Живой API на данных стенда:
 `docker compose -f deploy/stand/docker-compose.stand.yml up`. Регрессия — `tests/test_stand_sources.py`.
 
+Полная симуляция расследования по ТЗ Positive Technologies 2026 (чек-лист MVP п. 14, трудоёмкость
+против модельной базовой линии, роли п. 5.13): `python scripts/stand_scenario.py` →
+`data/stand/report/scenario.md`. Требует все четыре класса источников, стартует с чистой БД.
+
 ## Инфраструктура
 
 Доступ к ВМ SpaceWeb (панель, SSH, диагностика): `docs/ops/vm_spaceweb_access.md`.

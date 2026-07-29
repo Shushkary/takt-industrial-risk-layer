@@ -176,3 +176,70 @@ def test_stand_run_on_production_config_has_no_cross_source_correlation(work_dir
     assert report["rule_coverage"]["generalized_enabled"] is False
     assert report["correlation"]["cross_source_case_count"] == 0
     assert report["correlation"]["max_sources_in_case"] == 0
+
+
+def test_scenario_requires_four_source_classes(work_dir: Path) -> None:
+    """ТЗ п. 12.1 требует не менее четырёх классов; на двух симуляция обязана отказать."""
+    dataset_script = _load("stand_dataset.py")
+    scenario = _load("stand_scenario.py")
+    dataset_dir = work_dir / "dataset"
+
+    _generate(dataset_script, dataset_dir, "edr,ot", incidents=2, noise=10, seed=9)
+    rc = scenario.run(dataset=dataset_dir, db_path=work_dir / "takt.db",
+                      report_dir=work_dir / "report", config=STAND_CONFIG)
+    assert rc == 2
+
+
+def test_scenario_covers_mvp_requirements_of_the_specification(work_dir: Path) -> None:
+    """Сквозная симуляция расследования: все пункты минимального результата MVP (п. 14 ТЗ)."""
+    dataset_script = _load("stand_dataset.py")
+    scenario = _load("stand_scenario.py")
+    dataset_dir = work_dir / "dataset"
+    report_dir = work_dir / "report"
+
+    _generate(dataset_script, dataset_dir, "edr,siem,ndr,ot", incidents=3, noise=24, seed=5)
+    rc = scenario.run(dataset=dataset_dir, db_path=work_dir / "takt.db",
+                      report_dir=report_dir, config=STAND_CONFIG)
+    assert rc == 0, (report_dir / "scenario.md").read_text(encoding="utf-8")
+
+    assert (report_dir / "scenario.md").is_file()
+    report = json.loads((report_dir / "scenario.json").read_text(encoding="utf-8"))
+
+    failed = [item["requirement"] for item in report["mvp_checklist"] if not item["ok"]]
+    assert failed == []
+
+    steps = {str(item["step"]): item for item in report["scenario"]["steps"]}
+    assert len(steps) >= 12
+    assert all(bool(item["ok"]) for item in steps.values())
+
+    # единое окно действительно сводит все четыре класса
+    window = next(item for name, item in steps.items() if name.startswith("Единое окно"))
+    assert set(window["evidence"]["sources_in_case"]) == {"edr", "siem", "ndr", "ot"}
+    assert window["evidence"]["timeline_entries"] > 0
+    assert window["evidence"]["graph_nodes"] > 0
+
+    # human-in-the-loop: до действий аналитика система не решает за него
+    decision = next(item for name, item in steps.items() if name.startswith("Решение принимает аналитик"))
+    assert decision["evidence"]["cases_decided_by_system_before_analyst"] == 0
+    assert decision["evidence"]["status_after"] == "CONFIRMED"
+
+    # ручная корректировка связи выполнена по-настоящему, а не пропущена
+    manual = next(item for name, item in steps.items() if name.startswith("Ручная корректировка"))
+    assert manual["evidence"]["mode"] in {"attach_orphan", "detach_attach_roundtrip"}
+    assert manual["takt_actions"] >= 1
+
+    assert report["rbac"]["ok"] is True
+    assert report["scenario"]["totals"]["target_met"] is True
+
+
+def test_scenario_is_repeatable_from_clean_database(work_dir: Path) -> None:
+    """Повторный прогон не должен ломаться о решения и находки предыдущего."""
+    dataset_script = _load("stand_dataset.py")
+    scenario = _load("stand_scenario.py")
+    dataset_dir = work_dir / "dataset"
+    report_dir = work_dir / "report"
+
+    _generate(dataset_script, dataset_dir, "edr,siem,ndr,ot", incidents=2, noise=16, seed=21)
+    for _ in range(2):
+        assert scenario.run(dataset=dataset_dir, db_path=work_dir / "takt.db",
+                            report_dir=report_dir, config=STAND_CONFIG) == 0
