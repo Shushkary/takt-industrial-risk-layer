@@ -157,6 +157,7 @@ from takt.interface_adapters.api.routers.ingest import register_ingest_routes
 from takt.interface_adapters.api.routers.integrations import register_integration_routes
 from takt.interface_adapters.api.routers.system import register_system_routes
 from takt.interface_adapters.api.routers.workspace import register_workspace_routes
+from takt.interface_adapters.api.v1 import register_v1
 from takt.interface_adapters.api.schemas.case_actions import (
     CaseDecisionResponse,
     DecisionBody,
@@ -738,6 +739,10 @@ def create_app() -> FastAPI:
     register_ingest_routes(api_ctx)
 
     _register_prometheus_if_enabled(app)
+    # Итерация 1 «чистая архитектура»: изолированный surface ``/api/v1`` монтируется
+    # отдельным под-приложением (собственные обработчики ошибок RFC 9457 и роутеры),
+    # не затрагивая существующие маршруты и формат ошибок корневого приложения.
+    register_v1(app)
     _attach_custom_openapi(app)
     br = build_revision_from_env()
     py_tag = _python_runtime_tag()

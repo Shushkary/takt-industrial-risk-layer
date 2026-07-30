@@ -1,0 +1,39 @@
+# Контракты чистой архитектуры для слоя домена (import-linter), итерация 1.
+#
+# Запуск: `lint-imports` (без аргументов берётся этот файл).
+# CI использует секцию pyproject.toml явно: `lint-imports --config pyproject.toml`,
+# где заданы контракты для домена и приложения. Этот файл фиксирует главный
+# инвариант L1 — «чистоту» доменного слоя (в т.ч. нового пакета takt.domain.soc):
+# домен не зависит ни от прикладного слоя, ни от адаптеров/инфраструктуры,
+# ни от внешних фреймворков.
+
+[importlinter]
+root_package = takt
+include_external_packages = True
+
+[importlinter:contract:domain-independent]
+name = Domain is independent (L1)
+type = forbidden
+source_modules =
+    takt.domain
+forbidden_modules =
+    takt.application
+    takt.interface_adapters
+    takt.infrastructure
+    fastapi
+    uvicorn
+    sqlalchemy
+    pydantic_settings
+
+[importlinter:contract:soc-domain-pure]
+name = SOC domain layer stays pure (L1)
+type = forbidden
+source_modules =
+    takt.domain.soc
+forbidden_modules =
+    takt.application
+    takt.interface_adapters
+    takt.infrastructure
+    fastapi
+    pydantic
+    yaml
