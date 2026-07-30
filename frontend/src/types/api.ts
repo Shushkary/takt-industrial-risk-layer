@@ -10,6 +10,59 @@ export interface Case {
   risk_score: number;
   xai_summary: string;
   findings: Finding[];
+
+  // --- Антихрупкость: барбелл риск / импакт / доверие ---
+  base_risk_score?: number;   // риск до пересчёта весами модели
+  impact_score?: number;      // физический импакт на АСУ ТП (0..1)
+  confidence?: number;        // доверие к скору (растёт с числом наблюдений)
+  observations?: number;      // сколько событий обосновывают скор
+  tail_risk?: boolean;        // «тихий хвост»: низкая вероятность, высокий импакт
+  invariants?: string[];      // сработавшие инварианты (петля обучения)
+  invariant_factor?: number;  // текущий множитель весов инвариантов
+  falsifiers?: string[];      // via negativa: чем можно отменить вердикт
+  escalated?: boolean;
+
+  verdict?: CaseVerdict;      // вынесенный вердикт
+  lock?: CaseLock;            // текущий лок
+}
+
+export type VerdictKind = 'tp' | 'fp' | 'benign';
+
+export interface CaseVerdict {
+  verdict: VerdictKind;
+  reason: string;
+  risk_feedback?: 'too_high' | 'too_low' | null;
+  operator: string;
+  ts: string;
+}
+
+export interface CaseLock {
+  operator: string;
+  ts: string;
+}
+
+export interface VerdictResult {
+  case: Case;
+  adjusted_invariants: { invariant: string; before: number; after: number }[];
+  affected_cases: string[];
+}
+
+export interface ModelSnapshot {
+  weights: Record<string, number>;
+  confirms: Record<string, number>;
+  rejects: Record<string, number>;
+  verdicts_total: number;
+  verdict_counts: Partial<Record<VerdictKind, number>>;
+  calibration_delta: number;
+}
+
+export type ChaosMode =
+  | 'off' | 'burst' | 'drop_source' | 'dup' | 'future' | 'malformed' | 'latency';
+
+export interface ChaosState {
+  mode: ChaosMode;
+  since: string | null;
+  hits: number;
 }
 
 export interface Finding {

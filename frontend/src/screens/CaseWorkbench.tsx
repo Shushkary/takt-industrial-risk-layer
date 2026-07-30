@@ -1,15 +1,21 @@
 // Рабочий стол кейса — трёхпанельный layout с вкладками (строгий кибербез-стиль).
+// Антихрупкость: риск±доверие + импакт + «тихий хвост», via negativa (фальсификаторы),
+// queue lock, эскалация, вердикт с петлёй обучения.
 
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Tabs from '@radix-ui/react-tabs';
 import { ReactFlowProvider } from 'reactflow';
 import { format } from 'date-fns';
-import { fetchCaseById, fetchAttackChain, fetchEventsByCaseId, updateCaseStatus } from '../api/client';
+import {
+  fetchCaseById, fetchAttackChain, fetchEventsByCaseId,
+  lockCase, unlockCase, escalateCase,
+} from '../api/client';
 import { AttackGraph } from '../components/AttackGraph';
 import { Timeline } from '../components/Timeline';
 import { EventList } from '../components/EventList';
 import { EntityCard } from '../components/EntityCard';
+import { VerdictPanel } from '../components/VerdictPanel';
 import { theme } from '../styles/theme';
 import type { Case } from '../types/api';
 
@@ -49,15 +55,25 @@ export function CaseWorkbench() {
     enabled: !!caseId,
   });
 
-  const closeCaseMutation = useMutation({
-    mutationFn: () => updateCaseStatus(caseId!, 'resolved'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['case', caseId] });
-      navigate('/');
+  const invalidateCase = () => {
+    queryClient.invalidateQueries({ queryKey: ['case', caseId] });
+    queryClient.invalidateQueries({ queryKey: ['cases'] });
+  };
+
+  const lockMut = useMutation({
+    mutationFn: () => lockCase(caseId!),
+    onSuccess: (res) => {
+      if (res.conflict) alert(`Кейс уже в работе у ${res.operator}`);
+      invalidateCase();
     },
-    onError: (error) => {
-      alert(`Ошибка: ${error.message}`);
-    },
+  });
+  const unlockMut = useMutation({
+    mutationFn: () => unlockCase(caseId!),
+    onSuccess: invalidateCase,
+  });
+  const escalateMut = useMutation({
+    mutationFn: () => escalateCase(caseId!),
+    onSuccess: invalidateCase,
   });
 
   if (caseLoading) {
@@ -70,6 +86,10 @@ export function CaseWorkbench() {
 
   const severity = severityMeta[caseData.severity];
   const risk = Math.round(caseData.risk_score * 100);
+  const impact = Math.round((caseData.impact_score ?? 0) * 100);
+  const conf = caseData.confidence ?? 0;
+  const isTail = caseData.tail_risk;
+  const locked = Boolean(caseData.lock);
 
   return (
     <div>
@@ -83,28 +103,37 @@ export function CaseWorkbench() {
         </span>
         <div className="case-heading">
           <h1>{caseData.title}</h1>
-          <div className="case-sub">{caseData.id} · {statusLabels[caseData.status]}</div>
+          <div className="case-sub">
+            {caseData.id} · {statusLabels[caseData.status]}
+            {caseData.escalated && <span className="esc-tag">L2</span>}
+            {locked && <span className="lock-tag">🔒 {caseData.lock?.operator}</span>}
+          </div>
         </div>
-        <span className="risk-chip" style={{ '--severity-color': severity.color } as React.CSSProperties}>
-          TAKT RISK <span className="risk-chip-num">{risk}</span>/100
-        </span>
-        {caseData.status !== 'resolved' ? (
-          <button
-            className="wb-close"
-            style={{ width: 'auto', marginTop: 0, padding: '0 18px', minHeight: 40 }}
-            type="button"
-            disabled={closeCaseMutation.isPending}
-            onClick={() => {
-              if (confirm('Закрыть кейс?')) closeCaseMutation.mutate();
-            }}
-          >
-            {closeCaseMutation.isPending ? 'Закрытие…' : '✓ Закрыть кейс'}
-          </button>
-        ) : (
-          <span className="status-pill" style={{ '--status-color': theme.colors.resolved } as React.CSSProperties}>
-            Закрыт
+
+        {/* Барбелл-метрики: риск / импакт / доверие */}
+        <div className="metric-cluster">
+          <span className="risk-chip" style={{ '--severity-color': severity.color } as React.CSSProperties}>
+            RISK <span className="risk-chip-num">{risk}</span>
           </span>
-        )}
+          <span className="impact-chip" title="Физический импакт на АСУ ТП">
+            ИМПАКТ <span className="impact-chip-num">{impact}</span>
+          </span>
+          <span className={`conf-chip${conf < 0.5 ? ' is-low' : ''}`} title={`наблюдений: ${caseData.observations ?? '—'}`}>
+            ДОВЕРИЕ <span className="conf-chip-num">{conf.toFixed(2)}</span>
+          </span>
+          {isTail && <span className="tail-chip topbar-tail" title="Низкая вероятность, катастрофический импакт">ХВОСТ OT</span>}
+        </div>
+
+        <div className="wb-actions">
+          {!locked ? (
+            <button className="wb-act-btn" type="button" onClick={() => lockMut.mutate()} disabled={lockMut.isPending}>Взять в работу</button>
+          ) : (
+            <button className="wb-act-btn ghost" type="button" onClick={() => unlockMut.mutate()} disabled={unlockMut.isPending}>Снять лок</button>
+          )}
+          {!caseData.escalated && caseData.status !== 'resolved' && (
+            <button className="wb-act-btn ghost" type="button" onClick={() => escalateMut.mutate()} disabled={escalateMut.isPending}>Эскалация L2</button>
+          )}
+        </div>
       </div>
 
       <div className="wb-layout">
@@ -115,10 +144,25 @@ export function CaseWorkbench() {
             {caseData.xai_summary}
           </div>
 
-          <div className="wb-panel-title">Метаданные</div>
+          {/* via negativa: чем можно ОТМЕНИТЬ вердикт */}
+          {caseData.falsifiers && caseData.falsifiers.length > 0 && (
+            <>
+              <div className="wb-panel-title">Что отменило бы вердикт (via negativa)</div>
+              <ul className="falsifier-list">
+                {caseData.falsifiers.map((f, i) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <div className="wb-panel-title" style={{ marginTop: 18 }}>Метаданные</div>
           <div className="wb-meta-row"><span>Создан</span><span>{format(new Date(caseData.created_at), 'dd.MM.yyyy HH:mm')}</span></div>
           <div className="wb-meta-row"><span>Обновлён</span><span>{format(new Date(caseData.updated_at), 'dd.MM.yyyy HH:mm')}</span></div>
-          <div className="wb-meta-row"><span>Статус</span><span>{statusLabels[caseData.status]}</span></div>
+          <div className="wb-meta-row"><span>Наблюдений</span><span>{caseData.observations ?? '—'}</span></div>
+          {caseData.invariants && caseData.invariants.length > 0 && (
+            <div className="wb-meta-row"><span>Инварианты</span><span className="mono-small">{caseData.invariants.join(', ')}</span></div>
+          )}
 
           <div className="wb-panel-title" style={{ marginTop: 18 }}>
             Находки · {caseData.findings.length}
@@ -133,6 +177,10 @@ export function CaseWorkbench() {
               </div>
             ))
           )}
+
+          {/* Вердикт с петлёй обучения */}
+          <div className="wb-panel-title" style={{ marginTop: 18 }}>Вердикт · петля обучения</div>
+          <VerdictPanel caseData={caseData} />
         </div>
 
         {/* Центральная панель — вкладки */}

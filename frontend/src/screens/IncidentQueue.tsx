@@ -1,11 +1,18 @@
-// Главный экран оператора — плотная SOC-очередь инцидентов (сортируемая таблица).
+// Главный экран оператора — плотная SOC-очередь инцидентов.
+// Антихрупкость: барбелл риск/импакт/доверие, «тихий хвост» OT, queue lock,
+// хоткеи триажа, честное состояние канала (live/stale/polling/down).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { fetchCases, subscribeToUpdates } from '../api/client';
+import {
+  fetchCases, subscribeToUpdates, fetchModel, fetchChaos,
+  setCaseSeverity, escalateCase, lockCase,
+  type LinkState,
+} from '../api/client';
 import { CommandBar } from '../components/CommandBar';
+import { ChaosPanel } from '../components/ChaosPanel';
 import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
 import { useCaseStore } from '../stores/caseStore';
 import { theme } from '../styles/theme';
@@ -24,7 +31,13 @@ const statusMeta: Record<Case['status'], { label: string; color: string; rank: n
   resolved: { label: 'Закрыт', color: theme.colors.resolved, rank: 1 },
 };
 
-type SortKey = 'risk' | 'severity' | 'status' | 'created' | 'updated';
+const verdictMeta: Record<'tp' | 'fp' | 'benign', { label: string; color: string }> = {
+  tp: { label: 'TP', color: theme.colors.critical },
+  fp: { label: 'FP', color: theme.colors.low },
+  benign: { label: 'BENIGN', color: theme.colors.textMuted },
+};
+
+type SortKey = 'risk' | 'impact' | 'confidence' | 'severity' | 'status' | 'created' | 'updated';
 type SortDir = 'asc' | 'desc';
 
 function formatAge(iso: string): string {
@@ -44,6 +57,7 @@ function sourceTag(item: Case): string {
 
 export function IncidentQueue() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const {
     filters,
     toggleSeverityFilter,
@@ -55,14 +69,59 @@ export function IncidentQueue() {
 
   const [liveCases, setLiveCases] = useState<Case[]>([]);
   const [newIds, setNewIds] = useState<Set<string>>(new Set());
-  const [link, setLink] = useState<'live' | 'down' | 'idle'>('idle');
+  const [link, setLink] = useState<LinkState>('connecting');
+  const [dataAgeSec, setDataAgeSec] = useState(0);
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'risk', dir: 'desc' });
+  const [query, setQuery] = useState('');
+  const [chaosOpen, setChaosOpen] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const { data: initialCases, isLoading } = useQuery({
     queryKey: ['cases'],
     queryFn: fetchCases,
   });
+
+  const { data: model } = useQuery({
+    queryKey: ['model'],
+    queryFn: fetchModel,
+    refetchInterval: 4000,
+  });
+
+  const { data: chaos } = useQuery({
+    queryKey: ['chaos'],
+    queryFn: fetchChaos,
+    refetchInterval: 3000,
+  });
+
+  // Мутации триажа (клавиатура-first).
+  const severityMut = useMutation({
+    mutationFn: ({ id, sev }: { id: string; sev: Case['severity'] }) => setCaseSeverity(id, sev),
+    onSuccess: (_d, v) => {
+      queryClient.invalidateQueries({ queryKey: ['cases'] });
+      showFlash(`Severity → ${severityMeta[v.sev].code}`);
+    },
+  });
+  const escalateMut = useMutation({
+    mutationFn: (id: string) => escalateCase(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cases'] });
+      showFlash('Эскалировано на L2');
+    },
+  });
+  const lockMut = useMutation({
+    mutationFn: (id: string) => lockCase(id),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['cases'] });
+      showFlash(res.conflict ? `Занято: ${res.operator}` : 'Взято в работу');
+    },
+  });
+
+  function showFlash(msg: string) {
+    setFlash(msg);
+    window.setTimeout(() => setFlash(null), 1800);
+  }
 
   useEffect(() => {
     return subscribeToUpdates(
@@ -83,13 +142,26 @@ export function IncidentQueue() {
           });
         }, 1200);
       },
-      { onStatus: (up) => setLink(up ? 'live' : 'down') }
+      { onStatus: (state) => setLink(state) }
     );
   }, []);
 
+  // Возраст данных: 0 пока канал live, иначе растёт (для честного stale-индикатора).
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setDataAgeSec((prev) => (link === 'live' ? 0 : prev + 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [link]);
+
   const allCases = useMemo(() => {
     const byId = new Map((initialCases ?? []).map((item) => [item.id, item]));
-    liveCases.forEach((item) => byId.set(item.id, item));
+    // Побеждает более свежая версия по updated_at: снимок из живого канала
+    // не должен «затирать» только что перечитанный после триажа результат.
+    liveCases.forEach((item) => {
+      const existing = byId.get(item.id);
+      if (!existing || item.updated_at >= existing.updated_at) byId.set(item.id, item);
+    });
     return Array.from(byId.values());
   }, [initialCases, liveCases]);
 
@@ -98,35 +170,62 @@ export function IncidentQueue() {
     const value = (item: Case): number => {
       switch (sort.key) {
         case 'risk': return item.risk_score;
+        case 'impact': return item.impact_score ?? 0;
+        case 'confidence': return item.confidence ?? 0;
         case 'severity': return severityMeta[item.severity].rank;
         case 'status': return statusMeta[item.status].rank;
         case 'created': return new Date(item.created_at).getTime();
         case 'updated': return new Date(item.updated_at).getTime();
       }
     };
+    const q = query.trim().toLowerCase();
     return allCases
       .filter((item) => {
         if (filters.severity && !filters.severity.includes(item.severity)) return false;
         if (filters.status && !filters.status.includes(item.status)) return false;
+        if (q && !(`${item.id} ${item.title}`.toLowerCase().includes(q))) return false;
         return true;
       })
       .sort((a, b) => {
         const primary = (value(a) - value(b)) * dir;
         if (primary !== 0) return primary;
-        // Вторичный ключ — риск по убыванию, чтобы порядок был стабилен.
         return b.risk_score - a.risk_score;
       });
-  }, [allCases, filters, sort]);
+  }, [allCases, filters, sort, query]);
 
   const criticalCount = allCases.filter((item) => item.severity === 'critical').length;
   const activeCount = allCases.filter((item) => item.status === 'investigating').length;
-  const newCount = allCases.filter((item) => item.status === 'new').length;
+  const tailCount = allCases.filter((item) => item.tail_risk && item.risk_score < 0.6).length;
 
   // Автопрокрутка выбранной строки в зону видимости (навигация j/k).
   useEffect(() => {
     const row = tableBodyRef.current?.querySelector<HTMLElement>(`[data-index="${focusedIndex}"]`);
     row?.scrollIntoView({ block: 'nearest' });
   }, [focusedIndex]);
+
+  // Хоткеи триажа: 1-4 severity · a взять · e эскалация · / поиск · x chaos.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        if (e.key === 'Escape') el.blur();
+        return;
+      }
+      const item = sortedCases[focusedIndex];
+      switch (e.key) {
+        case '1': if (item) { e.preventDefault(); severityMut.mutate({ id: item.id, sev: 'critical' }); } break;
+        case '2': if (item) { e.preventDefault(); severityMut.mutate({ id: item.id, sev: 'high' }); } break;
+        case '3': if (item) { e.preventDefault(); severityMut.mutate({ id: item.id, sev: 'medium' }); } break;
+        case '4': if (item) { e.preventDefault(); severityMut.mutate({ id: item.id, sev: 'low' }); } break;
+        case 'a': case 'A': if (item) { e.preventDefault(); lockMut.mutate(item.id); } break;
+        case 'e': case 'E': if (item) { e.preventDefault(); escalateMut.mutate(item.id); } break;
+        case '/': e.preventDefault(); searchRef.current?.focus(); break;
+        case 'x': case 'X': e.preventDefault(); setChaosOpen((o) => !o); break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sortedCases, focusedIndex, severityMut, escalateMut, lockMut]);
 
   const toggleSort = (key: SortKey) => {
     setSort((prev) =>
@@ -139,16 +238,22 @@ export function IncidentQueue() {
   const sortArrow = (key: SortKey) =>
     sort.key === key ? <span className="sort-arrow">{sort.dir === 'desc' ? '▼' : '▲'}</span> : null;
 
-  const filtersActive = Boolean(filters.severity || filters.status);
+  const filtersActive = Boolean(filters.severity || filters.status || query);
 
   return (
     <main className="console">
-      <CommandBar link={link} />
+      <CommandBar
+        link={link}
+        dataAgeSec={dataAgeSec}
+        chaos={chaos}
+        onToggleChaos={() => setChaosOpen(true)}
+        model={model ? { verdicts_total: model.verdicts_total, calibration_delta: model.calibration_delta } : undefined}
+      />
 
       <div className="section-head">
         <h1>Очередь инцидентов</h1>
         <span className="section-sub">
-          Промышленный сегмент · приоритизация по контекстному риску и корреляции
+          Промышленный сегмент · приоритизация по контекстному риску, импакту и корреляции
         </span>
         <span className="toolbar-spacer" />
         <a
@@ -167,10 +272,10 @@ export function IncidentQueue() {
         <KpiTile label="Всего кейсов" value={allCases.length} note="Синтетический стенд" color={theme.colors.accent} />
         <KpiTile label="Критические" value={criticalCount} note="Немедленный triage" color={theme.colors.critical} />
         <KpiTile label="В работе" value={activeCount} note="Назначены оператору" color={theme.colors.investigating} />
-        <KpiTile label="Новые" value={newCount} note="Ожидают разбора" color={theme.colors.new} />
+        <KpiTile label="Тихий хвост OT" value={tailCount} note="Низкий риск · высокий импакт" color={theme.colors.high} />
       </section>
 
-      <section className="queue-toolbar" aria-label="Фильтры и сортировка">
+      <section className="queue-toolbar" aria-label="Фильтры, поиск и сортировка">
         <div className="filter-group">
           <span className="filter-label">Серьёзность</span>
           {(Object.keys(severityMeta) as Case['severity'][]).map((severity) => (
@@ -198,20 +303,35 @@ export function IncidentQueue() {
         </div>
 
         <span className="toolbar-spacer" />
+
+        <input
+          ref={searchRef}
+          className="queue-search"
+          type="search"
+          placeholder="Поиск  /  "
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Поиск по кейсам"
+        />
         <span className="result-count">
           <strong>{sortedCases.length}</strong> / {allCases.length}
         </span>
         {filtersActive && (
-          <button className="filter-reset" type="button" onClick={clearFilters}>
+          <button className="filter-reset" type="button" onClick={() => { clearFilters(); setQuery(''); }}>
             Сбросить
           </button>
         )}
       </section>
 
       <div className="queue-hint">
-        <span className="kbd-combo"><kbd>J</kbd><kbd>K</kbd> выбор строки</span>
-        <span className="kbd-combo"><kbd>Enter</kbd> открыть кейс</span>
-        <span>Клик по заголовку столбца — сортировка</span>
+        <span className="kbd-combo"><kbd>J</kbd><kbd>K</kbd> выбор</span>
+        <span className="kbd-combo"><kbd>Enter</kbd> открыть</span>
+        <span className="kbd-combo"><kbd>1</kbd>–<kbd>4</kbd> severity</span>
+        <span className="kbd-combo"><kbd>A</kbd> взять</span>
+        <span className="kbd-combo"><kbd>E</kbd> эскалация</span>
+        <span className="kbd-combo"><kbd>/</kbd> поиск</span>
+        <span className="kbd-combo"><kbd>X</kbd> chaos</span>
+        {flash && <span className="queue-flash" role="status">{flash}</span>}
       </div>
 
       {isLoading ? (
@@ -231,6 +351,12 @@ export function IncidentQueue() {
                 </th>
                 <th className="sortable" onClick={() => toggleSort('risk')}>
                   Риск{sortArrow('risk')}
+                </th>
+                <th className="col-impact sortable" onClick={() => toggleSort('impact')}>
+                  Импакт{sortArrow('impact')}
+                </th>
+                <th className="col-conf sortable" onClick={() => toggleSort('confidence')}>
+                  Дов.{sortArrow('confidence')}
                 </th>
                 <th>Кейс</th>
                 <th>Заголовок</th>
@@ -252,20 +378,24 @@ export function IncidentQueue() {
                 const severity = severityMeta[item.severity];
                 const status = statusMeta[item.status];
                 const risk = Math.round(item.risk_score * 100);
+                const impact = Math.round((item.impact_score ?? 0) * 100);
+                const conf = item.confidence ?? 0;
                 const isFocused = focusedIndex === index;
                 const isNew = newIds.has(item.id);
+                const isTail = item.tail_risk && item.risk_score < 0.6;
+                const locked = Boolean(item.lock);
 
                 return (
                   <tr
                     key={item.id}
                     data-index={index}
-                    className={`incident-row${isFocused ? ' is-focused' : ''}${isNew ? ' is-new' : ''}`}
+                    className={`incident-row${isFocused ? ' is-focused' : ''}${isNew ? ' is-new' : ''}${isTail ? ' is-tail' : ''}`}
                     onClick={() => {
                       setFocusedIndex(index);
                       navigate(`/case/${item.id}`);
                     }}
                     onMouseEnter={() => setFocusedIndex(index)}
-                    aria-label={`${severity.label}: ${item.title}. Риск ${risk} из 100. Статус ${status.label}`}
+                    aria-label={`${severity.label}: ${item.title}. Риск ${risk}, импакт ${impact}, доверие ${conf.toFixed(2)}. Статус ${status.label}`}
                     style={{ '--severity-color': severity.color } as React.CSSProperties}
                   >
                     <td className="cell-sev">
@@ -279,21 +409,41 @@ export function IncidentQueue() {
                         </span>
                       </div>
                     </td>
-                    <td className="cell-id">{item.id}</td>
+                    <td className="cell-impact col-impact">
+                      <div className="risk-figure">
+                        <span className="impact-num">{impact}</span>
+                        <span className="impact-mini" aria-hidden="true">
+                          <span style={{ '--risk-width': `${impact}%` } as React.CSSProperties} />
+                        </span>
+                      </div>
+                    </td>
+                    <td className="cell-conf col-conf">
+                      <span className={`conf-badge${conf < 0.5 ? ' is-low' : ''}`} title={`доверие ${conf.toFixed(2)} · наблюдений: ${item.observations ?? '—'}`}>
+                        {conf.toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="cell-id">
+                      {locked && <span className="lock-glyph" title={`В работе: ${item.lock?.operator}`}>🔒</span>}
+                      {item.id}
+                    </td>
                     <td className="cell-title">
                       <span className="title-line">{item.title}</span>
+                      {isTail && <span className="tail-chip" title="Низкая вероятность, высокий импакт на АСУ ТП">тихий хвост OT</span>}
                     </td>
                     <td className="cell-source col-source">
                       <span className="tag">{sourceTag(item)}</span>
                     </td>
                     <td className="cell-findings col-findings num">{item.findings.length}</td>
                     <td>
-                      <span
-                        className="status-pill"
-                        style={{ '--status-color': status.color } as React.CSSProperties}
-                      >
-                        {status.label}
-                      </span>
+                      {item.verdict ? (
+                        <span className="verdict-pill" style={{ '--status-color': verdictMeta[item.verdict.verdict].color } as React.CSSProperties}>
+                          {verdictMeta[item.verdict.verdict].label}
+                        </span>
+                      ) : (
+                        <span className="status-pill" style={{ '--status-color': status.color } as React.CSSProperties}>
+                          {status.label}
+                        </span>
+                      )}
                     </td>
                     <td className="cell-age col-age">{formatAge(item.created_at)}</td>
                     <td className="cell-age">{format(new Date(item.updated_at), 'dd.MM HH:mm')}</td>
@@ -306,6 +456,7 @@ export function IncidentQueue() {
       )}
 
       <KeyboardShortcuts cases={sortedCases} />
+      <ChaosPanel open={chaosOpen} onClose={() => setChaosOpen(false)} />
 
       <footer className="queue-footer">
         <span>TAKT PT · демонстрационная среда · IEC 60870-5-104 · MITRE ATT&amp;CK for ICS</span>

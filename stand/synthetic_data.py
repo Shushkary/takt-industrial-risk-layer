@@ -162,11 +162,28 @@ def build_cases() -> list[dict]:
         "updated_at": _iso(_BASE_TS + timedelta(minutes=19)),
         "title": "Несанкционированная команда управления на ПЛК (цепочка IEC-104)",
         "risk_score": 0.94,
+        # --- Разделение риск / импакт / доверие (антихрупкость: барбелл) ---
+        # impact_score: физический импакт на АСУ ТП (команда на ПЛК + аномалия HMI).
+        "impact_score": 0.97,
+        # confidence: доверие к скору, растёт с числом наблюдений и числом источников.
+        "confidence": 0.88,
+        # observations: сколько событий обосновывают скор (эпистемическая надёжность).
+        "observations": len(ATTACK_CHAIN),
+        # tail_risk: «тихий» хвост — низкая вероятность, катастрофический импакт на физику.
+        "tail_risk": True,
+        # invariants: какие правила-инварианты сработали (для петли обучения по вердикту).
+        "invariants": [s.invariant.split(":")[0] for s in ATTACK_CHAIN],
         "xai_summary": (
             "Коррелировано 6 событий из 4 источников за 19 минут: внешнее сканирование → "
             "brute-force → вход → доставка импланта → команда C_SC_NA_1 на plc-rtu-14 → "
             "аномалия телеметрии HMI. Единый источник 185.203.44.17 и пользователь a.petrov."
         ),
+        # via negativa: чего не хватает, чтобы отменить вердикт (фальсифицируемость).
+        "falsifiers": [
+            "Плановое окно ТО для plc-rtu-14 в 09:00–09:30 (проверить наряд-допуск)",
+            "Вход a.petrov подтверждён 2FA с корпоративного VPN, а не с 185.203.44.17",
+            "iec_pusher.exe присутствует в whitelist инженерного ПО",
+        ],
         "findings": _findings_for_chain(),
         "_chain": True,
     })
@@ -179,9 +196,22 @@ def build_cases() -> list[dict]:
         ("Обновление прошивки plc-rtu-15", "medium", "new"),
         ("Диск historian-01 заполнен на 82%", "high", "investigating"),
     ]
+    # Инварианты шумовых кейсов (одиночные срабатывания правил).
+    # ВНИМАНИЕ: кейс #1 «Всплеск ICMP от gw-iec104-01» намеренно делит сетевой
+    # инвариант INV-NET-01 с цепочкой атаки. Это показывает петлю обучения:
+    # вердикт FP/TP по цепочке пересчитывает вес INV-NET-01 и меняет риск
+    # этого фонового кейса тоже (skin in the game — решение оператора влияет
+    # на все кейсы с тем же инвариантом).
+    noise_invariants = [
+        "INV-PKI-02", "INV-NET-01", "INV-AUTH-09", "INV-CFG-03", "INV-CAP-01",
+    ]
     for i, (title, sev, status) in enumerate(noise_titles):
         off = 30 + i * 25
         host = rng.choice(HOSTS)
+        obs = rng.randint(1, 3)
+        # Импакт выше, если задет ПЛК/HMI (OT-физика), даже при низком риске.
+        touches_ot = host.startswith("plc") or host.startswith("hmi")
+        impact = round(rng.uniform(0.6, 0.85), 2) if touches_ot else round(rng.uniform(0.1, 0.35), 2)
         cases.append({
             "id": f"CASE-2026-{732 + i:04d}"[:9] + f"{732 + i:04d}"[-4:],
             "severity": sev,
@@ -190,7 +220,15 @@ def build_cases() -> list[dict]:
             "updated_at": _iso(_BASE_TS + timedelta(minutes=off + 3)),
             "title": title,
             "risk_score": round(rng.uniform(0.15, 0.55), 2),
+            "impact_score": impact,
+            # Доверие низкое: мало наблюдений, один источник.
+            "confidence": round(rng.uniform(0.35, 0.6), 2),
+            "observations": obs,
+            # Тихий хвост: низкий риск, но высокий OT-импакт — не пропустить.
+            "tail_risk": bool(touches_ot),
+            "invariants": [noise_invariants[i % len(noise_invariants)]],
             "xai_summary": "Одиночное срабатывание правила, корреляций не обнаружено.",
+            "falsifiers": [],
             "findings": [{
                 "id": _mk_id("fnd", host, i),
                 "entity_type": "host",
