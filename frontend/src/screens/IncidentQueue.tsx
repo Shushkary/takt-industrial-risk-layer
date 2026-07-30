@@ -112,9 +112,25 @@ export function IncidentQueue() {
     >
       {/* Заголовок и фильтры */}
       <div style={{ marginBottom: theme.spacing.xl }}>
-        <h1 style={{ marginBottom: theme.spacing.lg, fontSize: theme.typography.fontSize.xl }}>
-          Очередь инцидентов
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: theme.spacing.lg }}>
+          <h1 style={{ fontSize: theme.typography.fontSize.xl }}>
+            Очередь инцидентов
+          </h1>
+          <a
+            href="/compare"
+            onClick={(e) => { e.preventDefault(); navigate('/compare'); }}
+            style={{
+              color: theme.colors.accent,
+              textDecoration: 'none',
+              border: `1px solid ${theme.colors.border}`,
+              padding: '8px 14px',
+              borderRadius: theme.borderRadius.md,
+              fontSize: theme.typography.fontSize.sm,
+            }}
+          >
+            ⏱ Сравнение: ручной режим vs ТАКТ
+          </a>
+        </div>
         
         {/* Фильтры-чипы */}
         <div style={{ display: 'flex', gap: theme.spacing.md, flexWrap: 'wrap' }}>

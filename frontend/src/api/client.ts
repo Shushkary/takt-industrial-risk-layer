@@ -101,6 +101,53 @@ export async function fetchEntityBaseline(
   );
 }
 
+// === Стенд: сырой поток и метрика времени оператора ===
+
+export interface RawEvent {
+  id: string;
+  ts: string;
+  source_class: string;
+  level: string;
+  host_id: string;
+  message: string;
+  is_attack: boolean;
+  attack_step: number | null;
+}
+
+export interface BenchmarkResult {
+  scenario: string;
+  dataset: {
+    raw_events_total: number;
+    attack_events: number;
+    attack_events_ratio: number;
+    sources: number;
+    attack_graph_nodes: number;
+  };
+  manual: { breakdown: Record<string, number>; total_sec: number };
+  takt: { breakdown: Record<string, number>; total_sec: number };
+  result: {
+    manual_total_sec: number;
+    takt_total_sec: number;
+    manual_human: string;
+    takt_human: string;
+    seconds_saved: number;
+    seconds_saved_human: string;
+    speedup_x: number;
+  };
+}
+
+export async function fetchRawEvents(): Promise<{
+  items: RawEvent[];
+  total_count: number;
+  attack_step_count: number;
+}> {
+  return apiRequest('/api/v1/raw-events?limit=1000');
+}
+
+export async function fetchBenchmark(): Promise<BenchmarkResult> {
+  return apiRequest<BenchmarkResult>('/api/v1/benchmark');
+}
+
 // === SSE подписка на обновления кейсов ===
 
 export function subscribeToUpdates(onMessage: (data: Case) => void): () => void {

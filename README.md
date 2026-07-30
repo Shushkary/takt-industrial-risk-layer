@@ -1,5 +1,12 @@
 # ТАКТ Industrial Risk Layer (MVP)
 
+> **🚀 Демо-стенд + АРМ оператора (одна команда):**
+> `docker compose -f docker-compose.stand.yml up --build` → фронтенд на http://localhost:3000,
+> экран сравнения «ручной режим vs ТАКТ» (метрика — время обработки данных оператором) на
+> http://localhost:3000/compare. Полная инструкция и запуск без Docker — в [`stand/README.md`](stand/README.md).
+> Отчёт по метрике — [`docs/METRIC_OPERATOR_TIME.md`](docs/METRIC_OPERATOR_TIME.md).
+
+
 Автономный проект по **ТЗ MPV 2.0** и спринтам из `docs/` (извлечённые тексты из DOCX):
 
 - `Такт ТЗ MPV 2.0.txt` — концепция, слои L1–L5, 25 инвариантов (+ слияние кейсов как отдельный L2-пайплайн), Chaos Predictor (δ≈4.669), Causal Mesh, Risk/XAI.

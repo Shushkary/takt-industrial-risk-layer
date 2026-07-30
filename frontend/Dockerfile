@@ -14,6 +14,12 @@ RUN npm ci
 # Копирование исходного кода
 COPY . .
 
+# База API задаётся на этапе сборки (Vite «запекает» env в бандл).
+# Локально по умолчанию — прямые запросы на http://localhost:8090 (CORS открыт на стенде).
+# Для единого origin через nginx-прокси передайте пустую строку или относительный путь.
+ARG VITE_TAKT_API_BASE_URL=http://localhost:8090
+ENV VITE_TAKT_API_BASE_URL=${VITE_TAKT_API_BASE_URL}
+
 # Сборка production build
 RUN npm run build
 
