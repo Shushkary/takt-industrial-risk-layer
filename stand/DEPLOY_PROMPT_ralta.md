@@ -28,7 +28,7 @@ ssh -i ~/.ssh/id_rsa_spaceweb torionadmin@89.111.142.231
 ## ИСТОЧНИК КОДА
 
 Репозиторий: `https://github.com/Shushkary/takt-industrial-risk-layer`
-Ветка со стендом и фронтендом: **`feature/frontend-arm`** (PR #4).
+Ветка со стендом и финальным фронтендом (строгий кибербез-UI): **`feature/takt-pt-frontend-dark-ui`**.
 Каталог стенда: `stand/`, фронтенд: `frontend/`, compose: `docker-compose.stand.yml`.
 
 ## ШАГИ РАЗВЁРТЫВАНИЯ
@@ -47,9 +47,9 @@ ssh -i ~/.ssh/id_rsa_spaceweb torionadmin@89.111.142.231
    ```bash
    sudo mkdir -p /opt/takt && sudo chown torionadmin:torionadmin /opt/takt
    cd /opt/takt
-   git clone --branch feature/frontend-arm --depth 1 \
+   git clone --branch feature/takt-pt-frontend-dark-ui --depth 1 \
      https://github.com/Shushkary/takt-industrial-risk-layer.git app || \
-     (cd app && git fetch origin feature/frontend-arm && git checkout feature/frontend-arm && git pull)
+     (cd app && git fetch origin feature/takt-pt-frontend-dark-ui && git checkout feature/takt-pt-frontend-dark-ui && git pull)
    cd app
    ```
 
