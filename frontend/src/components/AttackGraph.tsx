@@ -1,6 +1,6 @@
 // Граф атаки с React Flow, force-layout и анимацией цепочки
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -11,6 +11,8 @@ import ReactFlow, {
   useEdgesState,
   useReactFlow,
   ConnectionLineType,
+  Handle,
+  Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { motion } from 'framer-motion';
@@ -25,68 +27,100 @@ interface AttackGraphProps {
 export function AttackGraph({ attackChain }: AttackGraphProps) {
   const { fitView } = useReactFlow();
   const setSelectedEntity = useCaseStore((state) => state.setSelectedEntity);
-  const [playbackMode, setPlaybackMode] = useState(false);
+  const [playbackState, setPlaybackState] = useState<'idle' | 'playing' | 'complete'>('idle');
   const [currentStep, setCurrentStep] = useState(0);
+  const [selectedEdge, setSelectedEdge] = useState<{ reason: string; step: number } | null>(null);
   
   // Преобразование данных для React Flow
-  const initialNodes: Node[] = attackChain.nodes.map((node) => ({
-    id: node.id,
-    type: 'custom',
-    position: node.position || { x: Math.random() * 500, y: Math.random() * 500 },
-    data: {
-      label: node.label,
-      nodeType: node.type,
-      severity: node.severity,
-      icon: getIcon(node.type),
-    },
-  }));
+  const initialNodes = useMemo<Node[]>(
+    () =>
+      attackChain.nodes.map((node, index) => ({
+        id: node.id,
+        type: 'custom',
+        position: node.position || {
+          x: index * 220,
+          y: 120 + (index % 2) * 90,
+        },
+        data: {
+          label: node.label,
+          nodeType: node.type,
+          severity: node.severity,
+          icon: getIcon(node.type),
+        },
+      })),
+    [attackChain.nodes]
+  );
   
-  const initialEdges: Edge[] = attackChain.edges.map((edge, index) => ({
-    id: edge.id || `edge-${index}`,
-    source: edge.source,
-    target: edge.target,
-    label: edge.correlation_reason,
-    type: ConnectionLineType.SmoothStep,
-    animated: false,
-    style: {
-      stroke: theme.colors.textMuted,
-      strokeWidth: 2,
-      strokeDasharray: '5,5',
-    },
-    labelStyle: {
-      fontSize: theme.typography.fontSize.xs,
-      fill: theme.colors.textSecondary,
-    },
-  }));
+  const initialEdges = useMemo<Edge[]>(
+    () =>
+      attackChain.edges.map((edge, index) => ({
+        id: edge.id || `edge-${index}`,
+        source: edge.source,
+        target: edge.target,
+        label: `${index + 1}`,
+        data: {
+          correlationReason: edge.correlation_reason,
+          correlationStep: index + 1,
+        },
+        type: ConnectionLineType.SmoothStep,
+        animated: false,
+        style: {
+          stroke: theme.colors.textMuted,
+          strokeWidth: 2,
+          strokeDasharray: '5,5',
+        },
+        labelStyle: {
+          fontSize: theme.typography.fontSize.xs,
+          fontWeight: 700,
+          fill: theme.colors.textPrimary,
+        },
+        labelBgStyle: {
+          fill: theme.colors.surfaceElevated,
+          fillOpacity: 0.96,
+        },
+        labelBgPadding: [6, 4],
+        labelBgBorderRadius: 6,
+      })),
+    [attackChain.edges]
+  );
   
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   
-  // Автоматическое центрирование при загрузке
+  // Синхронизация и автоматическое центрирование при смене кейса.
   useEffect(() => {
-    setTimeout(() => fitView({ duration: 300 }), 100);
-  }, [fitView]);
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+    setPlaybackState('idle');
+    setCurrentStep(0);
+    setSelectedEdge(null);
+    const timer = window.setTimeout(
+      () => fitView({ duration: 300, padding: 0.2 }),
+      100
+    );
+    return () => window.clearTimeout(timer);
+  }, [fitView, initialEdges, initialNodes, setEdges, setNodes]);
   
   // Режим "проиграть атаку"
   useEffect(() => {
-    if (!playbackMode) return;
+    if (playbackState !== 'playing' || nodes.length === 0) return;
     
-    const timer = setInterval(() => {
+    const timer = window.setInterval(() => {
       setCurrentStep((prev) => {
         if (prev >= nodes.length - 1) {
-          setPlaybackMode(false);
-          return 0;
+          setPlaybackState('complete');
+          return prev;
         }
         return prev + 1;
       });
-    }, 500); // 500 мс на шаг
+    }, 900);
     
-    return () => clearInterval(timer);
-  }, [playbackMode, nodes.length]);
+    return () => window.clearInterval(timer);
+  }, [playbackState, nodes.length]);
   
   // Подсветка узлов в playback mode
   useEffect(() => {
-    if (playbackMode) {
+    if (playbackState !== 'idle') {
       setNodes((nds) =>
         nds.map((node, index) => ({
           ...node,
@@ -124,7 +158,7 @@ export function AttackGraph({ attackChain }: AttackGraphProps) {
         }))
       );
     }
-  }, [playbackMode, currentStep, setNodes, setEdges]);
+  }, [playbackState, currentStep, setNodes, setEdges]);
   
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -137,8 +171,24 @@ export function AttackGraph({ attackChain }: AttackGraphProps) {
   );
   
   const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
-    alert(`Причина корреляции:\n${edge.label}`);
+    const data = edge.data as
+      | { correlationReason?: string; correlationStep?: number }
+      | undefined;
+    if (data?.correlationReason) {
+      setSelectedEdge({
+        reason: data.correlationReason,
+        step: data.correlationStep ?? 1,
+      });
+    }
   }, []);
+
+  const playbackReason =
+    playbackState !== 'idle' && currentStep > 0
+      ? attackChain.edges[Math.min(currentStep - 1, attackChain.edges.length - 1)]
+          ?.correlation_reason
+      : null;
+  const visibleReason = playbackReason || selectedEdge?.reason;
+  const visibleReasonStep = playbackReason ? currentStep : selectedEdge?.step ?? 1;
   
   return (
     <div style={{ height: '100%', position: 'relative' }}>
@@ -154,25 +204,45 @@ export function AttackGraph({ attackChain }: AttackGraphProps) {
         }}
       >
         <button
+          type="button"
+          aria-label={
+            playbackState === 'playing'
+              ? 'Остановить воспроизведение цепочки'
+              : 'Проиграть цепочку событий'
+          }
+          disabled={nodes.length === 0}
           onClick={() => {
-            setPlaybackMode(!playbackMode);
-            if (!playbackMode) setCurrentStep(0);
+            if (playbackState === 'playing') {
+              setPlaybackState('idle');
+              setCurrentStep(0);
+            } else {
+              setCurrentStep(0);
+              setPlaybackState('playing');
+            }
           }}
           style={{
             padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-            backgroundColor: playbackMode ? theme.colors.error : theme.colors.accent,
+            backgroundColor:
+              playbackState === 'playing' ? theme.colors.error : theme.colors.accent,
             color: theme.colors.textPrimary,
             border: 'none',
             borderRadius: theme.borderRadius.sm,
-            cursor: 'pointer',
+            cursor: nodes.length === 0 ? 'not-allowed' : 'pointer',
             fontWeight: 600,
+            opacity: nodes.length === 0 ? 0.55 : 1,
           }}
         >
-          {playbackMode ? '⏹ Стоп' : '▶️ Проиграть атаку'}
+          {playbackState === 'playing'
+            ? '■ Стоп'
+            : playbackState === 'complete'
+              ? '↻ Повторить цепочку'
+              : '▶ Проиграть цепочку'}
         </button>
         
-        {playbackMode && (
+        {playbackState !== 'idle' && nodes.length > 0 && (
           <div
+            role="status"
+            aria-live="polite"
             style={{
               padding: `${theme.spacing.sm} ${theme.spacing.md}`,
               backgroundColor: theme.colors.surface,
@@ -180,10 +250,46 @@ export function AttackGraph({ attackChain }: AttackGraphProps) {
               color: theme.colors.textPrimary,
             }}
           >
-            Шаг {currentStep + 1} / {nodes.length}
+            {playbackState === 'complete' ? 'Цепочка завершена' : 'Воспроизведение'} · шаг{' '}
+            {currentStep + 1} из {nodes.length}
           </div>
         )}
       </div>
+
+      {visibleReason && (
+        <div
+          role="note"
+          style={{
+            position: 'absolute',
+            top: 68,
+            left: theme.spacing.md,
+            zIndex: 9,
+            width: 'min(430px, calc(100% - 32px))',
+            padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+            backgroundColor: theme.colors.surfaceElevated,
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: theme.borderRadius.md,
+            boxShadow: '0 12px 36px rgba(0, 0, 0, 0.36)',
+            color: theme.colors.textSecondary,
+            fontSize: theme.typography.fontSize.sm,
+            lineHeight: 1.45,
+          }}
+        >
+          <div
+            style={{
+              marginBottom: theme.spacing.xs,
+              color: theme.colors.textMuted,
+              fontSize: theme.typography.fontSize.xs,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Причина корреляции · шаг {visibleReasonStep}
+          </div>
+          {visibleReason}
+        </div>
+      )}
       
       <ReactFlow
         nodes={nodes}
@@ -229,6 +335,16 @@ function CustomNode({ data }: { data: any }) {
         boxShadow: isHighlighted ? `0 0 20px ${theme.colors.accent}` : 'none',
       }}
     >
+      <Handle
+        type="target"
+        position={Position.Left}
+        style={{
+          width: 9,
+          height: 9,
+          backgroundColor: theme.colors.textMuted,
+          border: `2px solid ${theme.colors.surface}`,
+        }}
+      />
       <div style={{ fontSize: '24px', marginBottom: theme.spacing.xs }}>
         {data.icon}
       </div>
@@ -251,6 +367,16 @@ function CustomNode({ data }: { data: any }) {
       >
         {data.nodeType}
       </div>
+      <Handle
+        type="source"
+        position={Position.Right}
+        style={{
+          width: 9,
+          height: 9,
+          backgroundColor: theme.colors.accent,
+          border: `2px solid ${theme.colors.surface}`,
+        }}
+      />
     </motion.div>
   );
 }

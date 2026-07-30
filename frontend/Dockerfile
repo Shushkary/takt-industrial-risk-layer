@@ -19,6 +19,8 @@ COPY . .
 # Для единого origin через nginx-прокси передайте пустую строку или относительный путь.
 ARG VITE_TAKT_API_BASE_URL=http://localhost:8090
 ENV VITE_TAKT_API_BASE_URL=${VITE_TAKT_API_BASE_URL}
+ARG VITE_TAKT_APP_BASE=/
+ENV VITE_TAKT_APP_BASE=${VITE_TAKT_APP_BASE}
 
 # Сборка production build
 RUN npm run build

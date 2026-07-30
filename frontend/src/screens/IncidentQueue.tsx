@@ -1,18 +1,30 @@
-// Очередь инцидентов с SSE, фильтрами и keyboard shortcuts
-
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { format } from 'date-fns';
 import { fetchCases, subscribeToUpdates } from '../api/client';
-import { useCaseStore } from '../stores/caseStore';
 import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
+import { useCaseStore } from '../stores/caseStore';
 import { theme } from '../styles/theme';
 import type { Case } from '../types/api';
-import { format } from 'date-fns';
+
+const severityMeta: Record<Case['severity'], { label: string; code: string; color: string }> = {
+  critical: { label: 'Критический', code: 'Critical', color: theme.colors.critical },
+  high: { label: 'Высокий', code: 'High', color: theme.colors.high },
+  medium: { label: 'Средний', code: 'Medium', color: theme.colors.medium },
+  low: { label: 'Низкий', code: 'Low', color: theme.colors.low },
+};
+
+const statusMeta: Record<Case['status'], { label: string; color: string }> = {
+  new: { label: 'Новый', color: theme.colors.new },
+  investigating: { label: 'В работе', color: theme.colors.investigating },
+  resolved: { label: 'Закрыт', color: theme.colors.resolved },
+};
 
 export function IncidentQueue() {
   const navigate = useNavigate();
+  const reduceMotion = useReducedMotion();
   const {
     filters,
     toggleSeverityFilter,
@@ -20,301 +32,224 @@ export function IncidentQueue() {
     clearFilters,
     focusedIndex,
   } = useCaseStore();
-  
   const [liveCases, setLiveCases] = useState<Case[]>([]);
-  
-  // Начальная загрузка кейсов
+
   const { data: initialCases, isLoading } = useQuery({
     queryKey: ['cases'],
     queryFn: fetchCases,
   });
-  
-  // SSE подписка на обновления
+
   useEffect(() => {
-    const unsubscribe = subscribeToUpdates((updatedCase) => {
-      setLiveCases((prev) => {
-        const index = prev.findIndex((c) => c.id === updatedCase.id);
-        if (index >= 0) {
-          // Обновление существующего
-          const newCases = [...prev];
-          newCases[index] = updatedCase;
-          return newCases;
-        } else {
-          // Новый кейс
-          return [updatedCase, ...prev];
-        }
+    return subscribeToUpdates((updatedCase) => {
+      setLiveCases((previous) => {
+        const index = previous.findIndex((item) => item.id === updatedCase.id);
+        if (index < 0) return [updatedCase, ...previous];
+        const next = [...previous];
+        next[index] = updatedCase;
+        return next;
       });
     });
-    
-    return unsubscribe;
   }, []);
-  
-  // Объединение начальных и live кейсов
-  const allCases = liveCases.length > 0 ? liveCases : initialCases || [];
-  
-  // Фильтрация
-  const filteredCases = allCases.filter((c) => {
-    if (filters.severity && !filters.severity.includes(c.severity)) return false;
-    if (filters.status && !filters.status.includes(c.status)) return false;
-    return true;
-  });
-  
-  // Сортировка по риску (severity desc → timestamp desc)
-  const sortedCases = [...filteredCases].sort((a, b) => {
+
+  const allCases = useMemo(() => {
+    const byId = new Map((initialCases ?? []).map((item) => [item.id, item]));
+    liveCases.forEach((item) => byId.set(item.id, item));
+    return Array.from(byId.values());
+  }, [initialCases, liveCases]);
+  const sortedCases = useMemo(() => {
     const severityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
-    const severityDiff = severityOrder[b.severity] - severityOrder[a.severity];
-    if (severityDiff !== 0) return severityDiff;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
-  
-  const getSeverityColor = (severity: Case['severity']) => {
-    switch (severity) {
-      case 'critical':
-        return theme.colors.critical;
-      case 'high':
-        return theme.colors.high;
-      case 'medium':
-        return theme.colors.medium;
-      case 'low':
-        return theme.colors.low;
-    }
-  };
-  
-  const getStatusColor = (status: Case['status']) => {
-    switch (status) {
-      case 'new':
-        return theme.colors.new;
-      case 'investigating':
-        return theme.colors.investigating;
-      case 'resolved':
-        return theme.colors.resolved;
-    }
-  };
-  
-  const getStatusLabel = (status: Case['status']) => {
-    switch (status) {
-      case 'new':
-        return 'Новый';
-      case 'investigating':
-        return 'В работе';
-      case 'resolved':
-        return 'Закрыт';
-    }
-  };
-  
+    return allCases
+      .filter((item) => {
+        if (filters.severity && !filters.severity.includes(item.severity)) return false;
+        if (filters.status && !filters.status.includes(item.status)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const bySeverity = severityOrder[b.severity] - severityOrder[a.severity];
+        return bySeverity || new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+  }, [allCases, filters]);
+
+  const criticalCount = allCases.filter((item) => item.severity === 'critical').length;
+  const activeCount = allCases.filter((item) => item.status === 'investigating').length;
+  const newCount = allCases.filter((item) => item.status === 'new').length;
+
   return (
-    <div
-      style={{
-        padding: theme.spacing.xl,
-        minHeight: '100vh',
-        backgroundColor: theme.colors.background,
-      }}
-    >
-      {/* Заголовок и фильтры */}
-      <div style={{ marginBottom: theme.spacing.xl }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: theme.spacing.lg }}>
-          <h1 style={{ fontSize: theme.typography.fontSize.xl }}>
-            Очередь инцидентов
-          </h1>
-          <a
-            href="/compare"
-            onClick={(e) => { e.preventDefault(); navigate('/compare'); }}
-            style={{
-              color: theme.colors.accent,
-              textDecoration: 'none',
-              border: `1px solid ${theme.colors.border}`,
-              padding: '8px 14px',
-              borderRadius: theme.borderRadius.md,
-              fontSize: theme.typography.fontSize.sm,
-            }}
-          >
-            ⏱ Сравнение: ручной режим vs ТАКТ
-          </a>
+    <main className="app-frame">
+      <AppChrome />
+
+      <header className="page-hero">
+        <div>
+          <div className="eyebrow">Industrial SOC · incident triage</div>
+          <h1 className="page-title">Очередь инцидентов</h1>
+          <p className="page-lede">
+            Приоритизация событий промышленного сегмента по контекстному риску,
+            корреляции и влиянию на технологический процесс.
+          </p>
         </div>
-        
-        {/* Фильтры-чипы */}
-        <div style={{ display: 'flex', gap: theme.spacing.md, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'center' }}>
-            <span style={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSize.sm }}>
-              Severity:
-            </span>
-            {(['critical', 'high', 'medium', 'low'] as const).map((sev) => (
-              <FilterChip
-                key={sev}
-                label={sev}
-                active={filters.severity?.includes(sev) || false}
-                color={getSeverityColor(sev)}
-                onClick={() => toggleSeverityFilter(sev)}
-              />
-            ))}
-          </div>
-          
-          <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'center' }}>
-            <span style={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSize.sm }}>
-              Статус:
-            </span>
-            {(['new', 'investigating', 'resolved'] as const).map((status) => (
-              <FilterChip
-                key={status}
-                label={getStatusLabel(status)}
-                active={filters.status?.includes(status) || false}
-                color={getStatusColor(status)}
-                onClick={() => toggleStatusFilter(status)}
-              />
-            ))}
-          </div>
-          
-          {(filters.severity || filters.status) && (
-            <button
-              onClick={clearFilters}
-              style={{
-                padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-                backgroundColor: 'transparent',
-                color: theme.colors.textSecondary,
-                border: `1px solid ${theme.colors.border}`,
-                borderRadius: theme.borderRadius.sm,
-                cursor: 'pointer',
-                fontSize: theme.typography.fontSize.sm,
-              }}
-            >
-              Сбросить
-            </button>
-          )}
-        </div>
-      </div>
-      
-      {/* Карточки кейсов */}
-      {isLoading && (
-        <div style={{ color: theme.colors.textMuted }}>Загрузка...</div>
-      )}
-      
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-          gap: theme.spacing.lg,
-        }}
-      >
-        <AnimatePresence>
-          {sortedCases.map((caseItem, index) => (
-            <motion.div
-              key={caseItem.id}
-              layout
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.3 }}
-              onClick={() => navigate(`/case/${caseItem.id}`)}
-              style={{
-                padding: theme.spacing.lg,
-                backgroundColor: theme.colors.surface,
-                borderRadius: theme.borderRadius.md,
-                border: `2px solid ${
-                  focusedIndex === index ? theme.colors.accent : theme.colors.border
-                }`,
-                cursor: 'pointer',
-                transition: theme.transitions.fast,
-              }}
-              whileHover={{ scale: 1.02 }}
-            >
-              {/* Severity badge */}
-              <div
-                style={{
-                  display: 'inline-block',
-                  padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-                  borderRadius: theme.borderRadius.sm,
-                  backgroundColor: getSeverityColor(caseItem.severity) + '33',
-                  color: getSeverityColor(caseItem.severity),
-                  fontWeight: 600,
-                  fontSize: theme.typography.fontSize.xs,
-                  textTransform: 'uppercase',
-                  marginBottom: theme.spacing.sm,
-                }}
-              >
-                {caseItem.severity}
-              </div>
-              
-              {/* ID кейса */}
-              <div style={{ fontWeight: 600, marginBottom: theme.spacing.sm }}>
-                Кейс #{caseItem.id.slice(0, 8)}
-              </div>
-              
-              {/* Статус */}
-              <div
-                style={{
-                  fontSize: theme.typography.fontSize.sm,
-                  color: getStatusColor(caseItem.status),
-                  marginBottom: theme.spacing.sm,
-                }}
-              >
-                {getStatusLabel(caseItem.status)}
-              </div>
-              
-              {/* Метаданные */}
-              <div
-                style={{
-                  fontSize: theme.typography.fontSize.xs,
-                  color: theme.colors.textMuted,
-                }}
-              >
-                Создан: {format(new Date(caseItem.created_at), 'dd.MM.yyyy HH:mm')}
-              </div>
-              
-              {/* Находки */}
-              {caseItem.findings.length > 0 && (
-                <div
-                  style={{
-                    marginTop: theme.spacing.sm,
-                    fontSize: theme.typography.fontSize.xs,
-                    color: theme.colors.textSecondary,
-                  }}
-                >
-                  Находок: {caseItem.findings.length}
-                </div>
-              )}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-      
-      {sortedCases.length === 0 && !isLoading && (
-        <div
-          style={{
-            textAlign: 'center',
-            color: theme.colors.textMuted,
-            marginTop: theme.spacing.xl,
+        <a
+          className="primary-link"
+          href={`${import.meta.env.BASE_URL}compare`}
+          onClick={(event) => {
+            event.preventDefault();
+            navigate('/compare');
           }}
         >
-          Нет кейсов, соответствующих фильтрам
+          Сравнить режимы <span aria-hidden="true">→</span>
+        </a>
+      </header>
+
+      <section className="summary-grid" aria-label="Сводка очереди">
+        <SummaryItem label="Всего кейсов" value={String(allCases.length)} note="Синтетический стенд" />
+        <SummaryItem label="Критические" value={String(criticalCount)} note="Требуют немедленного triage" color={theme.colors.critical} />
+        <SummaryItem label="В работе" value={String(activeCount)} note="Назначены оператору" color={theme.colors.investigating} />
+        <SummaryItem label="Новые" value={String(newCount)} note="SSE-поток активен" color={theme.colors.accent} />
+      </section>
+
+      <section className="filter-panel" aria-label="Фильтры очереди">
+        <div className="filter-group">
+          <span className="filter-label">Серьёзность</span>
+          {(Object.keys(severityMeta) as Case['severity'][]).map((severity) => (
+            <FilterChip
+              key={severity}
+              label={severityMeta[severity].label}
+              active={filters.severity?.includes(severity) ?? false}
+              color={severityMeta[severity].color}
+              onClick={() => toggleSeverityFilter(severity)}
+            />
+          ))}
         </div>
+
+        <div className="filter-group">
+          <span className="filter-label">Состояние</span>
+          {(Object.keys(statusMeta) as Case['status'][]).map((status) => (
+            <FilterChip
+              key={status}
+              label={statusMeta[status].label}
+              active={filters.status?.includes(status) ?? false}
+              color={statusMeta[status].color}
+              onClick={() => toggleStatusFilter(status)}
+            />
+          ))}
+        </div>
+
+        {(filters.severity || filters.status) && (
+          <button className="filter-reset" type="button" onClick={clearFilters}>
+            Сбросить фильтры
+          </button>
+        )}
+      </section>
+
+      {isLoading && <div className="empty-state">Загрузка очереди…</div>}
+
+      <section className="incident-grid" aria-label="Кейсы">
+        <AnimatePresence>
+          {sortedCases.map((item, index) => {
+            const severity = severityMeta[item.severity];
+            const status = statusMeta[item.status];
+            const risk = Math.round(item.risk_score * 100);
+
+            return (
+              <motion.button
+                className={`incident-card${focusedIndex === index ? ' is-focused' : ''}`}
+                key={item.id}
+                type="button"
+                layout={!reduceMotion}
+                initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
+                whileHover={reduceMotion ? undefined : { y: -2 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => navigate(`/case/${item.id}`)}
+                aria-label={`${severity.label}: ${item.title}. Риск ${risk} из 100`}
+                style={{
+                  '--severity-color': severity.color,
+                  '--risk-width': `${risk}%`,
+                } as React.CSSProperties}
+              >
+                <div className="incident-card-top">
+                  <span
+                    className="severity-pill"
+                    style={{ '--severity-color': severity.color } as React.CSSProperties}
+                  >
+                    {severity.code}
+                  </span>
+                  <span className="risk-score">TAKT Risk <strong>{risk}</strong>/100</span>
+                </div>
+
+                <h2 className="incident-title">{item.title}</h2>
+                <div className="incident-id">{item.id}</div>
+                <div className="risk-track" aria-hidden="true"><span /></div>
+
+                <div className="incident-meta">
+                  <span
+                    className="status-pill"
+                    style={{ '--status-color': status.color } as React.CSSProperties}
+                  >
+                    {status.label}
+                  </span>
+                  <span>{format(new Date(item.updated_at), 'dd.MM · HH:mm')}</span>
+                </div>
+
+                <div className="incident-meta" style={{ marginTop: 10 }}>
+                  <span>{item.findings.length ? `${item.findings.length} находок` : 'Находок нет'}</span>
+                  <span>{item.severity === 'critical' ? 'MITRE ATT&CK for ICS' : 'Правило SIEM'}</span>
+                </div>
+              </motion.button>
+            );
+          })}
+        </AnimatePresence>
+      </section>
+
+      {sortedCases.length === 0 && !isLoading && (
+        <div className="empty-state">По выбранным фильтрам кейсов нет.</div>
       )}
-      
-      {/* Keyboard shortcuts (j/k/Enter) */}
+
       <KeyboardShortcuts cases={sortedCases} />
-      
-      {/* Подсказка */}
-      <div
-        style={{
-          position: 'fixed',
-          bottom: theme.spacing.lg,
-          right: theme.spacing.lg,
-          padding: theme.spacing.md,
-          backgroundColor: theme.colors.surface,
-          borderRadius: theme.borderRadius.md,
-          fontSize: theme.typography.fontSize.xs,
-          color: theme.colors.textMuted,
-          border: `1px solid ${theme.colors.border}`,
-        }}
-      >
-        <kbd style={{ padding: '2px 6px', backgroundColor: theme.colors.background, borderRadius: '3px' }}>j</kbd> / 
-        <kbd style={{ padding: '2px 6px', backgroundColor: theme.colors.background, borderRadius: '3px' }}>k</kbd> — навигация,{' '}
-        <kbd style={{ padding: '2px 6px', backgroundColor: theme.colors.background, borderRadius: '3px' }}>Enter</kbd> — открыть
+
+      <footer className="queue-footer">
+        <span>TAKT PT · демонстрационная среда · IEC 60870-5-104</span>
+        <span><kbd>J</kbd> <kbd>K</kbd> навигация · <kbd>Enter</kbd> открыть кейс</span>
+      </footer>
+    </main>
+  );
+}
+
+function AppChrome() {
+  return (
+    <div className="app-chrome">
+      <div className="brand-lockup">
+        <div className="brand-mark" aria-hidden="true">T</div>
+        <div>
+          <div className="brand-name">TAKT Industrial Risk Layer</div>
+          <div className="brand-caption">Operator workspace</div>
+        </div>
       </div>
+      <div className="system-state"><span>Стенд работает</span></div>
     </div>
   );
 }
 
-// Фильтр-чип компонент
+function SummaryItem({
+  label,
+  value,
+  note,
+  color,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  color?: string;
+}) {
+  return (
+    <div className="summary-item">
+      <div className="summary-label">{label}</div>
+      <div className="summary-value" style={color ? { color } : undefined}>{value}</div>
+      <div className="summary-note">{note}</div>
+    </div>
+  );
+}
+
 function FilterChip({
   label,
   active,
@@ -327,22 +262,14 @@ function FilterChip({
   onClick: () => void;
 }) {
   return (
-    <motion.button
-      whileTap={{ scale: 0.95 }}
+    <button
+      className="filter-chip"
+      type="button"
+      aria-pressed={active}
       onClick={onClick}
-      style={{
-        padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-        backgroundColor: active ? color + '33' : 'transparent',
-        color: active ? color : theme.colors.textSecondary,
-        border: `1px solid ${active ? color : theme.colors.border}`,
-        borderRadius: theme.borderRadius.sm,
-        cursor: 'pointer',
-        fontSize: theme.typography.fontSize.sm,
-        fontWeight: active ? 600 : 400,
-        transition: theme.transitions.fast,
-      }}
+      style={{ '--chip-color': color } as React.CSSProperties}
     >
       {label}
-    </motion.button>
+    </button>
   );
 }

@@ -9,10 +9,12 @@ import { Comparison } from './screens/Comparison';
 import { cssVariables } from './styles/theme';
 
 export function App() {
+  const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
+
   return (
     <QueryClientProvider client={queryClient}>
       <style>{cssVariables}</style>
-      <BrowserRouter>
+      <BrowserRouter basename={basename}>
         <Routes>
           <Route path="/" element={<IncidentQueue />} />
           <Route path="/case/:caseId" element={<CaseWorkbench />} />

@@ -1,269 +1,424 @@
-// Экран «Сравнение»: полностью ручной режим vs режим ТАКТ.
-// Метрика проекта — время обработки данных оператором.
-
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
-  fetchRawEvents,
+  fetchAttackChain,
   fetchBenchmark,
   fetchCaseById,
-  fetchAttackChain,
   fetchEntityBaseline,
+  fetchRawEvents,
 } from '../api/client';
 import { theme } from '../styles/theme';
 
 const CHAIN_CASE_ID = 'CASE-2026-0731';
+const ATTACK_TECHNIQUES = [
+  { id: 'T0840', label: 'Network Connection Enumeration' },
+  { id: 'T0859', label: 'Valid Accounts' },
+  { id: 'T0831', label: 'Manipulation of Control' },
+];
 
 function useStopwatch() {
   const [ms, setMs] = useState(0);
   const [running, setRunning] = useState(false);
-  const start = useRef<number>(0);
-  const raf = useRef<number>(0);
+  const start = useRef(0);
+  const frame = useRef(0);
+
   useEffect(() => {
     if (!running) return;
     start.current = performance.now() - ms;
     const tick = () => {
       setMs(performance.now() - start.current);
-      raf.current = requestAnimationFrame(tick);
+      frame.current = requestAnimationFrame(tick);
     };
-    raf.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf.current);
+    frame.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame.current);
+    // The elapsed value is intentionally captured when the timer starts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running]);
+
   return {
     ms,
     running,
-    startSw: () => setRunning(true),
-    stopSw: () => setRunning(false),
-    reset: () => { setRunning(false); setMs(0); },
+    start: () => setRunning(true),
+    stop: () => setRunning(false),
+    reset: () => {
+      setRunning(false);
+      setMs(0);
+    },
   };
 }
 
-function fmt(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const cs = Math.floor((ms % 1000) / 10);
-  return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+function formatStopwatch(ms: number) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const centiseconds = Math.floor((ms % 1000) / 10);
+  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
 }
 
 export function Comparison() {
+  const reduceMotion = useReducedMotion();
   const { data: raw } = useQuery({ queryKey: ['raw'], queryFn: fetchRawEvents });
-  const { data: bench } = useQuery({ queryKey: ['bench'], queryFn: fetchBenchmark });
-  const { data: chainCase } = useQuery({ queryKey: ['case', CHAIN_CASE_ID], queryFn: () => fetchCaseById(CHAIN_CASE_ID) });
-  const { data: chain } = useQuery({ queryKey: ['chain', CHAIN_CASE_ID], queryFn: () => fetchAttackChain(CHAIN_CASE_ID) });
-  const { data: baseline } = useQuery({ queryKey: ['bl', 'host', 'plc-rtu-14'], queryFn: () => fetchEntityBaseline('host', 'plc-rtu-14') });
+  const { data: benchmark } = useQuery({ queryKey: ['bench'], queryFn: fetchBenchmark });
+  const { data: incident } = useQuery({
+    queryKey: ['case', CHAIN_CASE_ID],
+    queryFn: () => fetchCaseById(CHAIN_CASE_ID),
+  });
+  const { data: chain } = useQuery({
+    queryKey: ['chain', CHAIN_CASE_ID],
+    queryFn: () => fetchAttackChain(CHAIN_CASE_ID),
+  });
+  const { data: baseline } = useQuery({
+    queryKey: ['baseline', 'host', 'plc-rtu-14'],
+    queryFn: () => fetchEntityBaseline('host', 'plc-rtu-14'),
+  });
 
-  // Ручной режим: оператор должен найти все ALERT-события среди шума.
   const manual = useStopwatch();
+  const takt = useStopwatch();
   const [found, setFound] = useState<Set<number>>(new Set());
+  const [confirmed, setConfirmed] = useState(false);
   const attackSteps = raw?.attack_step_count ?? 6;
 
   useEffect(() => {
-    if (found.size >= attackSteps && manual.running) manual.stopSw();
+    if (found.size >= attackSteps && manual.running) manual.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [found, attackSteps]);
 
-  // Режим ТАКТ.
-  const takt = useStopwatch();
-  const [confirmed, setConfirmed] = useState(false);
-
-  const c = theme.colors;
-
   const bar = useMemo(() => {
-    if (!bench) return null;
-    const max = bench.result.manual_total_sec;
+    if (!benchmark) return null;
     return {
-      manualPct: 100,
-      taktPct: Math.max(4, (bench.result.takt_total_sec / max) * 100),
+      manual: 100,
+      takt: Math.max(5, (benchmark.result.takt_total_sec / benchmark.result.manual_total_sec) * 100),
     };
-  }, [bench]);
+  }, [benchmark]);
 
   return (
-    <div style={{ minHeight: '100vh', background: c.background, color: c.textPrimary, padding: theme.spacing.lg }}>
-      {/* Шапка */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: theme.spacing.lg }}>
+    <main className="app-frame">
+      <AppChrome />
+
+      <header className="page-hero">
         <div>
-          <h1 style={{ fontSize: 24 }}>Сравнение режимов обработки инцидента</h1>
-          <div style={{ color: c.textSecondary, marginTop: 4 }}>
-            Метрика: <b style={{ color: c.accent }}>время обработки данных оператором</b>. Один и тот же инцидент — цепочка IEC-104.
+          <div className="eyebrow">Operator efficiency benchmark</div>
+          <h1 className="page-title">От сигнала к решению</h1>
+          <p className="page-lede">
+            Один IEC-104 инцидент, два сценария triage. Сравните сырой поток SIEM
+            с контекстом, который ТАКТ собирает в доказуемую цепочку.
+          </p>
+          <div className="standards-row" aria-label="Используемые стандарты">
+            <span className="standard-pill"><strong>MITRE</strong> ATT&amp;CK for ICS</span>
+            <span className="standard-pill"><strong>IEC</strong> 60870-5-104</span>
+            <span className="standard-pill"><strong>WCAG</strong> 2.2 AA</span>
           </div>
         </div>
-        <Link to="/" style={{ color: c.accent, textDecoration: 'none', border: `1px solid ${c.border}`, padding: '8px 14px', borderRadius: 8 }}>
-          ← Очередь инцидентов
+        <Link className="secondary-link" to="/">
+          <span aria-hidden="true">←</span> Вернуться в очередь
         </Link>
-      </div>
+      </header>
 
-      {/* Итоговая метрика (модель) */}
-      {bench && (
-        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, padding: theme.spacing.lg, marginBottom: theme.spacing.lg }}>
-          <div style={{ display: 'flex', gap: theme.spacing.xl, flexWrap: 'wrap', marginBottom: theme.spacing.md }}>
-            <Metric label="🖐️ Ручной режим" value={bench.result.manual_human} color={c.critical} />
-            <Metric label="⚡ Режим ТАКТ" value={bench.result.takt_human} color={c.success} />
-            <Metric label="Экономия" value={bench.result.seconds_saved_human} color={c.accent} />
-            <Metric label="Ускорение" value={`×${bench.result.speedup_x}`} color={c.medium} />
+      {benchmark && (
+        <section className="metric-shell" aria-label="Итоговая метрика">
+          <div className="metric-grid">
+            <Metric label="Ручной triage" value={benchmark.result.manual_human} color={theme.colors.critical} note="Сырой поток SIEM" />
+            <Metric label="Режим ТАКТ" value={benchmark.result.takt_human} color={theme.colors.success} note="Коррелированный кейс" />
+            <Metric label="Экономия" value={benchmark.result.seconds_saved_human} color={theme.colors.accent} note="На один инцидент" />
+            <Metric label="Ускорение" value={`×${benchmark.result.speedup_x}`} color={theme.colors.medium} note="По модели стенда" />
           </div>
+
           {bar && (
-            <div style={{ display: 'grid', gap: 8 }}>
-              <BarRow label="Ручной" pct={bar.manualPct} color={c.critical} text={bench.result.manual_human} />
-              <BarRow label="ТАКТ" pct={bar.taktPct} color={c.success} text={bench.result.takt_human} />
+            <div className="comparison-bars" aria-label="Сравнение длительности">
+              <BarRow label="Вручную" width={bar.manual} value={benchmark.result.manual_human} color={theme.colors.critical} />
+              <BarRow label="ТАКТ" width={bar.takt} value={benchmark.result.takt_human} color={theme.colors.success} />
             </div>
           )}
-          <div style={{ color: c.textMuted, fontSize: 12, marginTop: 8 }}>
-            Оценка параметрической модели ({bench.dataset.raw_events_total} событий в потоке,
-            {' '}{bench.dataset.attack_events} — реальная атака, {bench.dataset.sources} источника).
-            Ниже — интерактивный секундомер, чтобы измерить фактическое время на тех же данных стенда.
-          </div>
-        </div>
+
+          <p className="model-note">
+            Параметрическая модель: {benchmark.dataset.raw_events_total} событий,
+            из них {benchmark.dataset.attack_events} относятся к атаке; источников — {benchmark.dataset.sources}.
+            Интерактивные таймеры ниже измеряют фактическое время оператора на том же наборе.
+          </p>
+        </section>
       )}
 
-      {/* Две панели */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: theme.spacing.lg }}>
-        {/* ЛЕВАЯ: РУЧНОЙ РЕЖИМ */}
-        <Panel title="Полностью ручной режим" accent={c.critical}>
-          <p style={{ color: c.textSecondary, fontSize: 13, marginBottom: 8 }}>
-            Сырой нескоррелированный поток из SIEM. Найдите все события атаки (уровень <b style={{ color: c.critical }}>ALERT/NOTICE</b>)
-            среди шума — как это делается вручную. Найдено: <b>{found.size}</b> / {attackSteps}.
+      <section className="mode-grid" aria-label="Сравнение рабочих режимов">
+        <ModePanel
+          kicker="Без корреляции"
+          title="Полностью ручной режим"
+          color={theme.colors.critical}
+          badge={`${found.size} / ${attackSteps} найдено`}
+        >
+          <p className="panel-description">
+            Найдите шесть связанных событий среди шума. Уровень важности обозначен
+            текстом и цветом; каждое событие доступно с клавиатуры.
           </p>
-          <StopwatchBar sw={manual} onStart={() => { setFound(new Set()); manual.reset(); manual.startSw(); }} done={found.size >= attackSteps} />
-          <div style={{ height: 420, overflowY: 'auto', background: '#141414', border: `1px solid ${c.border}`, borderRadius: 8, padding: 8, fontFamily: 'monospace', fontSize: 12 }}>
-            {(raw?.items ?? []).map((e) => {
-              const isFound = e.attack_step != null && found.has(e.attack_step);
-              const clickable = manual.running && e.is_attack;
+          <Stopwatch
+            stopwatch={manual}
+            done={found.size >= attackSteps}
+            onStart={() => {
+              setFound(new Set());
+              manual.reset();
+              manual.start();
+            }}
+          />
+
+          <div className="event-console" aria-label="Сырой поток событий">
+            {(raw?.items ?? []).map((event) => {
+              const foundEvent = event.attack_step != null && found.has(event.attack_step);
+              const actionable = manual.running && event.is_attack;
+              const eventColor = event.level === 'ALERT'
+                ? theme.colors.critical
+                : event.level === 'NOTICE'
+                  ? theme.colors.medium
+                  : theme.colors.textMuted;
+
               return (
-                <div
-                  key={e.id}
+                <button
+                  className={`event-row${foundEvent ? ' is-found' : ''}`}
+                  key={event.id}
+                  type="button"
+                  disabled={!actionable}
                   onClick={() => {
-                    if (clickable && e.attack_step != null) setFound((s) => new Set(s).add(e.attack_step!));
+                    if (event.attack_step != null) {
+                      setFound((current) => new Set(current).add(event.attack_step!));
+                    }
                   }}
-                  style={{
-                    padding: '2px 6px',
-                    marginBottom: 1,
-                    borderRadius: 3,
-                    cursor: clickable ? 'pointer' : 'default',
-                    color: e.level === 'ALERT' ? c.critical : e.level === 'NOTICE' ? c.medium : c.textMuted,
-                    background: isFound ? 'rgba(68,255,136,0.15)' : 'transparent',
-                    outline: isFound ? `1px solid ${c.success}` : 'none',
-                  }}
+                  style={{ '--event-color': eventColor } as React.CSSProperties}
+                  aria-label={`${event.ts.slice(11, 19)}, ${event.source_class}, ${event.level}, ${event.message}`}
                 >
-                  <span style={{ color: c.textMuted }}>{e.ts.slice(11, 19)}</span>{' '}
-                  <span style={{ color: c.accent }}>{e.source_class.padEnd(8)}</span>{' '}
-                  [{e.level}] {e.message}
-                </div>
+                  <span className="event-time">{event.ts.slice(11, 19)}</span>
+                  <span className="event-source">{event.source_class}</span>
+                  <span className="event-level">{event.level}</span>
+                  <span className="event-message">{foundEvent ? '✓ ' : ''}{event.message}</span>
+                </button>
               );
             })}
           </div>
-          {bench && <Breakdown data={bench.manual.breakdown} color={c.critical} />}
-        </Panel>
+          {benchmark && <Breakdown data={benchmark.manual.breakdown} color={theme.colors.critical} />}
+        </ModePanel>
 
-        {/* ПРАВАЯ: РЕЖИМ ТАКТ */}
-        <Panel title="Режим ТАКТ" accent={c.success}>
-          <p style={{ color: c.textSecondary, fontSize: 13, marginBottom: 8 }}>
-            Готовый коррелированный кейс: XAI-резюме, граф атаки и baseline сущности. Проверьте и подтвердите.
+        <ModePanel
+          kicker="Context-assisted"
+          title="Режим ТАКТ"
+          color={theme.colors.success}
+          badge={confirmed ? 'Подтверждено' : 'Готов к triage'}
+        >
+          <p className="panel-description">
+            Коррелированный кейс объединяет объяснение, технику ATT&amp;CK,
+            причинную цепочку и отклонение от baseline.
           </p>
-          <StopwatchBar sw={takt} onStart={() => { setConfirmed(false); takt.reset(); takt.startSw(); }} done={confirmed} />
-          <div style={{ height: 420, overflowY: 'auto', background: '#141414', border: `1px solid ${c.border}`, borderRadius: 8, padding: 12 }}>
-            {chainCase && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ color: c.critical, fontWeight: 700 }}>{chainCase.id} · {chainCase.severity.toUpperCase()}</div>
-                <div style={{ fontWeight: 600, marginTop: 2 }}>{(chainCase as any).title}</div>
-                <div style={{ color: c.textSecondary, fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>
-                  <b style={{ color: c.accent }}>XAI:</b> {(chainCase as any).xai_summary}
+          <Stopwatch
+            stopwatch={takt}
+            done={confirmed}
+            onStart={() => {
+              setConfirmed(false);
+              takt.reset();
+              takt.start();
+            }}
+          />
+
+          <div className="case-console">
+            {incident && (
+              <>
+                <div className="case-identity">
+                  <span
+                    className="severity-pill"
+                    style={{ '--severity-color': theme.colors.critical } as React.CSSProperties}
+                  >
+                    Critical
+                  </span>
+                  <span className="incident-id">{incident.id}</span>
                 </div>
-              </div>
+                <h2 className="case-title">{incident.title}</h2>
+                <div className="xai-callout">
+                  <strong>XAI · почему это инцидент</strong><br />
+                  {incident.xai_summary}
+                </div>
+              </>
             )}
+
+            <div className="section-label">MITRE ATT&amp;CK for ICS · техники</div>
+            <div className="standards-row">
+              {ATTACK_TECHNIQUES.map((technique) => (
+                <span className="technique-pill" key={technique.id} title={technique.label}>
+                  <strong>{technique.id}</strong> {technique.label}
+                </span>
+              ))}
+            </div>
+
             {chain && chain.edges.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 4 }}>ЦЕПОЧКА АТАКИ (корреляция автоматом)</div>
-                {chain.edges.map((ed, i) => (
-                  <motion.div key={ed.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                    style={{ fontSize: 12, padding: '4px 8px', borderLeft: `2px solid ${c.accent}`, marginBottom: 4, background: c.surface, borderRadius: 4 }}>
-                    <b>{ed.source.split(':')[1]}</b> → <b>{ed.target.split(':')[1]}</b>
-                    <div style={{ color: c.textSecondary }}>{ed.correlation_reason}</div>
-                  </motion.div>
-                ))}
-              </div>
+              <>
+                <div className="section-label">Доказуемая цепочка корреляции</div>
+                <div className="attack-chain">
+                  {chain.edges.map((edge, index) => (
+                    <motion.div
+                      className="attack-step"
+                      data-step={index + 1}
+                      key={edge.id}
+                      initial={reduceMotion ? false : { opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: reduceMotion ? 0 : index * 0.04 }}
+                    >
+                      <strong>{edge.source.split(':')[1]} → {edge.target.split(':')[1]}</strong>
+                      <span>{edge.correlation_reason}</span>
+                    </motion.div>
+                  ))}
+                </div>
+              </>
             )}
+
             {baseline && (
-              <div>
-                <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 4 }}>BASELINE plc-rtu-14 (z-score, Welford)</div>
-                <Sparkline values={baseline.z_scores} color={c.medium} />
-              </div>
+              <>
+                <div className="section-label">Behavior baseline · plc-rtu-14 · z-score</div>
+                <Sparkline values={baseline.z_scores} color={theme.colors.medium} />
+              </>
             )}
           </div>
+
           <button
+            className="confirm-button"
+            type="button"
             disabled={!takt.running || confirmed}
-            onClick={() => { setConfirmed(true); takt.stopSw(); }}
-            style={{
-              marginTop: 10, width: '100%', padding: '10px', borderRadius: 8, border: 'none',
-              background: !takt.running || confirmed ? c.border : c.success,
-              color: !takt.running || confirmed ? c.textMuted : '#0a0a0a',
-              fontWeight: 700, cursor: !takt.running || confirmed ? 'default' : 'pointer',
+            onClick={() => {
+              setConfirmed(true);
+              takt.stop();
             }}
           >
-            {confirmed ? '✓ Инцидент подтверждён' : 'Подтвердить инцидент'}
+            {confirmed ? 'Инцидент подтверждён ✓' : 'Подтвердить инцидент'}
           </button>
-          {bench && <Breakdown data={bench.takt.breakdown} color={c.success} />}
-        </Panel>
+          {benchmark && <Breakdown data={benchmark.takt.breakdown} color={theme.colors.success} />}
+        </ModePanel>
+      </section>
+    </main>
+  );
+}
+
+function AppChrome() {
+  return (
+    <div className="app-chrome">
+      <div className="brand-lockup">
+        <div className="brand-mark" aria-hidden="true">T</div>
+        <div>
+          <div className="brand-name">TAKT Industrial Risk Layer</div>
+          <div className="brand-caption">Operator workspace</div>
+        </div>
       </div>
+      <div className="system-state"><span>Стенд работает</span></div>
     </div>
   );
 }
 
-function Metric({ label, value, color }: { label: string; value: string; color: string }) {
+function Metric({
+  label,
+  value,
+  note,
+  color,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  color: string;
+}) {
   return (
-    <div>
-      <div style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{label}</div>
-      <div style={{ color, fontSize: 28, fontWeight: 800 }}>{value}</div>
+    <div className="metric-card" style={{ '--metric-color': color } as React.CSSProperties}>
+      <div className="metric-label">{label}</div>
+      <div className="metric-value">{value}</div>
+      <div className="metric-note">{note}</div>
     </div>
   );
 }
 
-function BarRow({ label, pct, color, text }: { label: string; pct: number; color: string; text: string }) {
+function BarRow({
+  label,
+  width,
+  value,
+  color,
+}: {
+  label: string;
+  width: number;
+  value: string;
+  color: string;
+}) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ width: 60, color: theme.colors.textSecondary, fontSize: 13 }}>{label}</div>
-      <div style={{ flex: 1, background: '#141414', borderRadius: 4, overflow: 'hidden', height: 22 }}>
-        <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.4 }}
-          style={{ height: '100%', background: color, display: 'flex', alignItems: 'center', paddingLeft: 8, color: '#0a0a0a', fontSize: 12, fontWeight: 700 }}>
-          {text}
-        </motion.div>
+    <div className="comparison-bar-row">
+      <span className="comparison-bar-label">{label}</span>
+      <div className="comparison-bar-track">
+        <motion.div
+          className="comparison-bar-fill"
+          initial={{ width: 0 }}
+          animate={{ width: `${width}%` }}
+          transition={{ duration: 0.45 }}
+          style={{ '--bar-color': color } as React.CSSProperties}
+        />
       </div>
+      <span className="comparison-bar-value">{value}</span>
     </div>
   );
 }
 
-function Panel({ title, accent, children }: { title: string; accent: string; children: React.ReactNode }) {
+function ModePanel({
+  kicker,
+  title,
+  color,
+  badge,
+  children,
+}: {
+  kicker: string;
+  title: string;
+  color: string;
+  badge: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div style={{ background: theme.colors.surface, border: `1px solid ${theme.colors.border}`, borderRadius: 12, padding: theme.spacing.md }}>
-      <h2 style={{ fontSize: 18, borderLeft: `4px solid ${accent}`, paddingLeft: 10, marginBottom: 10 }}>{title}</h2>
+    <article className="mode-panel" style={{ '--panel-color': color } as React.CSSProperties}>
+      <div className="panel-heading">
+        <div>
+          <div className="panel-kicker">{kicker}</div>
+          <h2 className="panel-title">{title}</h2>
+        </div>
+        <span className="progress-badge">{badge}</span>
+      </div>
       {children}
-    </div>
+    </article>
   );
 }
 
-function StopwatchBar({ sw, onStart, done }: { sw: ReturnType<typeof useStopwatch>; onStart: () => void; done: boolean }) {
-  const c = theme.colors;
+function Stopwatch({
+  stopwatch,
+  onStart,
+  done,
+}: {
+  stopwatch: ReturnType<typeof useStopwatch>;
+  onStart: () => void;
+  done: boolean;
+}) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-      <div style={{ fontFamily: 'monospace', fontSize: 22, fontWeight: 700, color: done ? c.success : c.textPrimary }}>{fmt(sw.ms)}</div>
-      <button onClick={onStart} disabled={sw.running}
-        style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: sw.running ? c.border : c.accent, color: '#fff', cursor: sw.running ? 'default' : 'pointer', fontWeight: 600 }}>
-        {sw.running ? 'Идёт разбор…' : 'Начать разбор'}
+    <div className="stopwatch-row">
+      <div className={`stopwatch-value${done ? ' is-done' : ''}`} aria-live="off">
+        {formatStopwatch(stopwatch.ms)}
+      </div>
+      <button
+        className="action-button primary"
+        type="button"
+        onClick={onStart}
+        disabled={stopwatch.running}
+      >
+        {stopwatch.running ? 'Разбор идёт…' : 'Начать разбор'}
       </button>
-      {done && <span style={{ color: c.success, fontWeight: 700 }}>Готово ✓</span>}
+      {done && <span className="status-pill" style={{ '--status-color': theme.colors.success } as React.CSSProperties}>Готово</span>}
     </div>
   );
 }
 
 function Breakdown({ data, color }: { data: Record<string, number>; color: string }) {
   return (
-    <div style={{ marginTop: 10, fontSize: 12 }}>
-      <div style={{ color: theme.colors.textMuted, marginBottom: 4 }}>Модель времени (сек):</div>
-      {Object.entries(data).map(([k, v]) => (
-        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', color: theme.colors.textSecondary, padding: '1px 0' }}>
-          <span>{k}</span><span style={{ color }}>{v}</span>
+    <div className="breakdown-list" aria-label="Этапы модели времени">
+      {Object.entries(data).map(([label, seconds]) => (
+        <div
+          className="breakdown-row"
+          key={label}
+          style={{ '--breakdown-color': color } as React.CSSProperties}
+        >
+          <span>{label}</span>
+          <span>{seconds} с</span>
         </div>
       ))}
     </div>
@@ -271,22 +426,41 @@ function Breakdown({ data, color }: { data: Record<string, number>; color: strin
 }
 
 function Sparkline({ values, color }: { values: number[]; color: string }) {
-  const w = 320, h = 60, pad = 4;
-  const min = Math.min(...values), max = Math.max(...values);
+  const width = 520;
+  const height = 82;
+  const padding = 8;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const range = max - min || 1;
-  const pts = values.map((v, i) => {
-    const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
-    const y = h - pad - ((v - min) / range) * (h - 2 * pad);
+  const points = values.map((value, index) => {
+    const x = padding + (index / (values.length - 1)) * (width - padding * 2);
+    const y = height - padding - ((value - min) / range) * (height - padding * 2);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
+
   return (
-    <svg width={w} height={h} style={{ background: '#0f0f0f', borderRadius: 4 }}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} />
-      {values.map((v, i) => {
-        const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
-        const y = h - pad - ((v - min) / range) * (h - 2 * pad);
-        const hot = v >= 3;
-        return <circle key={i} cx={x} cy={y} r={hot ? 3 : 1.5} fill={hot ? theme.colors.critical : color} />;
+    <svg
+      className="baseline-chart"
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label="График отклонения поведения PLC от baseline"
+      preserveAspectRatio="none"
+    >
+      <line x1={0} x2={width} y1={height / 2} y2={height / 2} stroke="#38383a" strokeDasharray="4 5" />
+      <polyline points={points} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+      {values.map((value, index) => {
+        const x = padding + (index / (values.length - 1)) * (width - padding * 2);
+        const y = height - padding - ((value - min) / range) * (height - padding * 2);
+        const anomaly = value >= 3;
+        return (
+          <circle
+            key={`${index}-${value}`}
+            cx={x}
+            cy={y}
+            r={anomaly ? 4 : 2}
+            fill={anomaly ? theme.colors.critical : color}
+          />
+        );
       })}
     </svg>
   );

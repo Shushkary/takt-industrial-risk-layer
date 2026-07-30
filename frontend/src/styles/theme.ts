@@ -2,34 +2,36 @@
 
 export const theme = {
   colors: {
-    // Основные цвета
-    background: '#1a1a1a',
-    surface: '#2a2a2a',
-    surfaceHover: '#3a3a3a',
-    border: '#404040',
+    // Apple-style base/elevated dark surfaces.
+    background: '#000000',
+    surface: '#1c1c1e',
+    surfaceElevated: '#2c2c2e',
+    surfaceHover: '#3a3a3c',
+    border: '#38383a',
     
     // Текст
-    textPrimary: '#ffffff',
-    textSecondary: '#b0b0b0',
-    textMuted: '#808080',
+    textPrimary: '#f5f5f7',
+    textSecondary: '#c7c7cc',
+    textMuted: '#8e8e93',
     
-    // Severity levels (WCAG 2.1 AA контрастность ≥ 4.5:1)
-    critical: '#ff4444',
-    high: '#ff9944',
-    medium: '#ffcc44',
-    low: '#4488ff',
+    // Apple system colors adapted for dark appearance.
+    critical: '#ff453a',
+    high: '#ff9f0a',
+    medium: '#ffd60a',
+    low: '#64d2ff',
     
     // Акценты
-    accent: '#00aaff',
-    accentHover: '#0099ee',
-    success: '#44ff88',
-    warning: '#ffaa44',
-    error: '#ff4444',
+    accent: '#0a84ff',
+    accentHover: '#409cff',
+    focus: '#64d2ff',
+    success: '#30d158',
+    warning: '#ff9f0a',
+    error: '#ff453a',
     
     // Состояния
-    new: '#4488ff',
-    investigating: '#ffcc44',
-    resolved: '#44ff88',
+    new: '#0a84ff',
+    investigating: '#ffd60a',
+    resolved: '#30d158',
   },
   
   spacing: {
@@ -41,19 +43,20 @@ export const theme = {
   },
   
   borderRadius: {
-    sm: '4px',
-    md: '8px',
-    lg: '12px',
+    sm: '8px',
+    md: '12px',
+    lg: '16px',
+    xl: '22px',
   },
   
   transitions: {
-    fast: '150ms ease',
-    normal: '300ms ease',
-    slow: '500ms ease',
+    fast: '160ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+    normal: '280ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+    slow: '450ms cubic-bezier(0.2, 0.8, 0.2, 1)',
   },
   
   typography: {
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    fontFamily: '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     fontSize: {
       xs: '12px',
       sm: '14px',
@@ -76,6 +79,7 @@ export const cssVariables = `
 :root {
   --color-background: ${theme.colors.background};
   --color-surface: ${theme.colors.surface};
+  --color-surface-elevated: ${theme.colors.surfaceElevated};
   --color-surface-hover: ${theme.colors.surfaceHover};
   --color-border: ${theme.colors.border};
   
@@ -90,6 +94,7 @@ export const cssVariables = `
   
   --color-accent: ${theme.colors.accent};
   --color-accent-hover: ${theme.colors.accentHover};
+  --color-focus: ${theme.colors.focus};
   --color-success: ${theme.colors.success};
   --color-warning: ${theme.colors.warning};
   --color-error: ${theme.colors.error};
@@ -111,6 +116,9 @@ body {
   background-color: var(--color-background);
   color: var(--color-text-primary);
   line-height: 1.5;
+  color-scheme: dark;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* Поддержка prefers-reduced-motion */

@@ -48,17 +48,27 @@ export function Timeline({ events, width = 800, height = 400 }: TimelineProps) {
     );
   }
   
-  const margin = { top: 20, right: 30, bottom: 120, left: 120 };
-  const innerWidth = width - margin.left - margin.right;
-  const innerHeight = height - margin.top - margin.bottom;
-  const brushHeight = 60;
-  const overviewHeight = innerHeight - brushHeight - 20;
+  const safeWidth = Math.max(width, 640);
+  const margin = { top: 58, right: 36, bottom: 30, left: 120 };
+  const innerWidth = safeWidth - margin.left - margin.right;
+  const brushHeight = 52;
+  const availableHeight = Math.max(180, height - 220);
+  const overviewHeight = Math.min(Math.max(lanes.length * 68, 180), Math.min(420, availableHeight));
+  const svgHeight = margin.top + overviewHeight + brushHeight + 78;
   
   // Временные границы
-  const timeExtent = [
-    Math.min(...events.map((e) => new Date(e.ts).getTime())),
-    Math.max(...events.map((e) => new Date(e.ts).getTime())),
+  const firstTimestamp = Math.min(...events.map((e) => new Date(e.ts).getTime()));
+  const lastTimestamp = Math.max(...events.map((e) => new Date(e.ts).getTime()));
+  const timePadding = Math.max((lastTimestamp - firstTimestamp) * 0.06, 30_000);
+  const timeExtent: [number, number] = [
+    firstTimestamp - timePadding,
+    lastTimestamp + timePadding,
   ];
+  const eventNumbers = new Map(
+    [...events]
+      .sort((left, right) => new Date(left.ts).getTime() - new Date(right.ts).getTime())
+      .map((event, index) => [event.id, index + 1])
+  );
   
   // Шкалы для overview
   const xScaleOverview = scaleTime({
@@ -110,14 +120,49 @@ export function Timeline({ events, width = 800, height = 400 }: TimelineProps) {
   };
   
   return (
-    <div style={{ overflowX: 'auto', backgroundColor: theme.colors.background }}>
-      <svg width={width} height={height}>
+    <div
+      style={{
+        overflowX: 'auto',
+        backgroundColor: theme.colors.background,
+        height: '100%',
+      }}
+    >
+      <svg width={safeWidth} height={svgHeight} role="img" aria-label={`Таймлайн: ${events.length} событий`}>
+        <text
+          x={margin.left}
+          y={22}
+          fontSize={theme.typography.fontSize.md}
+          fontWeight={700}
+          fill={theme.colors.textPrimary}
+        >
+          Цепочка событий
+        </text>
+        <text
+          x={margin.left}
+          y={43}
+          fontSize={theme.typography.fontSize.xs}
+          fill={theme.colors.textMuted}
+        >
+          {events.length} событий · {lanes.length} источников ·{' '}
+          {new Date(firstTimestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+          {' — '}
+          {new Date(lastTimestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+        </text>
         <Group left={margin.left} top={margin.top}>
           {/* Zoom View */}
           <Group>
             {/* Дорожки */}
             {lanes.map(([sourceClass, laneEvents], laneIndex) => (
               <Group key={sourceClass} top={yScaleOverview(laneIndex)}>
+                <line
+                  x1={0}
+                  x2={innerWidth}
+                  y1={yScaleOverview(1) / 2}
+                  y2={yScaleOverview(1) / 2}
+                  stroke={theme.colors.border}
+                  strokeWidth={1}
+                  opacity={0.65}
+                />
                 {/* Подпись дорожки */}
                 <text
                   x={-10}
@@ -141,19 +186,31 @@ export function Timeline({ events, width = 800, height = 400 }: TimelineProps) {
                     const y = yScaleOverview(1) / 2;
                     
                     return (
-                      <circle
+                      <Group
                         key={event.id}
-                        cx={x}
-                        cy={y}
-                        r={5}
-                        fill={getSeverityColor(event.severity)}
-                        stroke={theme.colors.surface}
-                        strokeWidth={2}
+                        left={x}
+                        top={y}
                         style={{ cursor: 'pointer' }}
                         onClick={() => handleEventClick(event)}
                       >
-                        <title>{`${event.source_class} - ${new Date(event.ts).toLocaleString('ru-RU')}`}</title>
-                      </circle>
+                        <circle
+                          r={8}
+                          fill={getSeverityColor(event.severity)}
+                          stroke={theme.colors.background}
+                          strokeWidth={3}
+                        >
+                          <title>{`${event.source_class} — ${new Date(event.ts).toLocaleString('ru-RU')}`}</title>
+                        </circle>
+                        <text
+                          x={13}
+                          y={4}
+                          fontSize={theme.typography.fontSize.xs}
+                          fontWeight={700}
+                          fill={theme.colors.textPrimary}
+                        >
+                          #{eventNumbers.get(event.id)}
+                        </text>
+                      </Group>
                     );
                   })}
               </Group>
@@ -174,7 +231,7 @@ export function Timeline({ events, width = 800, height = 400 }: TimelineProps) {
           </Group>
           
           {/* Brush (overview с выделением) */}
-          <Group top={overviewHeight + 40}>
+          <Group top={overviewHeight + 44}>
             <rect
               width={innerWidth}
               height={brushHeight}

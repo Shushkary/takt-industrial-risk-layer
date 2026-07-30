@@ -6,6 +6,9 @@ export interface Case {
   status: 'new' | 'investigating' | 'resolved';
   created_at: string; // ISO 8601
   updated_at: string;
+  title: string;
+  risk_score: number;
+  xai_summary: string;
   findings: Finding[];
 }
 
