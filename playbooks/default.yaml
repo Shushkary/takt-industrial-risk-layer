@@ -1,0 +1,41 @@
+# Плейбук подсказок аналитику (детерминированный движок PlaybookEngine, без LLM).
+# Формат правила:
+#   - id: уникальный идентификатор правила
+#     condition: {поле CaseState: ожидаемое значение}
+#     recommendation: текст рекомендации аналитику
+#     priority: целочисленный приоритет (больше — важнее)
+#
+# Поля condition сопоставляются с полями CaseState:
+#   severity, status, degraded_sources — сравнение на равенство;
+#   invariant_hits, source_classes — проверка вхождения значения в перечень.
+
+rules:
+  - id: high-severity-escalate
+    condition: {severity: "high"}
+    recommendation: "Эскалировать кейс на L2 и запустить IOC-sweep по затронутым узлам."
+    priority: 100
+
+  - id: brute-force-lock-review
+    condition: {invariant_hits: "brute_force"}
+    recommendation: "Проверить серию неуспешных аутентификаций и согласовать блокировку учётной записи с оператором."
+    priority: 90
+
+  - id: c2-dns-contain
+    condition: {invariant_hits: "c2_external_dns"}
+    recommendation: "Изолировать узел от внешних DNS и передать индикатор во внешние проверки репутации."
+    priority: 85
+
+  - id: degraded-sources-verify
+    condition: {degraded_sources: true}
+    recommendation: "Часть источников деградировала (circuit breaker OPEN): пометить кейс как частично наблюдаемый и перепроверить после восстановления."
+    priority: 70
+
+  - id: ot-lateral-movement
+    condition: {invariant_hits: "lateral_movement", source_classes: "ot"}
+    recommendation: "Зафиксировать перемещение к промышленному сегменту: сверить с матрицей допустимых маршрутов jump-хоста."
+    priority: 80
+
+  - id: new-case-triage
+    condition: {status: "new"}
+    recommendation: "Провести первичную квалификацию: сверить карточки узла и пользователя с базовой линией типичности."
+    priority: 10
