@@ -150,10 +150,22 @@ export async function fetchBenchmark(): Promise<BenchmarkResult> {
 
 // === SSE подписка на обновления кейсов ===
 
-export function subscribeToUpdates(onMessage: (data: Case) => void): () => void {
+export interface SubscribeOptions {
+  onStatus?: (connected: boolean) => void;
+}
+
+export function subscribeToUpdates(
+  onMessage: (data: Case) => void,
+  options?: SubscribeOptions
+): () => void {
   const eventSource = new EventSource(`${API_BASE}/api/v1/stream/cases`);
-  
+
+  eventSource.onopen = () => {
+    options?.onStatus?.(true);
+  };
+
   eventSource.onmessage = (event) => {
+    options?.onStatus?.(true);
     try {
       const data = JSON.parse(event.data);
       onMessage(data);
@@ -161,11 +173,12 @@ export function subscribeToUpdates(onMessage: (data: Case) => void): () => void 
       console.error('Ошибка парсинга SSE сообщения:', error);
     }
   };
-  
+
   eventSource.onerror = (error) => {
+    options?.onStatus?.(false);
     console.error('SSE ошибка подключения:', error);
   };
-  
+
   // Возвращаем функцию отписки
   return () => eventSource.close();
 }

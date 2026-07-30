@@ -9,6 +9,7 @@ import {
   fetchEntityBaseline,
   fetchRawEvents,
 } from '../api/client';
+import { CommandBar } from '../components/CommandBar';
 import { theme } from '../styles/theme';
 
 const CHAIN_CASE_ID = 'CASE-2026-0731';
@@ -93,8 +94,8 @@ export function Comparison() {
   }, [benchmark]);
 
   return (
-    <main className="app-frame">
-      <AppChrome />
+    <main className="console">
+      <CommandBar showClock />
 
       <header className="page-hero">
         <div>
@@ -288,21 +289,6 @@ export function Comparison() {
         </ModePanel>
       </section>
     </main>
-  );
-}
-
-function AppChrome() {
-  return (
-    <div className="app-chrome">
-      <div className="brand-lockup">
-        <div className="brand-mark" aria-hidden="true">T</div>
-        <div>
-          <div className="brand-name">TAKT Industrial Risk Layer</div>
-          <div className="brand-caption">Operator workspace</div>
-        </div>
-      </div>
-      <div className="system-state"><span>Стенд работает</span></div>
-    </div>
   );
 }
 
