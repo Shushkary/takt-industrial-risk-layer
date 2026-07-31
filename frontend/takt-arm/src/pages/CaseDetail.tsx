@@ -90,7 +90,7 @@ const defaultManualPermit = (assetId: string, operation: string): ManualPermitPa
 
 const remediationKindLabels: Record<string, string> = {
   attach_manual_permit: 'Прикрепить ручной наряд',
-  generate_forensic_bundle: 'Сформировать forensic bundle',
+  generate_forensic_bundle: 'Сформировать доказательный пакет',
   ingest_telemetry: 'Загрузить телеметрию',
   rerun_assessment: 'Повторить оценку',
   submit_decision: 'Передать решение оператора',
@@ -468,7 +468,7 @@ export function CaseDetail() {
       setLocalAudit((current) => [
         taktApiConfigured()
           ? `${new Date().toLocaleTimeString('ru-RU')} формальный вердикт подтверждён через API: ${record.next}`
-          : `${new Date().toLocaleTimeString('ru-RU')} локальный демо-вердикт NON-EVIDENCE, не серверная доказательность: ${record.next}`,
+          : `${new Date().toLocaleTimeString('ru-RU')} локальный демо-вердикт без доказательной силы, не серверная доказательность: ${record.next}`,
         ...current,
       ])
       setFormalVerdict(record.next)
@@ -496,7 +496,7 @@ export function CaseDetail() {
       setLocalAudit((current) => [
         taktApiConfigured()
           ? `${new Date().toLocaleTimeString('ru-RU')} решение оператора сохранено через API: ${apiStatus}`
-          : `${new Date().toLocaleTimeString('ru-RU')} локальное демо-решение оператора NON-EVIDENCE, не серверная доказательность: ${apiStatus}`,
+          : `${new Date().toLocaleTimeString('ru-RU')} локальное демо-решение оператора без доказательной силы, не серверная доказательность: ${apiStatus}`,
         ...current,
       ])
     } catch {
@@ -520,7 +520,7 @@ export function CaseDetail() {
       setLocalAudit((current) => [
         taktApiConfigured()
           ? `${new Date().toLocaleTimeString('ru-RU')} дополнительная проверка запрошена через API`
-          : `${new Date().toLocaleTimeString('ru-RU')} локальный демо-запрос дополнительной проверки NON-EVIDENCE, не серверная доказательность`,
+          : `${new Date().toLocaleTimeString('ru-RU')} локальный демо-запрос дополнительной проверки без доказательной силы, не серверная доказательность`,
         ...current,
       ])
     } catch {
@@ -584,7 +584,7 @@ export function CaseDetail() {
       setLocalAudit((current) => [
         taktApiConfigured()
           ? `${new Date().toLocaleTimeString('ru-RU')} ручной наряд прикреплён через API: ${payload.work_order_number}`
-          : `${new Date().toLocaleTimeString('ru-RU')} локальный демо-наряд NON-EVIDENCE, не серверная доказательность: ${payload.work_order_number}`,
+          : `${new Date().toLocaleTimeString('ru-RU')} локальный демо-наряд без доказательной силы, не серверная доказательность: ${payload.work_order_number}`,
         ...current,
       ])
       setManualPermit(defaultManualPermit(displayAsset, displayOperation))
@@ -595,8 +595,8 @@ export function CaseDetail() {
 
   function buildCaseDocument(): string {
     return [
-      'NON-EVIDENCE LOCAL OPERATOR NOTE',
-      'This file is not a forensic bundle, has no root hash, and must not be used as machine-verifiable evidence.',
+      'ЛОКАЛЬНАЯ ЗАМЕТКА ОПЕРАТОРА — БЕЗ ДОКАЗАТЕЛЬНОЙ СИЛЫ',
+      'Файл не является доказательным пакетом, не содержит корневого хеша и не может использоваться как машинно-проверяемое доказательство.',
       '',
       'Паспорт инцидента ТАКТ',
       `Инцидент: ${displayCaseId}`,
@@ -642,7 +642,7 @@ export function CaseDetail() {
     if (!taktApiConfigured()) {
       exportLocalCaseDocument()
       setBundleState('local')
-      setBundleMessage('Backend API не настроен. Скачанный файл является локальной операторской заметкой NON-EVIDENCE, а не forensic bundle.')
+      setBundleMessage('Серверный интерфейс не настроен. Скачанный файл — локальная заметка оператора без доказательной силы, а не доказательный пакет.')
       return
     }
     setBundleState('loading')
@@ -652,7 +652,7 @@ export function CaseDetail() {
       if (!result) {
         exportLocalCaseDocument()
         setBundleState('local')
-        setBundleMessage('Backend API не настроен. Скачанный файл является локальной операторской заметкой NON-EVIDENCE, а не forensic bundle.')
+        setBundleMessage('Серверный интерфейс не настроен. Скачанный файл — локальная заметка оператора без доказательной силы, а не доказательный пакет.')
         return
       }
       const url = URL.createObjectURL(result.blob)
@@ -696,7 +696,7 @@ export function CaseDetail() {
       setBundleVerifyState('verified')
       setBundleVerifyResult(`verify=${String(status)}${rootHash ? ` root=${String(rootHash)}` : ''}`)
       setLocalAudit((current) => [
-        `${new Date().toLocaleTimeString('ru-RU')} forensic ZIP verified through /forensic-bundle/verify`,
+        `${new Date().toLocaleTimeString('ru-RU')} доказательный пакет проверен через /forensic-bundle/verify`,
         ...current,
       ])
     } catch {
@@ -890,7 +890,7 @@ export function CaseDetail() {
           </div>
 
           <aside className="p-3">
-            <h3 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Findings и артефакты</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Находки и артефакты</h3>
             {selectedEntity ? <p className="mt-2 rounded-takt bg-[var(--bg-2)] p-2 font-mono text-[12px] text-[var(--fg-1)]">{selectedEntity}</p> : null}
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Button disabled={quickActionState === 'saving'} onClick={() => void handleQuickFinding()}>+ Finding</Button>
@@ -1188,7 +1188,7 @@ export function CaseDetail() {
                   {bundleState === 'loading'
                     ? 'Получение манифеста...'
                     : bundleState === 'local'
-                      ? 'Backend API не настроен. Доступна только локальная операторская заметка NON-EVIDENCE.'
+                      ? 'Серверный интерфейс не настроен. Доступна только локальная операторская заметка без доказательной силы.'
                       : 'Манифест доказательного пакета недоступен.'}
                 </p>
               )}
@@ -1297,7 +1297,7 @@ export function CaseDetail() {
               disabled={bundleState === 'loading'}
             >
               <FileCheck2 className="h-4 w-4" strokeWidth={1.7} aria-hidden />
-              Скачать серверный forensic ZIP
+              Скачать серверный доказательный пакет
             </Button>
             <Button
               className="mt-2 inline-flex items-center gap-2"
@@ -1309,7 +1309,7 @@ export function CaseDetail() {
               disabled={!downloadedBundle || bundleVerifyState === 'verifying'}
             >
               <FileCheck2 className="h-4 w-4" strokeWidth={1.7} aria-hidden />
-              Проверить серверный forensic ZIP
+              Проверить серверный доказательный пакет
             </Button>
             {bundleVerifyResult ? <p className="mt-2 break-all text-[12px] text-[var(--fg-2)]">{bundleVerifyResult}</p> : null}
             <Button
@@ -1318,20 +1318,20 @@ export function CaseDetail() {
               onClick={exportLocalCaseDocument}
             >
               <FileCheck2 className="h-4 w-4" strokeWidth={1.7} aria-hidden />
-              Локальная заметка NON-EVIDENCE
+              Локальная заметка без доказательной силы
             </Button>
             <Button
               className="mt-2 inline-flex items-center gap-2"
               variant="ghost"
               onClick={() => {
-                setLocalAudit((current) => [`${new Date().toLocaleTimeString('ru-RU')} открыт диалог печати/PDF для локальной операторской заметки NON-EVIDENCE`, ...current])
+                setLocalAudit((current) => [`${new Date().toLocaleTimeString('ru-RU')} открыт диалог печати/PDF для локальной операторской заметки без доказательной силы`, ...current])
                 window.print()
               }}
             >
               <FileCheck2 className="h-4 w-4" strokeWidth={1.7} aria-hidden />
-              Печать/PDF NON-EVIDENCE
+              Печать/PDF без доказательной силы
             </Button>
-            {documentPrepared ? <p className="mt-2 text-[12px] text-[var(--teal-1)]">Локальная заметка NON-EVIDENCE подготовлена. Для машинно-проверяемой доказательности используйте серверный forensic ZIP.</p> : null}
+            {documentPrepared ? <p className="mt-2 text-[12px] text-[var(--teal-1)]">Локальная заметка без доказательной силы подготовлена. Для машинно-проверяемой доказательности используйте серверный доказательный пакет.</p> : null}
           </aside>
         </div>
       </div>

@@ -66,7 +66,16 @@ def correlation_fingerprints(
     rules: Sequence[CorrelationRule],
     hasher: HasherPort,
 ) -> list[str]:
-    """Return candidate keys for rules whose every field is present on the event."""
+    """
+    Return candidate keys for rules whose every field is present on the event.
+
+    Известное ограничение: **bucket_sec** режет по абсолютной сетке `timestamp // bucket_sec`,
+    поэтому цепочка, пересекающая границу окна (09:59:50 → 10:00:10), даёт два ключа и два
+    кейса. Наивное лечение — добавить ключ предыдущего окна — измерено на стенде двух
+    источников и отвергнуто: перекрытие делает связывание транзитивным и склеивает всю
+    историю узла в один кейс (precision 0.083 → 0.005, см. `deploy/stand/README.md`).
+    Корректное решение — окно, привязанное к интервалу кейса, а не к сетке времени.
+    """
     fingerprints: list[str] = []
     for rule in rules:
         values = [_correlation_value(event, field) for field in rule.fields]

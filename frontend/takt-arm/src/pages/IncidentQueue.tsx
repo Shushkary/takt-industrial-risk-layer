@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable'
 import { RiskBadge } from '../components/ui/RiskBadge'
@@ -23,26 +23,26 @@ const filters: Array<IncidentStatus | 'Все'> = ['Все', 'Разбор', 'П
 const apiStatuses = [undefined, 'TRIAGE', 'CONFIRMED', 'FALSE_POSITIVE', 'EXPECTED_BEHAVIOR', 'CLOSED'] as const
 const scenarioTitleById = new Map(demoScenarios.map((scenario) => [scenario.id, scenario.title]))
 const modeLabels: Record<SegmentMode, string> = {
-  NORMAL: 'РЁС‚Р°С‚РЅС‹Р№',
-  DEGRADED: 'Р”РµРіСЂР°РґР°С†РёСЏ',
-  'AIR-GAP': 'РР·РѕР»СЏС†РёСЏ',
-  STORM: 'РџРёРє РЅР°РіСЂСѓР·РєРё',
+  NORMAL: 'Штатный',
+  DEGRADED: 'Деградация',
+  'AIR-GAP': 'Изоляция',
+  STORM: 'Пик нагрузки',
 }
 const phaseLabels: Record<ShiftPhase, string> = {
-  WORK: 'Р Р°Р±РѕС‡Р°СЏ',
-  NIGHT: 'РќРѕС‡СЊ',
-  MAINT: 'РћР±СЃР»СѓР¶РёРІР°РЅРёРµ',
+  WORK: 'Рабочая',
+  NIGHT: 'Ночь',
+  MAINT: 'Обслуживание',
 }
 
 const columns: DataTableColumn<DemoIncident>[] = [
-  { id: 'time', header: 'Р’СЂРµРјСЏ', cell: (row) => row.time },
-  { id: 'node', header: 'РЈР·РµР»', cell: (row) => row.node },
-  { id: 'invariant', header: 'РРЅРІР°СЂРёР°РЅС‚', cell: (row) => row.invariant },
-  { id: 'risk', header: 'РРЅРґРµРєСЃ СЂРёСЃРєР°', align: 'right', cell: (row) => <RiskBadge value={row.risk} /> },
-  { id: 'phase', header: 'Р¤Р°Р·Р°', cell: (row) => row.phase },
-  { id: 'status', header: 'РЎС‚Р°С‚СѓСЃ', cell: (row) => row.status },
-  { id: 'operator', header: 'РћРїРµСЂР°С‚РѕСЂ', cell: (row) => row.operator },
-  { id: 'scenarioId', header: 'РЎС†РµРЅР°СЂРёР№', cell: (row) => scenarioTitleById.get(row.scenarioId) ?? row.scenarioId },
+  { id: 'time', header: 'Время', cell: (row) => row.time },
+  { id: 'node', header: 'Узел', cell: (row) => row.node },
+  { id: 'invariant', header: 'Инвариант', cell: (row) => row.invariant },
+  { id: 'risk', header: 'Индекс риска', align: 'right', cell: (row) => <RiskBadge value={row.risk} /> },
+  { id: 'phase', header: 'Фаза', cell: (row) => row.phase },
+  { id: 'status', header: 'Статус', cell: (row) => row.status },
+  { id: 'operator', header: 'Оператор', cell: (row) => row.operator },
+  { id: 'scenarioId', header: 'Сценарий', cell: (row) => scenarioTitleById.get(row.scenarioId) ?? row.scenarioId },
 ]
 
 function complianceEnabled(mode: ComplianceModeResponse | null): boolean {
@@ -59,7 +59,7 @@ export function IncidentQueue() {
   const [complianceMode, setComplianceMode] = useState<ComplianceModeResponse | null>(null)
   const pageLimit = 10
   const activeScenario = demoScenarios.find((scenario) => scenario.id === scenarioId) ?? demoScenarios[0]
-  const activeScenarioTitle = activeScenario?.title ?? 'РЎС†РµРЅР°СЂРёР№ РЅРµ РІС‹Р±СЂР°РЅ'
+  const activeScenarioTitle = activeScenario?.title ?? 'Сценарий не выбран'
   const strictRows = useMemo(
     () => selectDemoIncidents({ scenarioId, segmentMode, shiftPhase, riskControls }),
     [riskControls, scenarioId, segmentMode, shiftPhase],
@@ -128,20 +128,20 @@ export function IncidentQueue() {
 
   function buildReport(rowsForReport: DemoIncident[]): string {
     const lines = [
-      'NON-EVIDENCE LOCAL UI REPORT',
-      'Этот отчёт сформирован в браузере и не является машинно-проверяемым forensic-артефактом.',
+      'ЛОКАЛЬНЫЙ ОТЧЁТ ИНТЕРФЕЙСА — БЕЗ ДОКАЗАТЕЛЬНОЙ СИЛЫ',
+      'Этот отчёт сформирован в браузере и не является машинно-проверяемым доказательным артефактом.',
       '',
-      'РћС‚С‡С‘С‚ РїРѕ РѕС‡РµСЂРµРґРё РёРЅС†РёРґРµРЅС‚РѕРІ РўРђРљРў',
-      `РЎС†РµРЅР°СЂРёР№: ${activeScenarioTitle}`,
-      `Р РµР¶РёРј СЃРµРіРјРµРЅС‚Р°: ${modeLabels[segmentMode]}`,
-      `Р¤Р°Р·Р°: ${phaseLabels[shiftPhase]}`,
-      `РЎС‚Р°С‚СѓСЃ: ${filter}`,
-      `РРЅС†РёРґРµРЅС‚РѕРІ РІ РѕС‚С‡С‘С‚Рµ: ${rowsForReport.length}`,
-      `РЎСЂРµРґРЅРёР№ РёРЅРґРµРєСЃ СЂРёСЃРєР°: ${formatRisk(averageRisk)}`,
+      'Отчёт по очереди инцидентов ТАКТ',
+      `Сценарий: ${activeScenarioTitle}`,
+      `Режим сегмента: ${modeLabels[segmentMode]}`,
+      `Фаза: ${phaseLabels[shiftPhase]}`,
+      `Статус: ${filter}`,
+      `Инцидентов в отчёте: ${rowsForReport.length}`,
+      `Средний индекс риска: ${formatRisk(averageRisk)}`,
       '',
       ...rowsForReport.map(
         (incident) =>
-          `${incident.time}; ${incident.id}; ${incident.status}; СЂРёСЃРє ${formatRisk(incident.risk)}; ${incident.node}; ${incident.summary}`,
+          `${incident.time}; ${incident.id}; ${incident.status}; риск ${formatRisk(incident.risk)}; ${incident.node}; ${incident.summary}`,
       ),
     ]
     return lines.join('\n')
@@ -149,7 +149,7 @@ export function IncidentQueue() {
 
   function prepareReport() {
     if (reportDisabled) {
-      setReportText('NON-EVIDENCE LOCAL UI REPORT\nCompliance mode блокирует локальные демо-отчёты очереди без backend API.')
+      setReportText('ЛОКАЛЬНЫЙ ОТЧЁТ ИНТЕРФЕЙСА — БЕЗ ДОКАЗАТЕЛЬНОЙ СИЛЫ\nНормативный режим блокирует локальные демо-отчёты очереди без серверного интерфейса.')
       return
     }
     setReportText(buildReport(reportRows))
@@ -157,7 +157,7 @@ export function IncidentQueue() {
 
   function downloadReport() {
     if (reportDisabled) {
-      setReportText('NON-EVIDENCE LOCAL UI REPORT\nCompliance mode блокирует локальные демо-отчёты очереди без backend API.')
+      setReportText('ЛОКАЛЬНЫЙ ОТЧЁТ ИНТЕРФЕЙСА — БЕЗ ДОКАЗАТЕЛЬНОЙ СИЛЫ\nНормативный режим блокирует локальные демо-отчёты очереди без серверного интерфейса.')
       return
     }
     const text = reportText || buildReport(reportRows)
@@ -186,25 +186,25 @@ export function IncidentQueue() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-[20px] font-semibold text-[var(--fg-1)]">РћС‡РµСЂРµРґСЊ РёРЅС†РёРґРµРЅС‚РѕРІ</h1>
+        <h1 className="text-[20px] font-semibold text-[var(--fg-1)]">Очередь инцидентов</h1>
         <p className="mt-1 max-w-[72ch] text-[13px] text-[var(--fg-2)]">
-          РўСЂРёР°Р¶ Р±РµР· РјР°СЃСЃРѕРІС‹С… РѕРїРµСЂР°С†РёР№: РєР°Р¶РґС‹Р№ РёРЅС†РёРґРµРЅС‚ РєР»Р°СЃСЃРёС„РёС†РёСЂСѓРµС‚СЃСЏ РѕРїРµСЂР°С‚РѕСЂРѕРј РѕС‚РґРµР»СЊРЅРѕ.
+          Триаж без массовых операций: каждый инцидент классифицируется оператором отдельно.
         </p>
       </div>
       <p className="text-[12px] text-[var(--fg-3)]" aria-live="polite">
-        РЎС†РµРЅР°СЂРёР№: {activeScenarioTitle}. Р РµР¶РёРј: {modeLabels[segmentMode]}. Р¤Р°Р·Р°: {phaseLabels[shiftPhase]}.
+        Сценарий: {activeScenarioTitle}. Режим: {modeLabels[segmentMode]}. Фаза: {phaseLabels[shiftPhase]}.
         {workingApiMode
           ? ` API: /cases${caseRows.loading ? ' - загружается' : ''}${caseRows.error ? ` - ${caseRows.error}` : ''}.`
           : fallbackByScenario
-          ? ' Р”Р»СЏ СЌС‚РѕР№ РїР°СЂС‹ СЂРµР¶РёРјР° Рё С„Р°Р·С‹ СЃРѕР±С‹С‚РёР№ РЅРµС‚, РїРѕСЌС‚РѕРјСѓ РїРѕРєР°Р·Р°РЅР° РѕС‡РµСЂРµРґСЊ РІС‹Р±СЂР°РЅРЅРѕРіРѕ СЃС†РµРЅР°СЂРёСЏ С†РµР»РёРєРѕРј.'
-          : ' РћС‡РµСЂРµРґСЊ РѕС‚С„РёР»СЊС‚СЂРѕРІР°РЅР° РїРѕ РІС‹Р±СЂР°РЅРЅС‹Рј СЂРµР¶РёРјСѓ СЃРµРіРјРµРЅС‚Р° Рё С„Р°Р·Рµ СЃРјРµРЅС‹.'}
+          ? ' Для этой пары режима и фазы событий нет, поэтому показана очередь выбранного сценария целиком.'
+          : ' Очередь отфильтрована по выбранным режиму сегмента и фазе смены.'}
       </p>
 
       <div className="grid gap-3 md:grid-cols-4">
-        <MetricTile label="РРЅС†РёРґРµРЅС‚С‹" value={reportRows.length} hint="Р’ С‚РµРєСѓС‰РµР№ РѕС‚С‡С‘С‚РЅРѕР№ РІС‹Р±РѕСЂРєРµ" />
-        <MetricTile label="Р’С‹СЃРѕРєРёР№ СЂРёСЃРє" value={highRiskCount} hint="РРЅРґРµРєСЃ СЂРёСЃРєР° 0,700 Рё РІС‹С€Рµ" />
-        <MetricTile label="РЎСЂРµРґРЅРёР№ СЂРёСЃРє" value={formatRisk(averageRisk)} hint="РЎ СѓС‡С‘С‚РѕРј РїРѕР»Р·СѓРЅРєРѕРІ СЂРёСЃРєР°" />
-        <MetricTile label="Р РµР¶РёРј РІС‹Р±РѕСЂРєРё" value={fallbackByScenario ? 'РЎС†РµРЅР°СЂРёР№' : 'РўРѕС‡РЅРѕ'} hint={fallbackByScenario ? 'Р РµР·РµСЂРІ РїРѕ СЃС†РµРЅР°СЂРёСЋ' : 'Р РµР¶РёРј Рё С„Р°Р·Р° СЃРѕРІРїР°Р»Рё'} />
+        <MetricTile label="Инциденты" value={reportRows.length} hint="В текущей отчётной выборке" />
+        <MetricTile label="Высокий риск" value={highRiskCount} hint="Индекс риска 0,700 и выше" />
+        <MetricTile label="Средний риск" value={formatRisk(averageRisk)} hint="С учётом ползунков риска" />
+        <MetricTile label="Режим выборки" value={fallbackByScenario ? 'Сценарий' : 'Точно'} hint={fallbackByScenario ? 'Резерв по сценарию' : 'Режим и фаза совпали'} />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -218,23 +218,23 @@ export function IncidentQueue() {
         })}
         {filter !== 'Все' ? (
           <Button variant="ghost" onClick={resetStatusFilter}>
-            РЎР±СЂРѕСЃРёС‚СЊ СЃС‚Р°С‚СѓСЃ
+            Сбросить статус
           </Button>
         ) : null}
       </div>
 
       <section className="rounded-takt border border-[var(--line)] bg-[var(--bg-1)] p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="mr-auto text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">РћС‚С‡С‘С‚ РїРѕ РѕС‡РµСЂРµРґРё</h2>
-          <Button onClick={prepareReport} disabled={reportDisabled}>РЎС„РѕСЂРјРёСЂРѕРІР°С‚СЊ РѕС‚С‡С‘С‚</Button>
+          <h2 className="mr-auto text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Отчёт по очереди</h2>
+          <Button onClick={prepareReport} disabled={reportDisabled}>Сформировать отчёт</Button>
           <Button variant="ghost" onClick={downloadReport} disabled={reportDisabled}>
-            Р’С‹РіСЂСѓР·РёС‚СЊ РѕС‚С‡С‘С‚
+            Выгрузить отчёт
           </Button>
         </div>
         <p className="mt-2 text-[12px] text-[var(--fg-2)]">
           {reportDisabled
-            ? 'Compliance mode блокирует локальные демо-отчёты очереди без backend API. Используйте серверные evidence-сценарии.'
-            : 'РћС‚С‡С‘С‚ СЃС‚СЂРѕРёС‚СЃСЏ РїРѕ СЃС‚СЂРѕРєР°Рј С‚Р°Р±Р»РёС†С‹; РµСЃР»Рё СЃС‚Р°С‚СѓСЃ РІСЂРµРјРµРЅРЅРѕ СЃРєСЂС‹РІР°РµС‚ РІСЃРµ СЃС‚СЂРѕРєРё, РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РІСЃСЏ РѕС‡РµСЂРµРґСЊ РІС‹Р±СЂР°РЅРЅРѕРіРѕ СЃС†РµРЅР°СЂРёСЏ.'}
+            ? 'Нормативный режим блокирует локальные демо-отчёты очереди без серверного интерфейса. Используйте серверные доказательные сценарии.'
+            : 'Отчёт строится по строкам таблицы; если статус временно скрывает все строки, используется вся очередь выбранного сценария.'}
         </p>
         {reportText ? (
           <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-takt border border-[var(--line)] bg-[var(--bg-0)] p-3 font-mono text-[12px] text-[var(--fg-2)]">
@@ -264,7 +264,7 @@ export function IncidentQueue() {
           ) : null}
         </div>
         <aside className="takt-card p-4">
-          <h2 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Р”РµС‚Р°Р»Рё РІС‹Р±СЂР°РЅРЅРѕРіРѕ РёРЅС†РёРґРµРЅС‚Р°</h2>
+          <h2 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Детали выбранного инцидента</h2>
           {selected ? (
             <>
               <p className="mt-2 font-mono text-[13px] text-[var(--fg-1)]">{selected.id}</p>
@@ -273,26 +273,26 @@ export function IncidentQueue() {
                 <RiskBadge value={selected.risk} />
               </div>
               <dl className="mt-4 grid gap-2 text-[12px]">
-                <div><dt className="text-[var(--fg-3)]">РРЅРІР°СЂРёР°РЅС‚</dt><dd>{selected.invariant}</dd></div>
-                <div><dt className="text-[var(--fg-3)]">Р¤Р°Р·Р°</dt><dd>{selected.phase}</dd></div>
-                <div><dt className="text-[var(--fg-3)]">Р—Р°СЏРІРєР°</dt><dd>{selected.serviceDesk ?? 'РЅРµС‚'}</dd></div>
+                <div><dt className="text-[var(--fg-3)]">Инвариант</dt><dd>{selected.invariant}</dd></div>
+                <div><dt className="text-[var(--fg-3)]">Фаза</dt><dd>{selected.phase}</dd></div>
+                <div><dt className="text-[var(--fg-3)]">Заявка</dt><dd>{selected.serviceDesk ?? 'нет'}</dd></div>
               </dl>
               <Link
                 data-testid="incident-open-case"
                 to={`/cases/${encodeURIComponent(selected.id)}`}
                 className="mt-4 inline-flex rounded-takt border border-[var(--line)] px-3 py-1.5 text-[13px] font-medium text-[var(--fg-1)] transition-colors duration-150 hover:bg-[var(--bg-2)] takt-focus-ring"
               >
-                РћС‚РєСЂС‹С‚СЊ РєР°СЂС‚РѕС‡РєСѓ РёРЅС†РёРґРµРЅС‚Р°
+                Открыть карточку инцидента
               </Link>
             </>
           ) : (
             <p className="mt-3 text-[13px] text-[var(--fg-3)]">
-              Р”Р»СЏ РІС‹Р±СЂР°РЅРЅРѕРіРѕ СЃС†РµРЅР°СЂРёСЏ, СЂРµР¶РёРјР°, С„Р°Р·С‹ Рё СЃС‚Р°С‚СѓСЃР° РёРЅС†РёРґРµРЅС‚РѕРІ РЅРµС‚.
+              Для выбранного сценария, режима, фазы и статуса инцидентов нет.
             </p>
           )}
         </aside>
       </div>
-      <p className="text-[12px] text-[var(--fg-3)]">РћС‡РµСЂРµРґСЊ РёСЃРїРѕР»СЊР·СѓРµС‚ РІРѕСЃРїСЂРѕРёР·РІРѕРґРёРјС‹Р№ РЅР°Р±РѕСЂ СЃРѕР±С‹С‚РёР№ С‚РµРїР»РѕСЌРЅРµСЂРіРµС‚РёРєРё: РєРѕС‚Р»РѕР°РіСЂРµРіР°С‚С‹, СЃРµС‚РµРІС‹Рµ РЅР°СЃРѕСЃС‹, С€Р»СЋР·С‹ РђРЎРЈ РўРџ Рё СЃРјРµРЅРЅС‹Рµ Р·Р°СЏРІРєРё.</p>
+      <p className="text-[12px] text-[var(--fg-3)]">Очередь использует воспроизводимый набор событий теплоэнергетики: котлоагрегаты, сетевые насосы, шлюзы АСУ ТП и сменные заявки.</p>
     </div>
   )
 }

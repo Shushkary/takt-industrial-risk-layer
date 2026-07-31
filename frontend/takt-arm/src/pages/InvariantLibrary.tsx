@@ -116,8 +116,8 @@ export function InvariantLibrary() {
 
   function buildReport(): string {
     return [
-      'NON-EVIDENCE LOCAL UI REPORT',
-      'Этот отчёт сформирован в браузере и не является машинно-проверяемым forensic-артефактом.',
+      'ЛОКАЛЬНЫЙ ОТЧЁТ ИНТЕРФЕЙСА — БЕЗ ДОКАЗАТЕЛЬНОЙ СИЛЫ',
+      'Этот отчёт сформирован в браузере и не является машинно-проверяемым доказательным артефактом.',
       '',
       'Отчёт библиотеки инвариантов ТАКТ',
       `Период истории: ${period}`,
@@ -132,7 +132,7 @@ export function InvariantLibrary() {
 
   function prepareReport() {
     if (localReportBlocked) {
-      setReportText('NON-EVIDENCE LOCAL UI REPORT\nCompliance mode блокирует локальные отчёты по инвариантам. Для машинно-проверяемых артефактов используйте backend evidence и forensic API.')
+      setReportText('ЛОКАЛЬНЫЙ ОТЧЁТ ИНТЕРФЕЙСА — БЕЗ ДОКАЗАТЕЛЬНОЙ СИЛЫ\nНормативный режим блокирует локальные отчёты по инвариантам. Для машинно-проверяемых артефактов используйте серверные доказательные артефакты и интерфейс доказательного пакета.')
       return
     }
     setReportText(buildReport())
@@ -140,7 +140,7 @@ export function InvariantLibrary() {
 
   function exportReport() {
     if (localReportBlocked) {
-      setReportText('NON-EVIDENCE LOCAL UI REPORT\nCompliance mode блокирует локальные отчёты по инвариантам. Для машинно-проверяемых артефактов используйте backend evidence и forensic API.')
+      setReportText('ЛОКАЛЬНЫЙ ОТЧЁТ ИНТЕРФЕЙСА — БЕЗ ДОКАЗАТЕЛЬНОЙ СИЛЫ\nНормативный режим блокирует локальные отчёты по инвариантам. Для машинно-проверяемых артефактов используйте серверные доказательные артефакты и интерфейс доказательного пакета.')
       return
     }
     const text = reportText || buildReport()
@@ -176,7 +176,7 @@ export function InvariantLibrary() {
       </div>
       {localReportBlocked ? (
         <p className="text-[12px] text-[var(--fg-3)]">
-          Compliance mode блокирует локальные отчёты по инвариантам. Доказательность должна приходить из backend forensic и audit API.
+          Нормативный режим блокирует локальные отчёты по инвариантам. Доказательность должна приходить из backend forensic и audit API.
         </p>
       ) : null}
       {reportText ? (
@@ -190,7 +190,7 @@ export function InvariantLibrary() {
           : loadState === 'loading'
             ? 'API: /invariants загружается.'
             : loadState === 'error'
-              ? 'API: /invariants недоступен; backend-каталог не отображается.'
+              ? 'API: /invariants недоступен; серверный каталог не отображается.'
               : 'Локальный демо-каталог.'}
       </p>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

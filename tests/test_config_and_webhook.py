@@ -166,3 +166,24 @@ def test_webhook_resolve_once_across_retries(monkeypatch: pytest.MonkeyPatch) ->
         post_case_to_webhook_sync(case, "http://127.0.0.1/hook", resolve_fn=res, retries=3)
     assert len(hits) == 1
     assert inst.post.call_count == 3
+
+
+def test_legacy_correlation_mode_with_rules_warns_on_startup(caplog) -> None:
+    """При mode=legacy настроенные правила корреляции не работают — старт обязан это сказать."""
+    import logging
+
+    from takt.interface_adapters.api.app import _warn_if_correlation_rules_are_inert
+
+    weights = {"correlation": {"mode": "legacy", "keys": [{"name": "host", "fields": ["host_id"]}]}}
+    with caplog.at_level(logging.WARNING, logger="takt.api"):
+        _warn_if_correlation_rules_are_inert(weights)
+    assert "correlation.mode=legacy" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="takt.api"):
+        _warn_if_correlation_rules_are_inert(
+            {"correlation": {"mode": "generalized", "keys": [{"name": "host", "fields": ["host_id"]}]}}
+        )
+        _warn_if_correlation_rules_are_inert({"correlation": {"mode": "legacy", "keys": []}})
+        _warn_if_correlation_rules_are_inert({})
+    assert caplog.text == ""

@@ -1,0 +1,64 @@
+# Стенд «два источника»: живой API поверх той же SQLite, что наполняет scripts/stand_run.py.
+#
+#   docker compose -f deploy/stand/docker-compose.stand.yml --profile load run --rm stand-load
+#   docker compose -f deploy/stand/docker-compose.stand.yml up -d api
+#
+# Пути монтирования относительны корня репозитория (context: ../..).
+
+services:
+  api:
+    build:
+      context: ../..
+      args:
+        TAKT_BUILD_REVISION: ${TAKT_BUILD_REVISION:-stand}
+    ports:
+      - "8090:8090"
+    environment:
+      TAKT_CONFIG: /app/deploy/stand/risk_weights.stand.yaml
+      TAKT_STORAGE: sqlite
+      TAKT_SQLITE_PATH: data/stand/takt.db
+      TAKT_PROFILE: dev
+      TAKT_AUTH_REQUIRED: "0"
+      TAKT_METRICS: "1"
+      TAKT_CORS_ORIGINS: "http://localhost:5173"
+      TAKT_LOG_LEVEL: INFO
+    volumes:
+      - ../../deploy/stand:/app/deploy/stand:ro
+      - ../../data/stand:/app/data/stand
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8090/ready', method='HEAD'), timeout=4)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Одноразовая загрузка: генерация датасета и прогон стенда в том же образе.
+  stand-load:
+    profiles: ["load"]
+    build:
+      context: ../..
+    environment:
+      TAKT_PROFILE: dev
+      TAKT_AUTH_REQUIRED: "0"
+      TAKT_LOG_LEVEL: WARNING
+      STAND_SOURCES: ${STAND_SOURCES:-edr,siem,ndr,ot}
+      STAND_INCIDENTS: ${STAND_INCIDENTS:-6}
+      STAND_NOISE: ${STAND_NOISE:-400}
+    volumes:
+      - ../../deploy/stand:/app/deploy/stand:ro
+      - ../../scripts:/app/scripts:ro
+      - ../../data/stand:/app/data/stand
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        python scripts/stand_dataset.py --sources "$${STAND_SOURCES}"
+        --incidents "$${STAND_INCIDENTS}" --noise "$${STAND_NOISE}" &&
+        python scripts/stand_run.py --reset

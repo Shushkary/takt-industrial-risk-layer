@@ -28,6 +28,6 @@ describe('CaseDetail operator decision', () => {
     expect(decisionButton).toBeEnabled()
 
     await user.click(decisionButton)
-    expect(await screen.findByText(/локальное демо-решение оператора NON-EVIDENCE/i)).toBeInTheDocument()
+    expect(await screen.findByText(/локальное демо-решение оператора без доказательной силы/i)).toBeInTheDocument()
   })
 })

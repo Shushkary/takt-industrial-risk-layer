@@ -111,15 +111,15 @@ export function SettingsAudit() {
 
   function confirmAirGap() {
     setLocalAudit((current) => [
-      `${new Date().toLocaleTimeString('ru-RU')} локальное подтверждение изоляции NON-EVIDENCE; для доказательности используйте backend-аудиторскую цепочку`,
+      `${new Date().toLocaleTimeString('ru-RU')} локальное подтверждение изоляции без доказательной силы; для доказательности используйте серверную аудиторскую цепочку`,
       ...current,
     ])
   }
 
   function buildReport(): string {
     return [
-      'NON-EVIDENCE LOCAL UI REPORT',
-      'Этот отчёт сформирован в браузере и не является машинно-проверяемым forensic-артефактом.',
+      'ЛОКАЛЬНЫЙ ОТЧЁТ ИНТЕРФЕЙСА — БЕЗ ДОКАЗАТЕЛЬНОЙ СИЛЫ',
+      'Этот отчёт сформирован в браузере и не является машинно-проверяемым доказательным артефактом.',
       '',
       'Отчёт настроек и аудита ТАКТ',
       `Время проверки: ${now.toLocaleString('ru-RU')}`,
@@ -134,7 +134,7 @@ export function SettingsAudit() {
 
   function prepareReport() {
     if (localReportBlocked) {
-      setReportText('NON-EVIDENCE LOCAL UI REPORT\nCompliance mode блокирует локальные отчёты настроек. Для доказательности используйте backend-проверку цепочек, forensic readiness и API аудиторских проверок.')
+      setReportText('ЛОКАЛЬНЫЙ ОТЧЁТ ИНТЕРФЕЙСА — БЕЗ ДОКАЗАТЕЛЬНОЙ СИЛЫ\nНормативный режим блокирует локальные отчёты настроек. Для доказательности используйте серверную проверку цепочек, готовность доказательного пакета и программный интерфейс аудиторских проверок.')
       return
     }
     setReportText(buildReport())
@@ -143,7 +143,7 @@ export function SettingsAudit() {
   async function verifyAuditLedgers() {
     if (!taktApiConfigured()) {
       setLedgerState('error')
-      setLedgerMessage('API не настроен. Проверка цепочек требует backend audit API.')
+      setLedgerMessage('API не настроен. Проверка цепочек требует серверного интерфейса аудита.')
       return
     }
     setLedgerState('loading')
@@ -192,7 +192,7 @@ export function SettingsAudit() {
 
   function exportReport() {
     if (localReportBlocked) {
-      setReportText('NON-EVIDENCE LOCAL UI REPORT\nCompliance mode блокирует локальные отчёты настроек. Для доказательности используйте backend-проверку цепочек, forensic readiness и API аудиторских проверок.')
+      setReportText('ЛОКАЛЬНЫЙ ОТЧЁТ ИНТЕРФЕЙСА — БЕЗ ДОКАЗАТЕЛЬНОЙ СИЛЫ\nНормативный режим блокирует локальные отчёты настроек. Для доказательности используйте серверную проверку цепочек, готовность доказательного пакета и программный интерфейс аудиторских проверок.')
       return
     }
     const text = reportText || buildReport()
@@ -231,7 +231,7 @@ export function SettingsAudit() {
       </div>
       <section className="rounded-takt border border-[var(--line)] bg-[var(--bg-1)] p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-[13px] font-semibold">Compliance backend API</h2>
+          <h2 className="text-[13px] font-semibold">Нормативный режим на сервере</h2>
           <span className="font-mono text-[12px] text-[var(--fg-3)]">
             {complianceState === 'loaded'
               ? '/compliance/mode'
@@ -246,7 +246,7 @@ export function SettingsAudit() {
           <article className="rounded-takt border border-[var(--line)] bg-[var(--bg-0)] p-3">
             <h3 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Граница продукта</h3>
             <dl className="mt-2 grid gap-1 text-[12px] text-[var(--fg-2)]">
-              <div><dt>Compliance</dt><dd>{statusText(complianceMode?.compliance_enabled)}</dd></div>
+              <div><dt>Нормативный режим</dt><dd>{statusText(complianceMode?.compliance_enabled)}</dd></div>
               <div><dt>Активное управление</dt><dd>{statusText(productBoundary?.has_active_control)}</dd></div>
               <div><dt>Финальное решение оператора</dt><dd>{statusText(productBoundary?.requires_operator_final_decision)}</dd></div>
             </dl>
@@ -261,7 +261,7 @@ export function SettingsAudit() {
             </dl>
           </article>
           <article className="rounded-takt border border-[var(--line)] bg-[var(--bg-0)] p-3">
-            <h3 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Готовность forensic-пакетов</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.06em] text-[var(--fg-3)]">Готовность доказательных пакетов</h3>
             <dl className="mt-2 grid gap-1 text-[12px] text-[var(--fg-2)]">
               <div><dt>Готово</dt><dd>{numberField(forensicReadiness, 'ready_cases')}</dd></div>
               <div><dt>Не готово</dt><dd>{numberField(forensicReadiness, 'not_ready_cases')}</dd></div>
@@ -276,7 +276,7 @@ export function SettingsAudit() {
           <div>
             <h2 className="text-[13px] font-semibold">Проверка аудиторских цепочек</h2>
             <p className="mt-1 max-w-[72ch] text-[12px] text-[var(--fg-2)]">
-              Проверяет цепочки операций и кейсов через backend API. Локальные UI-отчёты остаются NON-EVIDENCE.
+              Проверяет цепочки операций и кейсов через серверный интерфейс. Локальные отчёты интерфейса остаются без доказательной силы.
             </p>
           </div>
           <span className="font-mono text-[12px] text-[var(--fg-3)]">
@@ -321,12 +321,12 @@ export function SettingsAudit() {
             {demoIngestState === 'loading' ? 'Загрузка демо-событий' : 'Загрузить демо-события'}
           </Button>
           <span className="text-[12px] text-[var(--fg-3)]">
-            {demoIngestState === 'idle' ? 'использует настроенный backend API' : demoIngestResult}
+            {demoIngestState === 'idle' ? 'использует настроенный серверный интерфейс' : demoIngestResult}
           </span>
         </div>
       </section>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={confirmAirGap}>Локальное подтверждение изоляции NON-EVIDENCE</Button>
+        <Button onClick={confirmAirGap}>Локальное подтверждение изоляции (без доказательной силы)</Button>
         <Button variant="ghost" onClick={prepareReport} disabled={localReportBlocked}>
           Сформировать отчёт
         </Button>
@@ -336,8 +336,8 @@ export function SettingsAudit() {
       </div>
       {localReportBlocked ? (
         <p className="text-[12px] text-[var(--fg-3)]">
-          Compliance mode блокирует локальные отчёты настроек. Доказательность должна приходить из backend-проверки цепочек,
-          forensic readiness и API аудиторских проверок.
+          Нормативный режим блокирует локальные отчёты настроек. Доказательность должна приходить из серверной проверки цепочек,
+          готовность доказательного пакета и API аудиторских проверок.
         </p>
       ) : null}
       {reportText ? (

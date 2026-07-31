@@ -244,7 +244,7 @@ export function SegmentOverview() {
             hint="/compliance/data-quality-report cases_without_manual_permit"
           />
           <MetricTile
-            label="HIGH без решения"
+            label="Высокий риск без решения"
             value={highRiskWithoutDecision ?? 'нет данных'}
             hint="/compliance/data-quality-report high_risk_without_decision"
           />

@@ -77,7 +77,7 @@ describe('taktApi runtime validation', () => {
     ['event sources', '/catalog/event-sources', 'fetchEventSourcesCatalog'],
     ['compliance mode', '/compliance/mode', 'fetchComplianceMode'],
     ['data quality', '/compliance/data-quality-report', 'fetchDataQualityReport'],
-    ['forensic readiness', '/compliance/forensic-readiness', 'fetchForensicReadiness'],
+    ['готовность доказательного пакета', '/compliance/forensic-readiness', 'fetchForensicReadiness'],
   ])('loads %s response records', async (_label, path, functionName) => {
     server.use(http.get(`http://takt.test${path}`, () => HttpResponse.json({ ok: true, path })))
     const api = await import('./taktApi')

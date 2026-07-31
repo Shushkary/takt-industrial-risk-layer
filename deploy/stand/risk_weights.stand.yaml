@@ -1,0 +1,104 @@
+# Конфигурация стенда «два источника». Отличия от боевого config/risk_weights.yaml
+# перечислены в deploy/stand/README.md; каталог инвариантов берётся из config/invariants
+# (у этого файла нет соседнего каталога invariants/ — см. invariant_catalog_dir_for_config).
+
+# Веса факторов Risk = F(R, G, C, U, DQ) — как в боевом конфиге
+rhythm: 0.22
+graph: 0.22
+context: 0.18
+user: 0.18
+data_quality: 0.20
+
+mandelbrot_entropy_cap: 2.5
+dq_degraded_threshold: 0.5
+feigenbaum_target: 4.669201609
+
+alert_fatigue:
+  mode: bucketed
+  bucket_sec: 300
+
+# ОТЛИЧИЕ 1. mode: generalized включает обобщённый коррелятор.
+# При mode: legacy AssessRisk._correlation_candidates возвращает пустой список,
+# и события двух источников никогда не попадут в один кейс — стенд был бы бессмысленным.
+correlation:
+  mode: generalized
+  keys:
+    - name: host_window
+      fields: [host_id]
+      bucket_sec: 600
+      priority: 10
+    - name: user_destination
+      fields: [user_id, dst_address]
+      bucket_sec: 300
+      priority: 20
+    - name: file_hash
+      fields: ["artifact:hash"]
+      priority: 30
+
+eps_soft_cap: 100000
+
+risk_class_thresholds:
+  critical: 0.85
+  high: 0.65
+  medium: 0.4
+
+# ОТЛИЧИЕ 2. Топология стенда: узлы-пивоты (АРМ инженера, HMI) видны обоим источникам.
+topology:
+  jump_host: jump-01
+  plc_hosts:
+    - plc-01
+    - plc-02
+    - plc-03
+  demo_graph_edges:
+    - src: ews-01
+      dst: plc-01
+      kind: ssh
+    - src: hmi-01
+      dst: plc-02
+      kind: iec104
+
+invariants:
+  allowed_function_codes: null
+  expected_payload_baseline: null
+  payload_drift_ratio: 0.45
+  auth_fail_window: 20
+  auth_fail_threshold: 5
+  iec104_disallowed_type_ids: []
+
+enrichment:
+  enabled: true
+  air_gap_segments:
+    - AIR_GAP_L2
+  iec104_type_aliases:
+    - asdu_type
+    - asdu_type_id
+    - type_id
+    - iec_asdu_type
+
+# ОТЛИЧИЕ 3. Явное доверие для четырёх SOC-классов. В боевом конфиге ключей
+# edr/siem/ndr/ot нет, и все они молча получают 1.0 — DQ-деградация по источнику
+# на стенде тогда не проверяется.
+ingest_trust:
+  by_source:
+    edr: 0.90
+    siem: 0.85
+    ndr: 0.80
+    ot: 1.0
+    plc_polling: 1.0
+    auth_logs: 0.92
+    network_events: 0.78
+    service_desk: 0.95
+    unknown: 0.5
+
+# ОТЛИЧИЕ 4. Стенд всегда персистентный: отчёт и живой API читают одну и ту же БД.
+storage:
+  backend: sqlite
+  sqlite_path: data/stand/takt.db
+
+siem_webhook:
+  allowed_url_prefixes: []
+  retries: 3
+  backoff_sec: 0.35
+
+export:
+  pdf_unicode_font: ""

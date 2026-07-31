@@ -97,10 +97,16 @@ def map_ndr(row: dict[str, str], trust: float) -> NormalizedEvent:
 
 
 def map_ot(row: dict[str, str], trust: float) -> NormalizedEvent:
+    # operator_id — опциональная колонка контракта (docs/pt_techlab/data_contract.md):
+    # если выгрузка её содержит, событие получает user_id и участвует в правиле
+    # корреляции user_destination наравне с IT-источниками.
+    operator = _value(row, "operator_id")
     return NormalizedEvent(
         event_id=row["event_id"], observed_at=_parse_ts(row["timestamp"]), source=EventSource.OT,
         protocol=row["protocol"], operation=row["operation"].upper(), payload_size=_size(row), payload=row,
-        entities=EventEntities(host_id=_value(row, "asset_id"), src_address=_value(row, "src_address"),
+        operator_id=operator or "",
+        entities=EventEntities(host_id=_value(row, "asset_id"), user_id=operator,
+                               src_address=_value(row, "src_address"),
                                dst_address=_value(row, "dst_address")),
         artifacts=_artifacts((ArtifactType.PROCESS, _value(row, "tag"))), ingest_trust=trust,
     )
