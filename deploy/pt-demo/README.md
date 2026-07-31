@@ -7,7 +7,7 @@
 | Файл | Назначение |
 |---|---|
 | `deploy.sh` | сборка под `/PT` и выкладка на ВМ по SSH + перезагрузка nginx |
-| `nginx-pt.conf` | snippet для server-блока `ralta.ru`: SPA-fallback, заголовки безопасности, кэш |
+| `nginx-pt.conf` | отдельный snippet для server-блока `ralta.ru`: SPA-fallback, заголовки безопасности, кэш. Не изменяет уже настроенные пути |
 
 ## Выкладка
 
@@ -34,11 +34,57 @@ PT_SSH_KEY=~/.ssh/id_rsa_spaceweb PT_API_URL=https://ralta.ru/PT-api ./deploy/pt
 
 ## Разовая настройка nginx на ВМ
 
+Витрина по `/PT/` **сосуществует** с уже настроенными путями и ничего в них не меняет.
+На ВМ, в частности, есть `/takt_pt/` (проксирование на Docker-фронт и API) — его
+трогать не нужно и не следует: `/PT/` и `/takt_pt/` это разные префиксы URI,
+пересечения между ними нет.
+
+### Сначала убедиться, что `/PT` никем не занят
+
+```bash
+# кто и как уже обслуживает /PT и /takt_pt
+sudo nginx -T | grep -n -E 'location[^;]*(/PT|/takt_pt)' 
+
+# есть ли регулярные location, способные перехватить ассеты витрины
+sudo nginx -T | grep -n -E 'location\s+~'
+
+# фактический ответ до изменений
+curl -sSI https://ralta.ru/PT/ | head -1
+curl -sSI https://ralta.ru/takt_pt/ | head -1
+```
+
+Ожидаемая картина: `location` для `/PT` нет, `/PT/` отдаёт 404 или уходит в общий
+`location /`, `/takt_pt/` отвечает 200. Если `/PT` уже кем-то объявлен — **остановиться
+и согласовать**, а не переопределять чужой блок.
+
+### Подключение
+
 ```bash
 sudo mkdir -p /var/www/ralta/PT
-sudo cp nginx-pt.conf /etc/nginx/snippets/takt-pt.conf
-# в server-блок ralta.ru добавить:  include /etc/nginx/snippets/takt-pt.conf;
+sudo cp nginx-pt.conf /etc/nginx/snippets/takt-pt-static.conf
+# в server-блок ralta.ru добавить ОДНУ строку:
+#   include /etc/nginx/snippets/takt-pt-static.conf;
 sudo nginx -t && sudo systemctl reload nginx
+```
+
+Имя файла отличается от возможного `takt-pt-locations.conf` намеренно: это отдельный
+сниппет, существующий не переписывается.
+
+### Почему это не конфликт
+
+* `location ^~ /PT/` и `location /takt_pt/` — непересекающиеся префиксы; nginx выбирает
+  блок по самому длинному совпавшему префиксу, запрос `/PT/...` в `/takt_pt/` не попадёт.
+* Модификатор `^~` не даёт регулярным `location` (например, общему правилу кэширования
+  `~* \.(js|css)$`) перехватить ассеты витрины.
+* Все директивы лежат внутри `location`. Если бы `add_header` или `root` оказались на
+  верхнем уровне сниппета, они применились бы ко всему server-блоку, включая `/takt_pt/`.
+* Используется `root /var/www/ralta`, а не `alias`: каталог называется `PT` и совпадает
+  с префиксом URI, поэтому alias не нужен, а в паре с `try_files` он даёт краевые эффекты.
+
+После перезагрузки проверить, что соседний путь не пострадал:
+
+```bash
+curl -sSI https://ralta.ru/takt_pt/ | head -1   # по-прежнему 200
 ```
 
 ## Два режима витрины
@@ -60,8 +106,12 @@ API поднимается по `deploy/stand/docker-compose.stand.yml`; отк�
 ## Проверка после выкладки
 
 ```bash
-curl -sSI https://ralta.ru/PT/ | head -1                 # 200
+curl -sSI https://ralta.ru/PT  | head -1                  # 301 на /PT/
+curl -sSI https://ralta.ru/PT/ | head -1                  # 200
 curl -sS https://ralta.ru/PT/ | grep -o '/PT/assets[^"]*' # пути ассетов с префиксом /PT
+curl -sSI https://ralta.ru/PT/overview | head -1          # 200, SPA-fallback
+curl -sSI https://ralta.ru/takt_pt/ | head -1             # 200, соседний путь не задет
+curl -sSI https://ralta.ru/ | head -1                     # корень домена не задет
 ```
 
 В браузере: <https://ralta.ru/PT/> — открывается «Рабочий стол расследования»,
