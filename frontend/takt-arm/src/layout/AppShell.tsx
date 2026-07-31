@@ -142,15 +142,15 @@ export function AppShell() {
                 ? 'border-[var(--teal-1)] bg-[var(--teal-3)] text-[var(--fg-1)]'
                 : 'border-[var(--line)] bg-[var(--bg-2)] text-[var(--fg-2)]'
             }`}
-            title="Режим compliance читается из /compliance/mode при настроенном backend API."
+            title="Нормативный режим читается из /compliance/mode при настроенном серверном интерфейсе."
           >
             {complianceOn
-              ? 'Compliance включён'
+              ? 'Нормативный режим включён'
               : complianceState === 'loading'
-                ? 'Compliance загружается'
+                ? 'Нормативный режим загружается'
                 : complianceState === 'error'
-                  ? 'Compliance недоступен'
-                  : 'Compliance выключен'}
+                  ? 'Нормативный режим недоступен'
+                  : 'Нормативный режим выключен'}
           </span>
           {apiConfigured ? (
             <span
@@ -159,7 +159,7 @@ export function AppShell() {
                   ? 'border-[var(--teal-1)] bg-[var(--teal-3)] text-[var(--fg-1)]'
                   : 'border-[var(--amber-1)] bg-[rgba(245,158,11,0.08)] text-[var(--amber-1)]'
               }`}
-              title="Готовность backend читается из /ready."
+              title="Готовность сервера читается из /ready."
             >
               {readyState === 'ready'
                 ? 'API готов'
@@ -217,7 +217,7 @@ export function AppShell() {
           </select>
           {demoControlsDisabled ? (
             <span className="text-[12px] text-[var(--amber-1)]">
-              {apiConfigured ? 'Демо-режим отключён в API-режиме.' : 'Демо-режим отключён в compliance-режиме.'}
+              {apiConfigured ? 'Демо-режим отключён в API-режиме.' : 'Демо-режим отключён в нормативном режиме.'}
             </span>
           ) : null}
           <span className="ml-auto font-mono text-[12px] text-[var(--fg-2)] tabular-nums" aria-live="polite">

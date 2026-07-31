@@ -146,3 +146,55 @@ export const NODE_KIND_LABELS: Record<string, string> = {
   account: 'Учётная запись',
   event: 'Событие',
 }
+
+/** Классы риска кейса в терминах интерфейса. */
+export const RISK_CLASS_LABELS: Record<string, string> = {
+  LOW: 'низкий',
+  MEDIUM: 'средний',
+  HIGH: 'высокий',
+  CRITICAL: 'критический',
+}
+
+/** Статусы кейса. Значения совпадают с CaseStatus на стороне backend. */
+export const CASE_STATUS_LABELS: Record<string, string> = {
+  NEW: 'новый',
+  TRIAGE: 'в разборе',
+  CONFIRMED: 'подтверждён',
+  FALSE_POSITIVE: 'ложное срабатывание',
+  EXPECTED_BEHAVIOR: 'ожидаемое поведение',
+  MERGED: 'объединён',
+  CLOSED: 'закрыт',
+}
+
+/**
+ * Операции событий: коды приходят из источников как есть, интерфейс показывает
+ * русское название. Незнакомый код выводится без перевода, чтобы не потерять
+ * данные источника; исходный код всегда доступен в подсказке.
+ */
+export const OPERATION_LABELS: Record<string, string> = {
+  PROCESS_START: 'запуск процесса',
+  NETWORK_CONNECT: 'сетевое соединение',
+  SUSPICIOUS_OUTBOUND: 'подозрительное исходящее соединение',
+  OT_PROTOCOL_FROM_WORKSTATION: 'промышленный протокол с рабочей станции',
+  MALWARE_HASH_MATCH: 'совпадение по хешу вредоносного файла',
+  C2_SUSPECT: 'подозрение на управляющий сервер',
+  POLICY_VIOLATION: 'нарушение сетевой политики',
+  WRITE_SETPOINT: 'запись уставки',
+  ADMIN_LOGIN: 'вход с правами администратора',
+  POLL: 'опрос',
+  ALLOWED: 'разрешено',
+  BACKUP_SUCCESS: 'успешное резервное копирование',
+  READ: 'чтение',
+}
+
+export function riskClassLabel(value: string): string {
+  return RISK_CLASS_LABELS[value] ?? value
+}
+
+export function caseStatusLabel(value: string): string {
+  return CASE_STATUS_LABELS[value] ?? value
+}
+
+export function operationLabel(value: string): string {
+  return OPERATION_LABELS[value] ?? value
+}

@@ -937,7 +937,7 @@ export async function fetchDataQualityReport(): Promise<DataQualityReportRespons
 }
 
 export async function fetchForensicReadiness(): Promise<ForensicReadinessResponse | null> {
-  return requestJson('/compliance/forensic-readiness', (value) => requireRecord(value, 'forensic readiness'))
+  return requestJson('/compliance/forensic-readiness', (value) => requireRecord(value, 'готовность доказательного пакета'))
 }
 
 export async function fetchCaseEvidenceChecklist(caseId: string): Promise<EvidenceChecklistResponse | null> {
@@ -1021,7 +1021,7 @@ export async function verifyForensicBundle(bundle: Blob): Promise<ForensicBundle
     throw new Error(await errorMessage(response))
   }
   try {
-    return requireRecord(await response.json(), 'forensic bundle verify')
+    return requireRecord(await response.json(), 'проверка доказательного пакета')
   } catch (error) {
     normalizeApiValidationError(error, '/forensic-bundle/verify')
   }

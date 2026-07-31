@@ -15,7 +15,7 @@ import {
   useWorkspace,
 } from '../investigation/useInvestigation'
 import type { EntityKind, InvestigationEvent } from '../investigation/types'
-import { SOURCE_COLORS, SOURCE_LABELS } from '../investigation/types'
+import { SOURCE_COLORS, SOURCE_LABELS, operationLabel, riskClassLabel } from '../investigation/types'
 
 /**
  * Единый рабочий стол расследования (ТЗ п. 5.1, п. 9.1).
@@ -131,7 +131,7 @@ export function InvestigationDesk() {
               className="rounded-takt border px-2 py-1 text-[11px]"
               style={{ borderColor: RISK_COLORS[caseRisk] ?? 'var(--line)', color: 'var(--fg-1)' }}
             >
-              риск {caseRisk} · {(workspace.case.risk_score ?? 0).toFixed(2)}
+              риск {riskClassLabel(caseRisk)} · {(workspace.case.risk_score ?? 0).toFixed(2)}
             </span>
           ) : null}
         </div>
@@ -296,7 +296,9 @@ export function InvestigationDesk() {
                             {SOURCE_LABELS[event.source] ?? event.source}
                           </span>
                         </td>
-                        <td className="px-3 py-1.5 font-mono text-[11px] text-[var(--fg-1)]">{event.operation}</td>
+                        <td className="px-3 py-1.5 text-[11px] text-[var(--fg-1)]" title={event.operation}>
+                          {operationLabel(event.operation)}
+                        </td>
                         <td className="px-3 py-1.5 font-mono text-[11px] text-[var(--fg-2)]">
                           {event.entities?.host_id ?? '—'}
                         </td>
@@ -406,7 +408,9 @@ export function InvestigationDesk() {
                         style={{ animationDelay: `${index * 40}ms` }}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-[var(--fg-1)]">{step.operation}</span>
+                          <span className="text-[var(--fg-1)]" title={step.operation}>
+                            {operationLabel(step.operation)}
+                          </span>
                           <span style={{ color: SOURCE_COLORS[step.source] ?? 'var(--fg-3)' }}>
                             {SOURCE_LABELS[step.source] ?? step.source}
                           </span>

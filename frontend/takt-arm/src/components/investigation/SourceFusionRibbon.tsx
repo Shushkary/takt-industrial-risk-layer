@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { SOURCE_COLORS, SOURCE_HINTS, SOURCE_LABELS } from '../../investigation/types'
+import { SOURCE_COLORS, SOURCE_HINTS, SOURCE_LABELS, riskClassLabel } from '../../investigation/types'
 
 /**
  * Схема слияния источников (ТЗ п. 4.1, п. 12.1): четыре класса ИБ-продуктов
@@ -167,7 +167,7 @@ export function SourceFusionRibbon({ countsBySource, caseTitle, riskClass, onSel
           кейс
         </text>
         <text x={WIDTH - 74} y={HEIGHT / 2 - 6} className="fill-[var(--fg-2)] text-[10px]">
-          {riskClass}
+          {riskClassLabel(riskClass)}
         </text>
         <text x={WIDTH - 74} y={HEIGHT / 2 + 9} className="fill-[var(--fg-3)] text-[10px]">
           {caseTitle.length > 26 ? `${caseTitle.slice(0, 24)}…` : caseTitle}

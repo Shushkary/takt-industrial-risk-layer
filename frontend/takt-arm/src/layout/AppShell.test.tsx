@@ -44,7 +44,7 @@ describe('AppShell API mode boundary', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Compliance включён')).toBeInTheDocument()
+    expect(await screen.findByText('Нормативный режим включён')).toBeInTheDocument()
     expect(await screen.findByText('API готов')).toBeInTheDocument()
     expect(screen.getByText('Демо-режим отключён в API-режиме.')).toBeInTheDocument()
     expect(document.querySelector<HTMLSelectElement>('#demo-scenario')).toBeDisabled()

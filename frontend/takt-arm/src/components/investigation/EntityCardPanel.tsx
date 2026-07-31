@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { EntityCard } from '../../investigation/types'
-import { SOURCE_COLORS, SOURCE_LABELS } from '../../investigation/types'
+import { SOURCE_COLORS, SOURCE_LABELS, operationLabel } from '../../investigation/types'
 
 /**
  * Карточка сущности (ТЗ п. 5.5, п. 4.3): историчность активности и окружение
@@ -141,7 +141,7 @@ export function EntityCardPanel({ card, loading, error, emptyHint }: Props) {
           {(card.environment ?? []).slice(0, 6).map((item) => (
             <li key={item.event_id} className="rounded-takt border border-[var(--line)] px-2 py-1.5 text-[11px]">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[var(--fg-1)]">{item.operation}</span>
+                <span className="text-[var(--fg-1)]" title={item.operation}>{operationLabel(item.operation)}</span>
                 <span style={{ color: SOURCE_COLORS[item.source] ?? 'var(--fg-3)' }}>
                   {SOURCE_LABELS[item.source] ?? item.source}
                 </span>

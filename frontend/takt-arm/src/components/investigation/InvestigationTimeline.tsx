@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pause, Play, RotateCcw } from 'lucide-react'
 import type { InvestigationEvent } from '../../investigation/types'
-import { SOURCE_COLORS, SOURCE_LABELS } from '../../investigation/types'
+import { SOURCE_COLORS, SOURCE_LABELS, operationLabel } from '../../investigation/types'
 
 /**
  * Таймлайн расследования (ТЗ п. 5.4) с воспроизведением хронологии.
@@ -152,8 +152,8 @@ export function InvestigationTimeline({ events, cursor, onCursorChange, selected
               className="takt-focus-ring absolute top-[26px] -ml-[9px] flex h-[24px] w-[18px] items-center justify-center"
               style={{ left: `calc(0.75rem + ${position} * (100% - 1.5rem))` }}
               onClick={() => onSelectEvent(isSelected ? null : event.event_id)}
-              title={`${SOURCE_LABELS[event.source] ?? event.source}: ${event.operation}`}
-              aria-label={`Событие ${event.operation}, источник ${SOURCE_LABELS[event.source] ?? event.source}`}
+              title={`${SOURCE_LABELS[event.source] ?? event.source}: ${operationLabel(event.operation)} (${event.operation})`}
+              aria-label={`Событие ${operationLabel(event.operation)}, источник ${SOURCE_LABELS[event.source] ?? event.source}`}
             >
               <span
                 className={`block rounded-full transition-all duration-takt-slow ease-takt ${
