@@ -46,6 +46,24 @@ python scripts/stand_run.py --reset
 против модельной базовой линии, роли п. 5.13): `python scripts/stand_scenario.py` →
 `data/stand/report/scenario.md`. Требует все четыре класса источников, стартует с чистой БД.
 
+## Фронтенд АРМ
+
+`frontend/takt-arm` (React 19 + Vite + Tailwind). Главный экран — «Рабочий стол расследования»
+(`src/pages/InvestigationDesk.tsx`) по ТЗ Positive Technologies: единое окно четырёх классов
+источников, анимированный граф связей, таймлайн с воспроизведением, карточка сущности,
+журнал находок, пакет реагирования.
+
+Без `VITE_TAKT_API_BASE_URL` экран работает на встроенном наборе
+(`src/investigation/demoInvestigation.ts`) и помечает режим в интерфейсе.
+
+```bash
+cd frontend/takt-arm && npm ci && npm run test:frontend
+VITE_BASE_PATH=/PT/ npm run build        # сборка под подкаталог домена
+```
+
+Если браузеры Playwright предустановлены отдельно: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=<путь>`.
+Публикация витрины на ralta.ru/PT: `deploy/pt-demo/README.md`.
+
 ## Инфраструктура
 
 Доступ к ВМ SpaceWeb (панель, SSH, диагностика): `docs/ops/vm_spaceweb_access.md`.

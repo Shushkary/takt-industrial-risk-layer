@@ -7,12 +7,14 @@ import { InvariantLibrary } from './pages/InvariantLibrary'
 import { TopologyMap } from './pages/TopologyMap'
 import { SettingsAudit } from './pages/SettingsAudit'
 import { UnifiedSearch } from './pages/UnifiedSearch'
+import { InvestigationDesk } from './pages/InvestigationDesk'
 
 export default function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route index element={<SegmentOverview />} />
+        <Route index element={<InvestigationDesk />} />
+        <Route path="overview" element={<SegmentOverview />} />
         <Route path="incidents" element={<IncidentQueue />} />
         <Route path="cases/:id" element={<CaseDetail />} />
         <Route path="search" element={<UnifiedSearch />} />

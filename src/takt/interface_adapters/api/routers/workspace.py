@@ -17,27 +17,46 @@ def _workspace_event(event) -> dict:
 
 
 def _case_graph(events) -> dict:
-    nodes: dict[tuple[str, str], dict] = {}
+    """
+    Граф связей расследования (ТЗ п. 5.4).
+
+    `source`/`target` рёбер — это `id` узлов (`kind:value`), а не голые значения:
+    иначе рёбра невозможно соединить с узлами на стороне интерфейса. Адрес всегда
+    получает вид `address`, независимо от того, был он источником или назначением,
+    поэтому один адрес — один узел, а не два.
+    """
+    nodes: dict[str, dict] = {}
     edges: dict[tuple[str, str, str], dict] = {}
+
+    def node_id(kind: str, value: str) -> str:
+        key = f"{kind}:{value}"
+        nodes.setdefault(key, {"id": key, "type": kind, "value": value})
+        return key
+
     for event in events:
         entities = event.entities
         if entities is None:
             continue
-        values = {
-            "host": entities.host_id, "user": entities.user_id, "process": entities.process_id,
-            "address": entities.src_address, "destination": entities.dst_address,
-        }
-        for kind, value in values.items():
-            if value:
-                nodes[(kind, value)] = {"id": f"{kind}:{value}", "type": kind, "value": value}
+        host = node_id("host", entities.host_id) if entities.host_id else ""
+        user = node_id("user", entities.user_id) if entities.user_id else ""
+        process = node_id("process", entities.process_id) if entities.process_id else ""
+        parent = node_id("process", entities.parent_process_id) if entities.parent_process_id else ""
+        src = node_id("address", entities.src_address) if entities.src_address else ""
+        dst = node_id("address", entities.dst_address) if entities.dst_address else ""
+        for item in event.artifacts:
+            node_id(item.type.value, item.value)
+
         relations = [
-            (entities.user_id, entities.process_id, "initiated"),
-            (entities.parent_process_id, entities.process_id, "spawned"),
-            (entities.host_id, entities.process_id, "runs"),
-            (entities.src_address, entities.dst_address, "network"),
+            (user, process, "initiated"),
+            (parent, process, "spawned"),
+            (host, process, "runs"),
+            (host, user, "acted_on"),
+            (src, dst, "network"),
+            (host, dst, "connects"),
         ]
+        relations.extend((host, node_id(item.type.value, item.value), "observed") for item in event.artifacts if host)
         for source, target, kind in relations:
-            if source and target:
+            if source and target and source != target:
                 edges[(source, target, kind)] = {
                     "source": source, "target": target, "type": kind, "event_id": event.event_id,
                 }

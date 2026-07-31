@@ -66,3 +66,49 @@ def test_entity_card_api_returns_cross_source_environment(tmp_path) -> None:
     finally:
         app.state.recent_event_store = original
         store.close()
+
+
+def test_case_workspace_graph_edges_reference_node_ids() -> None:
+    """Граф ТЗ п. 5.4: рёбра обязаны соединяться с узлами, иначе интерфейс не построит связи."""
+    from datetime import UTC, datetime
+
+    from takt.domain.entities.event import (
+        ArtifactType,
+        EventArtifact,
+        EventEntities,
+        EventSource,
+        NormalizedEvent,
+    )
+    from takt.interface_adapters.api.routers.workspace import _case_graph
+
+    events = [
+        NormalizedEvent(
+            event_id="edr-1", observed_at=datetime(2026, 6, 1, 9, 0, tzinfo=UTC), source=EventSource.EDR,
+            protocol="endpoint", operation="PROCESS_START", payload_size=1, payload={},
+            entities=EventEntities(host_id="ews-01", user_id="ivanov", process_id="p-2",
+                                   parent_process_id="p-1", dst_address="10.10.2.20"),
+            artifacts=(EventArtifact(ArtifactType.HASH, "abc"),),
+        ),
+        NormalizedEvent(
+            event_id="ot-1", observed_at=datetime(2026, 6, 1, 9, 1, tzinfo=UTC), source=EventSource.OT,
+            protocol="IEC104", operation="WRITE_SETPOINT", payload_size=1, payload={},
+            entities=EventEntities(host_id="ews-01", src_address="10.10.2.20", dst_address="10.10.2.21"),
+            artifacts=(),
+        ),
+    ]
+    graph = _case_graph(events)
+
+    node_ids = {node["id"] for node in graph["nodes"]}
+    assert node_ids, "граф без узлов бесполезен для расследования"
+    for node in graph["nodes"]:
+        assert node["id"] == f"{node['type']}:{node['value']}"
+    assert graph["edges"], "у связанных событий обязаны быть рёбра"
+    for edge in graph["edges"]:
+        assert edge["source"] in node_ids
+        assert edge["target"] in node_ids
+        assert edge["source"] != edge["target"]
+
+    # один адрес — один узел: 10.10.2.20 в одном событии назначение, в другом источник
+    address_values = [node["value"] for node in graph["nodes"] if node["type"] == "address"]
+    assert sorted(address_values) == ["10.10.2.20", "10.10.2.21"]
+    assert "hash:abc" in node_ids

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { BookOpen, FileText, LayoutDashboard, ListTodo, Map, Search, Settings } from 'lucide-react'
+import { BookOpen, FileText, LayoutDashboard, ListTodo, Map, Radar, Search, Settings } from 'lucide-react'
 import { useUiStore, type SegmentMode, type ShiftPhase } from '../store/uiStore'
 import { Chip } from '../components/ui/Chip'
 import { fetchComplianceMode, fetchReady, taktApiConfigured, type ComplianceModeResponse, type ReadyResponse } from '../app/taktApi'
@@ -9,7 +9,8 @@ import { demoIncidents, demoScenarios, useDemoStore, type DemoScenarioId } from 
 const firstDemoIncidentId = demoIncidents[0]?.id ?? 'demo'
 
 const nav = [
-  { to: '/', label: 'Обзор сегмента', icon: LayoutDashboard },
+  { to: '/', label: 'Расследование', icon: Radar },
+  { to: '/overview', label: 'Обзор сегмента', icon: LayoutDashboard },
   { to: '/incidents', label: 'Очередь инцидентов', icon: ListTodo },
   { to: `/cases/${firstDemoIncidentId}`, label: 'Карточка инцидента', icon: FileText },
   { to: '/search', label: 'Единый поиск', icon: Search },

@@ -417,6 +417,59 @@ export type CaseWorkspaceResponse = {
   }
 }
 
+export type EntityCardKind = 'host' | 'user' | 'process'
+
+export type EntityCardResponse = {
+  type: string
+  id: string
+  first_seen: string
+  last_seen: string
+  sources: string[]
+  event_count: number
+  activity_by_hour: Array<{ bucket: string; count: number }>
+  typicality: { status: string; explanation: string }
+  attributes: Record<string, unknown>
+  environment: Array<{
+    event_id: string
+    observed_at: string
+    source: string
+    operation: string
+    artifacts: Array<{ type: string; value: string }>
+  }>
+  environment_total: number
+  related_cases: string[]
+}
+
+export type AttackChainResponse = {
+  case_id: string
+  entry_point: string
+  current_state: string
+  steps: Array<{
+    order: number
+    kind: string
+    event_id: string
+    observed_at: string
+    source: string
+    from_entity: string
+    to_entity: string
+    operation: string
+  }>
+  artifacts: Array<{ type: string; value: string; event_id: string }>
+}
+
+export type DecodeResponse = {
+  input: string
+  decodings: Array<{ kind: string; value: string; success: boolean; error?: string }>
+}
+
+export type CorrelationEditResponse = {
+  case_id: string
+  status: string
+  event_ids: string[]
+  risk_score: number
+  related_cases: string[]
+}
+
 export type EventSearchQuery = {
   source?: string
   observed_from?: string
@@ -1003,3 +1056,82 @@ export async function downloadForensicBundle(caseId: string): Promise<ForensicBu
 }
 
 
+/** Карточка сущности ТЗ п. 5.5: историчность активности и окружение узла, пользователя, процесса. */
+export async function fetchEntityCard(kind: EntityCardKind, entityId: string): Promise<EntityCardResponse | null> {
+  return requestJson(
+    `/entities/${encodeURIComponent(kind)}/${encodeURIComponent(entityId)}/card`,
+    (value) => requireRecord(value, 'entity card') as unknown as EntityCardResponse,
+  )
+}
+
+/** Реконструкция цепочки атаки ТЗ п. 4.6. */
+export async function fetchCaseAttackChain(caseId: string): Promise<AttackChainResponse | null> {
+  return requestJson(
+    `/cases/${encodeURIComponent(caseId)}/attack-chain`,
+    (value) => requireRecord(value, 'attack chain') as unknown as AttackChainResponse,
+  )
+}
+
+/** Обогащение артефакта ТЗ п. 5.7: декодирование base64/URL в интерфейсе. */
+export async function decodeArtifactValue(value: string): Promise<DecodeResponse | null> {
+  return requestJson('/enrichment/decode', (body) => requireRecord(body, 'decode') as unknown as DecodeResponse, {
+    method: 'POST',
+    body: { value },
+  })
+}
+
+/** Ручная корректировка связей ТЗ п. 5.3: аналитик привязывает событие к инциденту. */
+export async function attachEventToCase(
+  caseId: string,
+  eventId: string,
+  reason: string,
+): Promise<CorrelationEditResponse | null> {
+  return requestJson(
+    `/cases/${encodeURIComponent(caseId)}/events/attach`,
+    (value) => requireRecord(value, 'attach event') as unknown as CorrelationEditResponse,
+    { method: 'POST', body: { event_id: eventId, reason } },
+  )
+}
+
+/** Ручная корректировка связей ТЗ п. 5.3: аналитик оспаривает автоматическую связь. */
+export async function detachEventFromCase(
+  caseId: string,
+  eventId: string,
+  reason: string,
+): Promise<CorrelationEditResponse | null> {
+  return requestJson(
+    `/cases/${encodeURIComponent(caseId)}/events/${encodeURIComponent(eventId)}/detach`,
+    (value) => requireRecord(value, 'detach event') as unknown as CorrelationEditResponse,
+    { method: 'POST', body: { reason } },
+  )
+}
+
+/** Журнал находок ТЗ п. 5.6 (чтение). */
+export async function fetchCaseFindings(caseId: string): Promise<Array<Record<string, unknown>> | null> {
+  const response = await apiRequest(`/cases/${encodeURIComponent(caseId)}/findings`)
+  if (!response) {
+    return null
+  }
+  if (!response.ok) {
+    throw new Error(await errorMessage(response))
+  }
+  const body = await response.json()
+  return Array.isArray(body) ? (body as Array<Record<string, unknown>>) : []
+}
+
+/** Пакет реагирования ТЗ п. 5.11: артефакты с типом и узлом. */
+export async function fetchCaseArtifacts(caseId: string): Promise<Array<Record<string, unknown>> | null> {
+  const response = await apiRequest(`/cases/${encodeURIComponent(caseId)}/artifacts`)
+  if (!response) {
+    return null
+  }
+  if (!response.ok) {
+    throw new Error(await errorMessage(response))
+  }
+  const body = await response.json()
+  if (Array.isArray(body)) {
+    return body as Array<Record<string, unknown>>
+  }
+  const items = isRecord(body) && Array.isArray(body.artifacts) ? body.artifacts : []
+  return items as Array<Record<string, unknown>>
+}
