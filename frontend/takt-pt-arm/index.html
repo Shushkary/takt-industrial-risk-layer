@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050b13" />
+    <title>TAKT — АРМ оператора</title>
+  </head>
+  <body>
+    <svg class="svg-sprite" aria-hidden="true">
+      <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></symbol>
+      <symbol id="i-radar" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M12 7a5 5 0 1 0 5 5M12 11a1 1 0 1 0 1 1M13 11l7-7"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+      <symbol id="i-node" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.7 3 8 7.5 9.5 4.5-1.5 7.5-4.8 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-5"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7-.7-1.7.9-2-2.2-2.2-2 .9-1.7-.7-.7-2h-3l-.7 2-1.7.7-2-.9L3 6.1l.9 2-.7 1.7-2 .7v3l2 .7.7 1.7-.9 2L5.2 20l2-.9 1.7.7.7 2h3l.7-2 1.7-.7 2 .9 2.2-2.2-.9-2 .7-1.7 2-.7Z"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    </svg>
+
+    <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+    <div class="app-shell">
+      <aside class="rail" aria-label="Основная навигация">
+        <a class="brand-mark" href="#" aria-label="TAKT"><span>T</span></a>
+        <nav>
+          <button class="rail-btn active" data-tip="Обзор"><svg><use href="#i-grid"/></svg></button>
+          <button class="rail-btn" data-tip="Расследование"><svg><use href="#i-radar"/></svg></button>
+          <button class="rail-btn" data-tip="Инциденты"><svg><use href="#i-list"/></svg><i>4</i></button>
+          <button class="rail-btn" data-tip="Топология"><svg><use href="#i-node"/></svg></button>
+          <button class="rail-btn" data-tip="Поиск"><svg><use href="#i-search"/></svg></button>
+          <button class="rail-btn" data-tip="Контроль"><svg><use href="#i-shield"/></svg></button>
+        </nav>
+        <div class="rail-bottom">
+          <button class="rail-btn" data-tip="Настройки"><svg><use href="#i-settings"/></svg></button>
+          <button class="avatar" title="Оператор Волков">АВ<span></span></button>
+        </div>
+      </aside>
+
+      <div class="page">
+        <header class="topbar">
+          <div class="product">
+            <div class="wordmark">TAKT<span>//</span></div>
+            <div class="product-caption">ПРОМЫШЛЕННЫЙ СЛОЙ РИСКА</div>
+          </div>
+          <div class="top-tabs" role="tablist">
+            <button class="top-tab active" data-view="situation">Оперативная обстановка</button>
+            <button class="top-tab" data-view="investigation">Расследование</button>
+            <button class="top-tab" data-view="assets">Активы</button>
+          </div>
+          <div class="top-meta">
+            <div><small>СЕГМЕНТ</small><strong>Котельная №4</strong></div>
+            <div class="divider"></div>
+            <div><small>СМЕНА</small><strong>02 · Дневная</strong></div>
+            <div class="system-time"><b id="clock">13:37:06</b><span>31 ИЮЛЯ 2026 · МСК</span></div>
+            <div class="live" id="channelStatus"><i></i> API · ПОДКЛЮЧЕНИЕ</div>
+          </div>
+        </header>
+
+        <main>
+          <section class="hero-line" id="overviewHero">
+            <div>
+              <p class="eyebrow"><span></span> ЦЕНТР МОНИТОРИНГА / АРМ-04</p>
+              <h1>Анализ промышленного риска</h1>
+            </div>
+            <div class="mode-switch" role="group" aria-label="Режим сегмента">
+              <span class="mode-label">РЕЖИМ СЕГМЕНТА</span>
+              <button class="mode active" type="button" data-mode="normal" aria-pressed="true">Штатный</button>
+              <button class="mode" type="button" data-mode="degraded" aria-pressed="false">Деградация</button>
+              <button class="mode" type="button" data-mode="isolated" aria-pressed="false">Изоляция</button>
+              <output class="mode-state" id="segmentModeStatus" aria-live="polite">ШТАТНЫЙ · МОНИТОРИНГ ПОЛНЫЙ</output>
+            </div>
+          </section>
+
+          <section class="investigation-view" id="investigationView" hidden>
+            <header class="investigation-head">
+              <button class="back-to-overview" id="backToOverview">← ОПЕРАТИВНАЯ ОБСТАНОВКА</button>
+              <div class="investigation-title">
+                <span id="investigationSeverity">КРИТИЧЕСКИЙ</span>
+                <h2 id="investigationTitle">Расследование инцидента</h2>
+                <p><b id="investigationCode">CASE-—</b> · единое рабочее пространство ТАКТ</p>
+              </div>
+              <div class="investigation-metrics">
+                <div><small>РИСК</small><strong id="investigationRisk">—</strong></div>
+                <div><small>ИМПАКТ</small><strong id="investigationImpact">—</strong></div>
+                <div><small>ДОВЕРИЕ</small><strong id="investigationConfidence">—</strong></div>
+                <div class="elapsed"><small>ВРЕМЯ РАЗБОРА</small><strong id="investigationElapsed">00:00</strong></div>
+                <output class="verdict-chip" id="verdictChip" title="Вердикт по инциденту">—</output>
+              </div>
+            </header>
+
+            <div class="investigation-grid">
+              <aside class="investigation-context">
+                <div class="workspace-section handoff-section">
+                  <div class="workspace-title"><span>01</span> ПРИНЯТО ОТ АВТОМАТИКИ <output class="handoff-state open" id="handoffState">—</output></div>
+                  <div class="handoff-split">
+                    <div><small>ЗАКРЫТО ПРАВИЛАМИ SIEM</small><strong id="handoffClosed">0</strong></div>
+                    <div class="accent"><small>ОСТАЛОСЬ АНАЛИТИКУ</small><strong id="handoffOpen">0</strong></div>
+                  </div>
+                  <p class="handoff-closed" id="handoffClosedList">—</p>
+                  <ul class="handoff-reasons" id="handoffReasons"></ul>
+                  <p class="handoff-note">Разбор автоматики смоделирован по охвату правил SIEM; прямой интеграции с внешним ML-контуром нет.</p>
+                </div>
+                <div class="workspace-section">
+                  <div class="workspace-title"><span>02</span> ГИПОТЕЗА</div>
+                  <p class="hypothesis-statement" id="hypothesisStatement">Формирование гипотезы…</p>
+                  <ul class="hypothesis-basis" id="hypothesisBasis"></ul>
+                </div>
+                <div class="workspace-section">
+                  <div class="workspace-title"><span>03</span> ПОЧЕМУ ЭТО ИНЦИДЕНТ</div>
+                  <p class="xai-text" id="investigationXai">Загрузка контекста ТАКТ…</p>
+                </div>
+                <div class="workspace-section">
+                  <div class="workspace-title"><span>04</span> ЧТО ОТМЕНИТ ВЕРДИКТ</div>
+                  <ul class="falsifier-list" id="falsifierList"></ul>
+                </div>
+                <div class="workspace-section">
+                  <div class="workspace-title"><span>05</span> УРОВНИ СУЩНОСТИ <b id="levelReach">—</b></div>
+                  <div class="entity-levels" id="entityLevels"></div>
+                  <p class="handoff-note">Выберите уровень, чтобы перейти к сущности и её baseline.</p>
+                </div>
+                <div class="workspace-section findings-section">
+                  <div class="workspace-title"><span>06</span> ЖУРНАЛ НАХОДОК <b id="findingCount">0</b></div>
+                  <div class="finding-list" id="findingList"></div>
+                </div>
+                <div class="workspace-section verdict-section">
+                  <div class="workspace-title"><span>07</span> ВЕРДИКТ И ВЫВОДЫ</div>
+                  <output class="verdict-badge" id="verdictBadge">—</output>
+                  <ul class="verdict-conclusions" id="verdictConclusions"></ul>
+                  <p class="handoff-note">Варианты реагирования — во вкладке «Пакет реагирования». Решение принимает аналитик.</p>
+                </div>
+              </aside>
+
+              <section class="investigation-canvas">
+                <div class="canvas-tabs" role="tablist">
+                  <button class="canvas-tab active" data-canvas="graph">ГРАФ АТАКИ</button>
+                  <button class="canvas-tab" data-canvas="timeline">ТАЙМЛАЙН</button>
+                  <button class="canvas-tab" data-canvas="events">СОБЫТИЯ</button>
+                  <button class="canvas-tab response-tab" data-canvas="response">ПАКЕТ РЕАГИРОВАНИЯ <i id="packageCount">0</i></button>
+                  <div class="canvas-meta"><span id="eventTotal">— событий</span><i></i><span>4 класса источников</span></div>
+                </div>
+                <div class="canvas-pane active" id="graphPane">
+                  <div class="pane-loading">Формирование цепочки атаки…</div>
+                  <svg id="attackGraph" viewBox="0 0 900 500" preserveAspectRatio="xMidYMid meet" aria-label="Граф цепочки атаки"></svg>
+                  <div class="graph-legend"><span><i class="node-address"></i>адрес</span><span><i class="node-user"></i>пользователь</span><span><i class="node-artifact"></i>артефакт</span><span><i class="node-host"></i>узел</span></div>
+                </div>
+                <div class="canvas-pane" id="timelinePane"><div class="timeline-list" id="timelineList"></div></div>
+                <div class="canvas-pane" id="eventsPane"><div class="workspace-events" id="workspaceEvents"></div></div>
+                <div class="canvas-pane" id="responsePane">
+                  <div class="response-workspace">
+                    <header class="response-heading">
+                      <div><span>HUMAN-IN-THE-LOOP</span><h3>Подготовка контекста для реагирования</h3><p>ТАКТ формирует пакет доказательств. Критичные действия выполняются только после подтверждения аналитиком.</p></div>
+                      <div class="response-state"><i></i><span>ЧЕРНОВИК</span><b id="packageCaseCode">CASE-—</b></div>
+                    </header>
+                    <div class="response-layout">
+                      <section class="package-builder">
+                        <div class="response-section-title"><span>01</span> ЗАТРОНУТЫЕ СУЩНОСТИ <small>выберите состав пакета</small></div>
+                        <div class="package-summary" id="packageSummary"></div>
+                        <div class="package-entities" id="packageEntities"></div>
+                      </section>
+                      <aside class="decision-builder">
+                        <div class="response-section-title"><span>02</span> ВАРИАНТЫ РЕАГИРОВАНИЯ <small>выбор за аналитиком</small></div>
+                        <div class="verdict-options" id="verdictOptions"></div>
+                        <div class="response-section-title"><span>03</span> РЕШЕНИЕ АНАЛИТИКА</div>
+                        <label class="decision-label" for="responseAction">РЕКОМЕНДУЕМОЕ ДЕЙСТВИЕ</label>
+                        <select id="responseAction">
+                          <option value="isolate_hosts">Изолировать затронутые узлы</option>
+                          <option value="block_ioc">Заблокировать IOC на рубеже</option>
+                          <option value="collect_forensics">Собрать форензические данные</option>
+                          <option value="monitor">Оставить под наблюдением</option>
+                          <option value="no_action">Реагирование не требуется</option>
+                        </select>
+                        <label class="decision-label" for="responseNote">ОБОСНОВАНИЕ / КОММЕНТАРИЙ</label>
+                        <textarea id="responseNote" placeholder="Зафиксируйте основание решения, ограничения и ожидаемый результат…"></textarea>
+                        <div class="approval-card"><i>!</i><div><b>Автоматическое исполнение отключено</b><span>Пакет только подготавливает проверяемый контекст для EDR / SOAR.</span></div></div>
+                        <button class="package-primary" id="downloadPackage">СКАЧАТЬ ПАКЕТ · JSON</button>
+                        <button class="package-secondary" id="downloadReport">СФОРМИРОВАТЬ ОТЧЁТ · TXT</button>
+                      </aside>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <aside class="entity-panel">
+                <div class="workspace-title"><span>04</span> КАРТОЧКА СУЩНОСТИ</div>
+                <div class="entity-empty" id="entityEmpty">Выберите узел на графе или событие в таймлайне</div>
+                <div class="entity-content" id="entityContent" hidden>
+                  <div class="entity-heading"><i id="entityIcon">●</i><div><small id="entityType">СУЩНОСТЬ</small><strong id="entityId">—</strong></div></div>
+                  <div class="entity-score"><div><small>ТИПИЧНОСТЬ</small><strong id="entityTypicality">—</strong></div><span id="entityVerdict">загрузка baseline</span></div>
+                  <div class="baseline-chart"><svg viewBox="0 0 300 100" preserveAspectRatio="none"><path class="baseline-zero" d="M0 50H300"/><polyline id="baselineLine" points="0,50 300,50"/></svg><div><span>−3σ</span><span>BASELINE · 28 точек</span><span>+6σ</span></div></div>
+                  <div class="entity-stats"><div><small>СРЕДНЕЕ</small><b id="baselineMean">—</b></div><div><small>ОТКЛОНЕНИЕ</small><b id="baselineStd">—</b></div></div>
+                  <div class="entity-relations"><small>ОКРУЖЕНИЕ В КЕЙСЕ</small><div id="entityRelations"></div></div>
+                  <button class="load-baseline" id="loadBaselineButton">ПРОВЕРИТЬ ИСТОРИЧНОСТЬ / BASELINE</button>
+                  <button class="add-finding" id="addFindingButton">+ ДОБАВИТЬ В ЖУРНАЛ НАХОДОК</button>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="dashboard" id="overviewDashboard">
+            <div class="left-stack">
+              <article class="panel incident-panel">
+                <div class="panel-heading">
+                  <div><span class="panel-index">01</span><h2>Активные инциденты</h2></div>
+                  <button class="text-action">ВСЕ <span id="totalCount">—</span> <svg><use href="#i-chevron"/></svg></button>
+                </div>
+                <div class="incident-summary">
+                  <div><strong id="activeCount">—</strong><span>требуют решения</span></div>
+                  <div class="spark" aria-hidden="true"><i style="height:28%"></i><i style="height:46%"></i><i style="height:38%"></i><i style="height:62%"></i><i style="height:55%"></i><i style="height:85%"></i><i style="height:66%"></i><i style="height:95%"></i><i style="height:74%"></i></div>
+                  <div class="delta up" id="queueDelta">—<small>средний риск</small></div>
+                </div>
+                <div class="incident-table" role="table">
+                  <div class="tr th" role="row"><span>ИНЦИДЕНТ / УЗЕЛ</span><span>РИСК</span><span>SLA</span><span></span></div>
+                  <button class="tr selected" data-id="CASE-0731" role="row">
+                    <span><i class="severity critical"></i><b>Компрометация АРМ инженера</b><small>WS-ENG-07 · EDR / SIEM</small></span><span class="risk high">0.78</span><span class="sla danger">04:18</span><svg><use href="#i-chevron"/></svg>
+                  </button>
+                  <button class="tr" data-id="CASE-0732" role="row">
+                    <span><i class="severity warning"></i><b>Перебор пароля на сервере</b><small>SRV-AD-02 · SIEM</small></span><span class="risk medium">0.62</span><span class="sla">12:44</span><svg><use href="#i-chevron"/></svg>
+                  </button>
+                  <button class="tr" data-id="CASE-0734" role="row">
+                    <span><i class="severity cyan"></i><b>Отклонение цикла опроса</b><small>PLC-01 · OT / PT ISIM</small></span><span class="risk low">0.44</span><span class="sla">28:09</span><svg><use href="#i-chevron"/></svg>
+                  </button>
+                  <button class="tr" data-id="CASE-0736" role="row">
+                    <span><i class="severity muted"></i><b>Новый узел в изолированной зоне</b><small>10.10.1.103 · NDR</small></span><span class="risk quiet">0.31</span><span class="sla">41:52</span><svg><use href="#i-chevron"/></svg>
+                  </button>
+                </div>
+              </article>
+
+              <article class="panel source-panel">
+                <div class="panel-heading"><div><span class="panel-index">02</span><h2>Контроль источников</h2></div><span class="status-ok" id="sourcesStatus"><i></i> TAKT API</span></div>
+                <div class="source-grid">
+                  <div data-source="EDR"><span class="source-name"><i class="c-blue"></i>EDR</span><strong>—</strong><small>событий в выборке</small><em>ONLINE</em></div>
+                  <div data-source="SIEM"><span class="source-name"><i class="c-violet"></i>SIEM</span><strong>—</strong><small>событий в выборке</small><em>ONLINE</em></div>
+                  <div data-source="NDR"><span class="source-name"><i class="c-teal"></i>NDR</span><strong>—</strong><small>событий в выборке</small><em>ONLINE</em></div>
+                  <div data-source="OT"><span class="source-name"><i class="c-amber"></i>OT / ISIM</span><strong>—</strong><small>событий в выборке</small><em>ONLINE</em></div>
+                </div>
+              </article>
+            </div>
+
+            <div class="center-stack">
+              <article class="panel focus-panel">
+                <div class="panel-heading">
+                  <div><span class="panel-index">03</span><h2>Фокус оператора</h2></div>
+                  <span class="case-code" id="caseCode">CASE-2026-0731</span>
+                </div>
+                <div class="focus-main">
+                  <div class="risk-dial" id="riskDial"><div><small>ИНДЕКС<br>РИСКА</small><strong id="riskValue">78</strong><span>/ 100</span></div></div>
+                  <div class="focus-copy">
+                    <div class="focus-title"><span class="critical-label">КРИТИЧЕСКИЙ</span><small>обновлено 8 сек. назад</small></div>
+                    <h3 id="caseTitle">Компрометация АРМ инженера</h3>
+                    <p id="caseDescription">Аномальная сессия привилегированного пользователя связана с изменением периода опроса PLC-01.</p>
+                    <div class="progress-row" id="contextMetric"><span>КОНТЕКСТ</span><div><i style="width:92%"></i></div><b>92%</b></div>
+                    <div class="progress-row" id="confidenceMetric"><span>ДОВЕРИЕ</span><div><i style="width:86%"></i></div><b>86%</b></div>
+                    <div class="progress-row" id="impactMetric"><span>ИМПАКТ</span><div class="hot"><i style="width:71%"></i></div><b>71%</b></div>
+                  </div>
+                </div>
+                <div class="decision-strip">
+                  <div><small>РЕКОМЕНДАЦИЯ</small><b id="recommendation">Изолировать узел WS-ENG-07</b></div>
+                  <span>до нарушения SLA</span><strong id="countdown">04:18</strong>
+                  <button id="acceptButton">ПРИНЯТЬ В РАБОТУ</button>
+                </div>
+              </article>
+
+              <article class="panel trend-panel">
+                <div class="panel-heading">
+                  <div><span class="panel-index">04</span><h2>Динамика риска</h2></div>
+                  <div class="legend"><span><i class="line-risk"></i>Риск</span><span><i class="bar-event"></i>События</span><span><i class="bar-case"></i>Кейсы</span></div>
+                  <div class="period"><button>1Ч</button><button class="active">6Ч</button><button>12Ч</button><button>24Ч</button></div>
+                </div>
+                <div class="chart-wrap">
+                  <div class="y-axis"><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div>
+                  <svg class="trend-chart" viewBox="0 0 760 245" preserveAspectRatio="none" aria-label="График динамики риска">
+                    <defs>
+                      <linearGradient id="riskArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17c9ff" stop-opacity=".28"/><stop offset="1" stop-color="#17c9ff" stop-opacity="0"/></linearGradient>
+                      <linearGradient id="barBlue" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#90dfff"/><stop offset="1" stop-color="#1a4662" stop-opacity=".2"/></linearGradient>
+                    </defs>
+                    <g class="grid-lines"><path d="M0 18H760M0 68H760M0 118H760M0 168H760M0 218H760"/></g>
+                    <g class="bars events"><rect x="28" y="144" width="15" height="74"/><rect x="103" y="99" width="15" height="119"/><rect x="178" y="155" width="15" height="63"/><rect x="253" y="68" width="15" height="150"/><rect x="328" y="126" width="15" height="92"/><rect x="403" y="82" width="15" height="136"/><rect x="478" y="137" width="15" height="81"/><rect x="553" y="54" width="15" height="164"/><rect x="628" y="106" width="15" height="112"/><rect x="703" y="75" width="15" height="143"/></g>
+                    <g class="bars cases"><rect x="48" y="198" width="9" height="20"/><rect x="123" y="185" width="9" height="33"/><rect x="198" y="194" width="9" height="24"/><rect x="273" y="180" width="9" height="38"/><rect x="348" y="190" width="9" height="28"/><rect x="423" y="178" width="9" height="40"/><rect x="498" y="188" width="9" height="30"/><rect x="573" y="176" width="9" height="42"/><rect x="648" y="183" width="9" height="35"/><rect x="723" y="187" width="9" height="31"/></g>
+                    <path class="risk-area" d="M0 145 C38 137 54 185 92 172 S136 115 174 133 S220 95 258 109 S300 74 338 93 S384 117 422 92 S467 56 505 72 S550 122 588 95 S634 37 672 68 S716 85 760 42 L760 218 L0 218Z"/>
+                    <path class="risk-line" d="M0 145 C38 137 54 185 92 172 S136 115 174 133 S220 95 258 109 S300 74 338 93 S384 117 422 92 S467 56 505 72 S550 122 588 95 S634 37 672 68 S716 85 760 42"/>
+                    <g class="risk-points"><circle cx="92" cy="172" r="4"/><circle cx="258" cy="109" r="4"/><circle cx="422" cy="92" r="4"/><circle cx="588" cy="95" r="4"/><circle cx="760" cy="42" r="5"/></g>
+                  </svg>
+                  <div class="x-axis"><span>08:00</span><span>09:00</span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span></div>
+                  <div class="chart-callout"><small>СЕЙЧАС</small><b id="currentRisk">0.78</b><span id="riskDelta">данные ТАКТ</span></div>
+                </div>
+              </article>
+            </div>
+
+            <div class="right-stack">
+              <article class="panel profile-panel">
+                <div class="panel-heading"><div><span class="panel-index">05</span><h2>Профиль угрозы</h2></div><button class="icon-action">•••</button></div>
+                <div class="radar-wrap">
+                  <svg viewBox="0 0 320 245" aria-label="Радар профиля угрозы">
+                    <g class="radar-grid"><polygon points="160,28 259,83 242,188 160,224 78,188 61,83"/><polygon points="160,61 226,98 215,168 160,192 105,168 94,98"/><polygon points="160,94 193,113 188,148 160,160 132,148 127,113"/><path d="M160 28v196M61 83l181 105M259 83 78 188"/></g>
+                    <polygon class="radar-shape" id="threatPolygon" points="160,43 238,95 211,169 160,209 93,177 103,107"/>
+                    <g class="radar-dots"><circle cx="160" cy="43" r="4"/><circle cx="238" cy="95" r="4"/><circle cx="211" cy="169" r="4"/><circle cx="160" cy="209" r="4"/><circle cx="93" cy="177" r="4"/><circle cx="103" cy="107" r="4"/></g>
+                    <g class="radar-labels"><text x="160" y="15">УЧЁТНЫЕ ДАННЫЕ</text><text x="278" y="82">СЕТЬ</text><text x="276" y="196">ПРОЦЕСС</text><text x="160" y="242">OT-ИМПАКТ</text><text x="40" y="196">ДАННЫЕ</text><text x="42" y="82">ПОВЕДЕНИЕ</text></g>
+                  </svg>
+                  <div class="profile-score"><small>ДОВЕРИЕ</small><strong id="profileScore">86%</strong><span>TAKT XAI</span></div>
+                </div>
+                <div class="tactics" id="tactics">
+                  <div><span>T1078</span><b>Valid Accounts</b><em>HIGH</em></div>
+                  <div><span>T1059</span><b>Command Interpreter</b><em>MED</em></div>
+                  <div><span>T0831</span><b>Manipulation of Control</b><em>HIGH</em></div>
+                </div>
+              </article>
+
+              <article class="panel shift-panel">
+                <div class="panel-heading"><div><span class="panel-index">06</span><h2>Сводка смены</h2></div><span class="shift-progress">68%</span></div>
+                <div class="kpi-grid">
+                  <div><small>АКТИВНЫЕ</small><strong id="kpiActive">—</strong><span class="good">LIVE</span></div>
+                  <div><small>СР. РИСК</small><strong id="kpiAverage">—</strong><span>по кейсам</span></div>
+                  <div><small>КРИТИЧЕСКИЕ</small><strong id="kpiCritical">—</strong><span>приоритет</span></div>
+                  <div><small>ХВОСТ OT</small><strong id="kpiTail">—</strong><span>tail risk</span></div>
+                </div>
+                <div class="operator-row"><div class="avatar-mini">АВ</div><div><b>Алексей Волков</b><small>SOC-оператор · L2</small></div><span><i></i> НА ЛИНИИ</span></div>
+              </article>
+            </div>
+          </section>
+        </main>
+
+        <footer class="statusbar">
+          <span id="systemState"><i class="ok-dot"></i> Подключение к программе ТАКТ</span><span>СОБЫТИЯ В ВЫБОРКЕ <b id="eventCount">—</b></span><span>ЗАДЕРЖКА <b id="latency">—</b></span><span>ДАННЫЕ <b>TAKT Industrial Risk Layer</b></span><span class="status-right">Последняя синхронизация: <b id="lastSync">—</b></span>
+        </footer>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status"><i></i><div><b>Инцидент принят в работу</b><span>Лок установлен за оператором А. Волков</span></div></div>
+    <script src="./app.min.js?v=20260803-03"></script>
+  </body>
+</html>

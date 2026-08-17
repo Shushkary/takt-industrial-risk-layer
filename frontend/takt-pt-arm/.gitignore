@@ -1,0 +1,7 @@
+# Артефакты сборки: создаются `node build-production.mjs` из app.js и styles.css.
+# В репозитории держим только исходники, чтобы исходник и то, что отдаётся
+# пользователю, не расходились (см. историю правок build-production.mjs).
+app.min.js
+styles.min.css
+index.prod.html
+*.gz

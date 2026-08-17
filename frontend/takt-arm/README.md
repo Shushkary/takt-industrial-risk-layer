@@ -73,6 +73,35 @@ npm run build-storybook
 - Playwright e2e scenarios
 - frontend release artifact checks
 
+## Публикация на подпуть
+
+По умолчанию приложение собирается для корня домена. Для выкладки в подкаталог
+(например, `https://example.org/takt_pt/`) базовый путь задаётся переменной
+окружения — маршруты в коде остаются относительными:
+
+```powershell
+$env:VITE_BASE = "/takt_pt/"; npm run build
+```
+
+Значение попадает в `import.meta.env.BASE_URL`, откуда его берут `base` в
+[`vite.config.ts`](vite.config.ts) и `basename` роутера в
+[`src/main.tsx`](src/main.tsx). В собранном `dist/index.html` пути к ассетам
+должны начинаться с этого префикса — если там осталось `/assets/…`, сборка
+выполнена без переменной.
+
+На стороне веб-сервера подпуть требует SPA-fallback, иначе прямая ссылка и
+обновление страницы дадут 404:
+
+```nginx
+location ^~ /takt_pt/ {
+    try_files $uri $uri/ /takt_pt/index.html;
+}
+```
+
+> В Git Bash на Windows значение вида `/takt_pt/` подменяется на путь установки
+> (`/Program Files/Git/takt_pt/`) из-за преобразования POSIX-путей. Собирайте с
+> этой переменной в PowerShell или экранируйте значение.
+
 ## Release artifacts
 
 - Production bundle: `dist/`

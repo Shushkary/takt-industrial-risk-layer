@@ -6,7 +6,10 @@ import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    {/* Базовый путь публикации берётся из vite.config.ts (base). Маршруты в
+        коде остаются относительными, поэтому перенос приложения на подпуть
+        (например, /takt_pt/) меняет только конфигурацию сборки. */}
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <App />
     </BrowserRouter>
   </StrictMode>,
