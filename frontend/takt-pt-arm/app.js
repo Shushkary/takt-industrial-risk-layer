@@ -3,7 +3,7 @@
 if (!document.querySelector('style[data-takt-styles]')) {
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = './styles.css?v=20260803-06';
+  stylesheet.href = './styles.css?v=20260803-07';
   document.head.appendChild(stylesheet);
 }
 
@@ -554,10 +554,23 @@ function stopInvestigationTimer() {
   investigationStartedAt = 0;
 }
 
+// Раскладка узлов графа. При длинной цепочке (десятки сущностей) размещение в
+// одну линию давало наложение кругов, поэтому узлы переносятся на несколько
+// рядов «змейкой»: порядок обхода сохраняется, подписи не сливаются.
+const GRAPH_MAX_PER_ROW = 7;
+
 function nodePosition(index, total) {
-  const x = total <= 1 ? 450 : 105 + index * (690 / (total - 1));
-  const y = index % 2 === 0 ? 205 : 295;
-  return { x, y };
+  if (total <= 1) return { x: 450, y: 250 };
+  const perRow = Math.min(total, GRAPH_MAX_PER_ROW);
+  const rows = Math.ceil(total / perRow);
+  const row = Math.floor(index / perRow);
+  const inRow = index % perRow;
+  const rowCount = row === rows - 1 ? total - perRow * row : perRow;
+  const step = rowCount > 1 ? 690 / (rowCount - 1) : 0;
+  const x = rowCount > 1 ? 105 + inRow * step : 450;
+  const rowGap = rows > 1 ? Math.min(150, 380 / rows) : 0;
+  const top = 250 - ((rows - 1) * rowGap) / 2;
+  return { x, y: top + row * rowGap };
 }
 
 function shortText(value, max = 24) {
