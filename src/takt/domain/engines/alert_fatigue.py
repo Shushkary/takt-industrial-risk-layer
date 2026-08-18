@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from takt.domain.entities.event import NormalizedEvent
+from takt.domain.entities.event import ArtifactType, NormalizedEvent
 
 _ENTITY_FIELDS = frozenset(
     {"host_id", "user_id", "process_id", "parent_process_id", "src_address", "dst_address"}
@@ -83,9 +83,13 @@ def correlation_fingerprints(
 
 
 def _valid_correlation_field(field: str) -> bool:
-    return field in _ENTITY_FIELDS or (field.startswith("artifact:") and field.split(":", 1)[1] in {
-        "host", "file", "hash", "process", "account", "address", "url", "domain"
-    })
+    # Допустимые типы артефактов берутся из каталога ArtifactType, а не из
+    # копии списка: иначе новый тип (напр. `spn`, `repo`) молча оказался бы
+    # недоступен для правил корреляции.
+    return field in _ENTITY_FIELDS or (
+        field.startswith("artifact:")
+        and field.split(":", 1)[1] in {kind.value for kind in ArtifactType}
+    )
 
 
 def _correlation_value(event: NormalizedEvent, field: str) -> str | tuple[str, ...] | None:

@@ -28,6 +28,12 @@ class ArtifactType(StrEnum):
     ADDRESS = "address"
     URL = "url"
     DOMAIN = "domain"
+    # Идентификатор службы Kerberos (напр. `MSSQLSvc/db01`): цель kerberoasting,
+    # по нему связываются запросы билетов и захват сервисной учётной записи.
+    SPN = "spn"
+    # Репозиторий кода или релизный конвейер (напр. `release-prod`): объект
+    # атаки на цепочку поставки сборки.
+    REPO = "repo"
 
 
 @dataclass(frozen=True, slots=True)

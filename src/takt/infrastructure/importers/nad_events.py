@@ -34,14 +34,21 @@ logger = logging.getLogger(__name__)
 REDACTED_FIELDS: tuple[tuple[str, ...], ...] = (("credentials", "password"),)
 REDACTED_MARKER = "[redacted]"
 
-# Приоритет полей: первое непустое значение выигрывает.
+# Приоритет полей: первое непустое значение выигрывает. Каскад покрывает две
+# формы записи: полную схему индекса заказчика (`src.host_id`, `s_msg`,
+# `query.rrname`) и упрощённую выгрузку потоков (`src.host`, `verdict`,
+# `dns.query`), которая встречается в демонстрационных наборах.
 TIME_FIELDS = ("ts", "ts_start", "_ltime", "tx_time")
 PROTOCOL_FIELDS = ("app_proto", "proto", "protocol")
-OPERATION_FIELDS = ("s_msg", "alert.description", "type", "app_name")
-HOST_FIELDS = ("src.host_id", "host.host_id", "attacker.host_id", "src.name", "host.name")
+OPERATION_FIELDS = ("s_msg", "alert.description", "verdict", "type", "app_name")
+HOST_FIELDS = (
+    "src.host_id", "host.host_id", "attacker.host_id",
+    "src.host", "host.host", "src.name", "host.name",
+)
 USER_FIELDS = ("user", "credentials.login", "subject")
 SRC_FIELDS = ("src.ip", "attacker.ip")
 DST_FIELDS = ("dst.ip", "victim.ip")
+DOMAIN_FIELDS = ("query.rrname", "dns.query", "server_name", "dst.dns")
 
 
 def _get(doc: dict[str, Any], path: str) -> Any:
@@ -91,7 +98,7 @@ def redact(doc: dict[str, Any]) -> dict[str, Any]:
 
 def _event_id(doc: dict[str, Any]) -> str:
     """Идентификатор события: явный id хранилища, иначе составной ключ потока."""
-    for path in ("_id", "_ndx", "_prn.id", "tx_id", "file_id"):
+    for path in ("_id", "_ndx", "_prn.id", "flow_id", "tx_id", "file_id"):
         value = _text(doc, path)
         if value is not None:
             return value
@@ -119,9 +126,12 @@ def _payload_size(doc: dict[str, Any]) -> int:
             seen = True
     if seen:
         return max(0, total)
-    raw = _get(doc, "size")
-    if isinstance(raw, (int, float)):
-        return max(0, int(raw))
+    # Упрощённая выгрузка хранит объём одним числом в `bytes`, а не разбивкой
+    # по направлениям; булево значение объёмом не считается.
+    for path in ("bytes", "size"):
+        raw = _get(doc, path)
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return max(0, int(raw))
     return 0
 
 
@@ -133,9 +143,7 @@ def _artifacts(doc: dict[str, Any]) -> tuple[EventArtifact, ...]:
         (ArtifactType.HASH, _text(doc, "ja3_md5")),
         (ArtifactType.HASH, _text(doc, "ja4")),
         (ArtifactType.FILE, _text(doc, "filepath") or _text(doc, "filename")),
-        (ArtifactType.DOMAIN, _text(doc, "query.rrname")),
-        (ArtifactType.DOMAIN, _text(doc, "server_name")),
-        (ArtifactType.DOMAIN, _text(doc, "dst.dns")),
+        *((ArtifactType.DOMAIN, _text(doc, path)) for path in DOMAIN_FIELDS),
         (ArtifactType.ADDRESS, _first(doc, DST_FIELDS)),
         (ArtifactType.ACCOUNT, _text(doc, "credentials.login")),
     ]

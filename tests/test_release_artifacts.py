@@ -57,6 +57,19 @@ _BINARY_OFFICE_SUFFIXES = {
 }
 
 
+# Каталоги синтетической телеметрии. В них профиль пользователя Windows —
+# легитимное содержимое данных: дроппер в сценарии закономерно попадает в
+# `C:` + профиль жертвы, и такие пути описывают смоделированный узел, а не
+# машину разработчика. Гард нацелен на утечку окружения сборки в исходники,
+# документацию и CI, поэтому данные фикстур из скана исключены.
+_DATA_ONLY_DIRS = (Path("tests") / "fixtures",)
+
+
+def _is_fixture_data(path: Path) -> bool:
+    relative = path.relative_to(ROOT)
+    return any(relative.is_relative_to(data_dir) for data_dir in _DATA_ONLY_DIRS)
+
+
 def _iter_text_files(path: Path):
     if path.is_file():
         yield path
@@ -64,7 +77,7 @@ def _iter_text_files(path: Path):
     for candidate in path.rglob("*"):
         if candidate.is_file() and candidate.suffix.lower() not in {
             ".pyc", ".pyo", ".pdf", ".png", ".jpg", *_BINARY_OFFICE_SUFFIXES
-        }:
+        } and not _is_fixture_data(candidate):
             yield candidate
 
 
