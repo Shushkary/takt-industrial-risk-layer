@@ -3,7 +3,7 @@
 if (!document.querySelector('style[data-takt-styles]')) {
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = './styles.css?v=20260803-03';
+  stylesheet.href = './styles.css?v=20260803-06';
   document.head.appendChild(stylesheet);
 }
 
@@ -12,12 +12,49 @@ const OPERATOR_ID = 'operator.arm-04';
 const POLL_MS = 10000;
 const STALE_MS = 7000;
 
+// Демонстрационный сценарий INC-002 — компрометация конвейера сборки через
+// фишинг. Используется, когда API недоступен: интерфейс остаётся показательным
+// и на стенде без бэкенда. Данные синтетические, совпадают с фикстурой
+// tests/fixtures/pt_techlab/inc_002.
 const FALLBACK_CASES = [
-  { id: 'CASE-2026-0731', severity: 'critical', status: 'investigating', title: 'Несанкционированная команда управления на ПЛК (цепочка IEC-104)', risk_score: .94, impact_score: .97, confidence: .88, observations: 6, tail_risk: true, invariants: ['INV-NET-01','INV-AUTH-03','INV-OT-11'], xai_summary: 'Коррелировано 6 событий из 4 источников: внешнее сканирование → вход → команда C_SC_NA_1 на plc-rtu-14 → аномалия HMI.', findings: [{ entity_type: 'host', entity_id: 'plc-rtu-14' }] },
-  { id: 'CASE-20260735', severity: 'medium', status: 'new', title: 'Обновление прошивки plc-rtu-15', risk_score: .43, impact_score: .16, confidence: .41, observations: 1, tail_risk: false, invariants: ['INV-CFG-03'], xai_summary: 'Одиночное срабатывание правила, корреляций не обнаружено.', findings: [{ entity_type: 'host', entity_id: 'jump-host-01' }] },
-  { id: 'CASE-20260733', severity: 'low', status: 'new', title: 'Всплеск ICMP от gw-iec104-01', risk_score: .38, impact_score: .23, confidence: .48, observations: 1, tail_risk: false, invariants: ['INV-NET-01'], xai_summary: 'Одиночное срабатывание правила, корреляций не обнаружено.', findings: [{ entity_type: 'host', entity_id: 'eng-ws-01' }] },
-  { id: 'CASE-20260734', severity: 'low', status: 'resolved', title: 'Повтор входа svc_scada (плановая ротация)', risk_score: .25, impact_score: .29, confidence: .42, observations: 1, tail_risk: false, invariants: ['INV-AUTH-09'], xai_summary: 'Одиночное срабатывание правила, корреляций не обнаружено.', findings: [{ entity_type: 'host', entity_id: 'jump-host-01' }] }
+  { id: 'INC-002', severity: 'critical', status: 'investigating', title: 'Компрометация конвейера сборки: фишинг → C2 → подмена артефакта', risk_score: .93, impact_score: .96, confidence: .87, observations: 27, tail_risk: true, invariants: ['INV-NET-01','INV-AUTH-03','INV-CI-07'], xai_summary: 'Собрано 27 событий из 4 источников: фишинг на ws-17 (smirnov) → канал C2 по DoH → kerberoasting и захват svc_build → перемещение на build-srv-01 → неподписанный артефакт в релизном конвейере release-prod.', findings: [{ entity_type: 'host', entity_id: 'ws-17' }, { entity_type: 'account', entity_id: 'svc_build' }, { entity_type: 'address', entity_id: '185.220.101.34' }, { entity_type: 'repo', entity_id: 'release-prod' }] },
+  { id: 'BG-ADMIN', severity: 'medium', status: 'new', title: 'Удалённое исполнение WMI вне рабочего окна (admin_ops)', risk_score: .44, impact_score: .21, confidence: .39, observations: 2, tail_risk: false, invariants: ['INV-AUTH-09'], xai_summary: 'Похоже на горизонтальное перемещение, но действие выполнено штатной учётной записью администратора.', findings: [{ entity_type: 'host', entity_id: 'dc-02' }] },
+  { id: 'BG-SCAN', severity: 'low', status: 'new', title: 'Сканирование сети с scan-01', risk_score: .31, impact_score: .12, confidence: .52, observations: 9, tail_risk: false, invariants: ['INV-NET-01'], xai_summary: 'Санкционированное сканирование уязвимостей; профиль совпадает с согласованным окном.', findings: [{ entity_type: 'host', entity_id: 'scan-01' }] },
+  { id: 'BG-BACKUP', severity: 'low', status: 'resolved', title: 'Ночное резервное копирование (svc_backup)', risk_score: .22, impact_score: .18, confidence: .46, observations: 2, tail_risk: false, invariants: [], xai_summary: 'Большой объём SMB-трафика объясняется плановым бэкапом.', findings: [{ entity_type: 'host', entity_id: 'backup-01' }] }
 ];
+
+const INC002_EVENTS = [
+  { ts:'2026-08-17T06:00:00Z', source_class:'edr', host_id:'ws-17', user_id:'smirnov', process:'OUTLOOK.EXE', severity:'info', operation:'PROCESS_START' },
+  { ts:'2026-08-17T06:01:00Z', source_class:'edr', host_id:'ws-17', user_id:'smirnov', process:'mshta.exe', severity:'info', operation:'PROCESS_START' },
+  { ts:'2026-08-17T06:01:30Z', source_class:'edr', host_id:'ws-17', user_id:'smirnov', process:'powershell.exe', address:'185.220.101.34', severity:'info', operation:'PROCESS_START' },
+  { ts:'2026-08-17T06:02:00Z', source_class:'edr', host_id:'ws-17', user_id:'smirnov', process:'invoice_viewer.exe', severity:'warning', operation:'FILE_WRITE' },
+  { ts:'2026-08-17T06:02:30Z', source_class:'edr', host_id:'ws-17', user_id:'smirnov', process:'invoice_viewer.exe', address:'185.220.101.34', severity:'info', operation:'PROCESS_START' },
+  { ts:'2026-08-17T06:03:00Z', source_class:'ndr', host_id:'ws-17', address:'185.220.101.34', artifact:'cdn-metrics.example-analytics.com', severity:'critical', operation:'C2_SUSPECT' },
+  { ts:'2026-08-17T06:04:00Z', source_class:'siem', host_id:'ws-17', user_id:'smirnov', address:'185.220.101.34', artifact:'cdn-metrics.example-analytics.com', severity:'warning', operation:'SUSPICIOUS_OUTBOUND' },
+  { ts:'2026-08-17T06:10:00Z', source_class:'ndr', host_id:'ws-17', address:'185.220.101.34', artifact:'cdn-metrics.example-analytics.com', severity:'critical', operation:'C2_SUSPECT' },
+  { ts:'2026-08-17T06:12:00Z', source_class:'edr', host_id:'ws-17', user_id:'smirnov', process:'svchosts.exe', severity:'info', operation:'PROCESS_START' },
+  { ts:'2026-08-17T06:13:00Z', source_class:'siem', host_id:'dc-01', user_id:'smirnov', address:'10.10.1.10', artifact:'MSSQLSvc/db01', severity:'critical', operation:'KERBEROS_TGS_RC4' },
+  { ts:'2026-08-17T06:13:00Z', source_class:'siem', host_id:'dc-01', user_id:'smirnov', address:'10.10.1.10', artifact:'HTTP/build-srv-01', severity:'critical', operation:'KERBEROS_TGS_RC4' },
+  { ts:'2026-08-17T06:13:00Z', source_class:'siem', host_id:'dc-01', user_id:'smirnov', address:'10.10.1.10', artifact:'CIFS/file-srv-01', severity:'critical', operation:'KERBEROS_TGS_RC4' },
+  { ts:'2026-08-17T06:14:00Z', source_class:'siem', host_id:'dc-01', user_id:'svc_build', address:'10.10.1.10', artifact:'svc_build', severity:'warning', operation:'LOGON_SERVICE_ACCOUNT_ANOMALY' },
+  { ts:'2026-08-17T06:15:00Z', source_class:'ndr', host_id:'ws-17', address:'10.10.3.5', severity:'critical', operation:'LATERAL_SUSPECT' },
+  { ts:'2026-08-17T06:16:00Z', source_class:'edr', host_id:'build-srv-01', user_id:'svc_build', process:'wmiprvse.exe', address:'10.10.1.26', severity:'info', operation:'PROCESS_START' },
+  { ts:'2026-08-17T06:16:30Z', source_class:'edr', host_id:'build-srv-01', user_id:'svc_build', process:'powershell.exe', severity:'info', operation:'PROCESS_START' },
+  { ts:'2026-08-17T06:17:00Z', source_class:'ndr', host_id:'ws-17', address:'185.220.101.34', artifact:'cdn-metrics.example-analytics.com', severity:'critical', operation:'C2_SUSPECT' },
+  { ts:'2026-08-17T06:17:00Z', source_class:'siem', host_id:'build-srv-01', user_id:'svc_build', address:'10.10.3.5', severity:'critical', operation:'REMOTE_EXEC_WMI' },
+  { ts:'2026-08-17T06:20:00Z', source_class:'ndr', host_id:'build-srv-01', address:'10.10.3.6', artifact:'git-srv-01.corp.local', severity:'info', operation:'ALLOWED' },
+  { ts:'2026-08-17T06:21:00Z', source_class:'edr', host_id:'build-srv-01', user_id:'svc_build', process:'git.exe', severity:'info', operation:'PROCESS_START' },
+  { ts:'2026-08-17T06:22:00Z', source_class:'edr', host_id:'build-srv-01', user_id:'svc_build', process:'app-setup.msi', severity:'warning', operation:'FILE_WRITE' },
+  { ts:'2026-08-17T06:23:00Z', source_class:'ot', host_id:'artifact:app-setup.msi', address:'10.10.3.6', severity:'critical', operation:'ARTIFACT_HASH_MISMATCH' },
+  { ts:'2026-08-17T06:23:30Z', source_class:'ot', host_id:'pipeline:release-prod', address:'10.10.3.6', severity:'critical', operation:'UNSIGNED_ARTIFACT_PUSH' },
+  { ts:'2026-08-17T06:24:00Z', source_class:'ndr', host_id:'ws-17', address:'185.220.101.34', artifact:'cdn-metrics.example-analytics.com', severity:'critical', operation:'C2_SUSPECT' },
+  { ts:'2026-08-17T06:24:00Z', source_class:'siem', host_id:'build-srv-01', user_id:'svc_build', address:'10.10.3.6', artifact:'release-prod', severity:'warning', operation:'CODE_REPO_WRITE_OFFHOURS' },
+  { ts:'2026-08-17T06:31:00Z', source_class:'ndr', host_id:'ws-17', address:'185.220.101.34', artifact:'cdn-metrics.example-analytics.com', severity:'critical', operation:'C2_SUSPECT' },
+  { ts:'2026-08-17T06:38:00Z', source_class:'ndr', host_id:'ws-17', address:'185.220.101.34', artifact:'cdn-metrics.example-analytics.com', severity:'critical', operation:'C2_SUSPECT' },
+];
+
+// События демо-сценария по кейсам: показываются, когда поток из API недоступен.
+const FALLBACK_EVENTS = { 'INC-002': INC002_EVENTS };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -286,6 +323,21 @@ function renderInvestigationFindings(item) {
 const SIEM_COVERED_PREFIXES = ['INV-NET', 'INV-AUTH', 'INV-MAL', 'INV-SIG'];
 const OT_SOURCE_PATTERN = /iec|modbus|opc|scada|\bot\b|plc/;
 
+// Источник класса `ot` описывает защищаемый контур за пределами корпоративной
+// сети. В промышленном сценарии это АСУ ТП, в SOC-сценарии — целостность
+// сборки и релиза. Формулировки подстраиваются, чтобы не называть конвейер
+// сборки технологическим сегментом.
+function protectedZone(events) {
+  const assets = events
+    .filter((event) => OT_SOURCE_PATTERN.test(String(event.source_class || '').toLowerCase()))
+    .map((event) => String(event.host_id || ''));
+  if (!assets.length) return null;
+  const build = assets.some((asset) => asset.startsWith('artifact:') || asset.startsWith('pipeline:'));
+  return build
+    ? { name: 'конвейер сборки и релиза', short: 'конвейер сборки', asset: assets[0] }
+    : { name: 'технологический сегмент', short: 'технологический сегмент', asset: assets[0] };
+}
+
 function o2Handoff(item, events) {
   const invariants = (item.invariants || []).map(String);
   const closed = invariants.filter((inv) => SIEM_COVERED_PREFIXES.some((prefix) => inv.startsWith(prefix)));
@@ -295,7 +347,8 @@ function o2Handoff(item, events) {
 
   const reasons = [];
   if (open.length) reasons.push(`${open.length} инвариант${open.length === 1 ? '' : 'а'} вне правил SIEM: ${open.join(', ')}`);
-  if (otClasses.length) reasons.push(`телеметрия технологического сегмента (${otClasses.join(', ')}) не входит в модель SIEM`);
+  const zoneForHandoff = protectedZone(events);
+  if (otClasses.length) reasons.push(`телеметрия защищаемого контура — ${zoneForHandoff ? zoneForHandoff.name : 'вне SIEM'} (${otClasses.join(', ')}) — не входит в модель SIEM`);
   if (classes.length > 1) reasons.push(`связь ${classes.length} классов источников установлена корреляцией, а не одиночным правилом`);
   if (item.tail_risk) reasons.push('хвостовой риск: редкое сочетание признаков вне обучающей выборки');
 
@@ -307,14 +360,15 @@ function buildHypothesis(item, events) {
   const entry = chain.nodes[0];
   const target = chain.nodes[chain.nodes.length - 1];
   const otEvent = events.find((event) => OT_SOURCE_PATTERN.test(String(event.source_class || '').toLowerCase()));
+  const zone = protectedZone(events);
 
   const statement = entry && target && entry.id !== target.id
-    ? `Точка входа — ${entry.label}; активность прошла по цепочке и достигла ${target.label}${otEvent ? ' в технологическом сегменте' : ''}.`
+    ? `Точка входа — ${entry.label}; активность прошла по цепочке и достигла ${target.label}${zone ? ` в защищаемом контуре (${zone.short})` : ''}.`
     : `Активность сосредоточена на ${mainEntity(item)}; цепочка пока не восстановлена.`;
 
   const basis = [];
   if (chain.nodes.length > 1) basis.push(`Цепочка из ${chain.nodes.length} сущностей связана корреляцией ТАКТ`);
-  if (otEvent) basis.push(`Достигнут технологический сегмент: ${otEvent.host_id || 'узел АСУ ТП'}`);
+  if (zone) basis.push(`Достигнут ${zone.name}: ${zone.asset || otEvent?.host_id || 'защищаемый объект'}`);
   if (item.tail_risk) basis.push('Отмечен хвостовой риск — редкое сочетание признаков');
   if ((item.invariants || []).length) basis.push(`Сработали инварианты: ${item.invariants.join(', ')}`);
   if (!basis.length) basis.push('Оснований пока недостаточно — требуется сбор контекста');
@@ -348,7 +402,7 @@ function buildVerdict(item, events) {
   const score = Number(item.risk_score || 0);
   const handoff = o2Handoff(item, events);
   const levels = entityLevels(item, events).filter((level) => level.values.length);
-  const otReached = events.some((event) => OT_SOURCE_PATTERN.test(String(event.source_class || '').toLowerCase()));
+  const zoneReached = protectedZone(events);
 
   let verdict = 'ОТКЛОНЕНИЕ БЕЗ ПРИЗНАКОВ АТАКИ';
   let tone = 'quiet';
@@ -357,18 +411,33 @@ function buildVerdict(item, events) {
 
   const conclusions = [];
   if (handoff.handedOver) conclusions.push(`Автоматика закрыла ${handoff.closed.length} из ${handoff.closed.length + handoff.open.length} признаков; остальное разобрано в ТАКТ.`);
-  if (levels.length > 1) conclusions.push(`Разбор поднялся на ${levels.length} уровня сущностей: ${levels.map((level) => level.label.toLowerCase()).join(' → ')}.`);
-  if (otReached) conclusions.push('Активность пересекла границу корпоративного и технологического сегмента — приоритет по импакту.');
+  if (levels.length > 1) {
+    const word = levels.length % 10 === 1 && levels.length % 100 !== 11 ? 'уровень'
+      : [2, 3, 4].includes(levels.length % 10) && ![12, 13, 14].includes(levels.length % 100) ? 'уровня' : 'уровней';
+    conclusions.push(`Разбор охватил ${levels.length} ${word} сущностей: ${levels.map((level) => level.label.toLowerCase()).join(' → ')}.`);
+  }
+  if (zoneReached) conclusions.push(`Активность вышла за пределы рабочих станций и затронула ${zoneReached.name} — приоритет по импакту.`);
   conclusions.push(`Совокупная оценка: риск ${score.toFixed(2)}, импакт ${Number(item.impact_score || 0).toFixed(2)}, доверие ${Number(item.confidence || 0).toFixed(2)}.`);
 
   // Варианты, а не единственное предписание: выбор остаётся за аналитиком.
+  // Состав вариантов выводится из того, какие сущности затронуты инцидентом,
+  // поэтому одни и те же правила дают разные наборы для разных сценариев.
+  const findings = item.findings || [];
+  const findingOf = (type) => findings.find((entry) => entry.entity_type === type)?.entity_id;
+  const account = findingOf('account') || events.map((event) => event.user_id).find(Boolean);
+  const external = findingOf('address')
+    || events.map((event) => event.address).find((value) => value && !String(value).startsWith('10.'));
+  const pipeline = findingOf('repo') || findingOf('pipeline');
   const options = [];
+
   if (score >= 0.75) {
-    options.push({ code: 'isolate', title: `Изолировать ${mainEntity(item)}`, effect: 'Прерывает цепочку немедленно. Возможна остановка технологического процесса — согласовать с владельцем.' });
-    options.push({ code: 'restrict', title: 'Ограничить учётную запись и наблюдать', effect: 'Сохраняет процесс, снижает риск распространения. Требует усиленного мониторинга.' });
+    options.push({ code: 'isolate', title: `Изолировать ${mainEntity(item)}`, effect: 'Прерывает цепочку немедленно. Узел теряет связь — согласовать с владельцем актива.' });
+    if (account) options.push({ code: 'reset', title: `Сбросить учётную запись ${account}`, effect: 'Обрывает доступ, полученный атакующим. Сервисная запись может остановить зависимые задания.' });
+    if (external) options.push({ code: 'block', title: `Заблокировать внешний адрес ${external}`, effect: 'Закрывает управляющий канал на периметре. Не удаляет закрепление на узле.' });
+    if (pipeline) options.push({ code: 'freeze', title: `Заморозить конвейер ${pipeline}`, effect: 'Останавливает распространение неподписанного артефакта в релиз. Задержит выпуск сборки.' });
   } else if (score >= 0.4) {
-    options.push({ code: 'verify', title: 'Подтвердить окно работ у владельца актива', effect: 'Отделяет плановые работы от инцидента без вмешательства в процесс.' });
-    options.push({ code: 'restrict', title: 'Ограничить учётную запись и наблюдать', effect: 'Применяется, если владелец не подтвердил работы.' });
+    options.push({ code: 'verify', title: 'Подтвердить легитимность у владельца актива', effect: 'Отделяет плановые работы от инцидента без вмешательства в процесс.' });
+    if (account) options.push({ code: 'restrict', title: `Ограничить ${account} и наблюдать`, effect: 'Применяется, если владелец не подтвердил работы.' });
   } else {
     options.push({ code: 'observe', title: 'Наблюдение с фиксацией baseline', effect: 'Отклонение фиксируется без действий; при повторе кейс поднимется автоматически.' });
   }
@@ -772,8 +841,20 @@ async function openInvestigation(caseId = selectedCaseId) {
     const firstNode = chain.nodes?.[0];
     if (firstNode) loadEntity(firstNode.type, firstNode.label);
   } catch (error) {
-    $('#graphPane .pane-loading').textContent = `Данные расследования недоступны · ${error.message}`;
-    showToast('Не удалось открыть расследование', error.message, true);
+    // Демонстрационный сценарий отрабатывает и без API: граф, таймлайн и
+    // события строятся из встроенного набора INC-002.
+    events = FALLBACK_EVENTS[item.id] || [];
+    if (events.length) {
+      const chain = deriveAttackChain(events);
+      renderAttackGraph(chain);
+      renderInvestigationEvents(events);
+      const firstNode = chain.nodes?.[0];
+      if (firstNode) loadEntity(firstNode.type, firstNode.label);
+      setChannel('offline', 'демонстрационный сценарий');
+    } else {
+      $('#graphPane .pane-loading').textContent = `Данные расследования недоступны · ${error.message}`;
+      showToast('Не удалось открыть расследование', error.message, true);
+    }
   }
   // Разбор строится и без потока событий: гипотеза, уровни и вердикт опираются
   // на сам кейс, поэтому панели не остаются пустыми при недоступном источнике.
