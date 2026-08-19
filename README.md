@@ -95,7 +95,8 @@ readinessProbe:
 - Smoke после выкладки: [`docs/releases/runbook_smoke_checks.md`](docs/releases/runbook_smoke_checks.md)
 - Rollback: [`docs/releases/runbook_rollback.md`](docs/releases/runbook_rollback.md)
 - Закрытие аудита в среде (чеклист эксплуатации): [`docs/releases/2026-05-08_ops_handover.md`](docs/releases/2026-05-08_ops_handover.md) · сводка статуса: [`docs/releases/2026-05-08_audit_closure_note.md`](docs/releases/2026-05-08_audit_closure_note.md)
-- Фронтенд АРМ (MVP UI по внешнему фронтенд-чек-листу проекта): [`frontend/takt-arm/README.md`](frontend/takt-arm/README.md)
+- АРМ аналитика, **канонический интерфейс заявки «Техлаб 2026»**: [`frontend/takt-pt-arm/README.md`](frontend/takt-pt-arm/README.md)
+- Вспомогательный React-АРМ (не для демо, рабочая среда проверки REST-контура): [`frontend/takt-arm/README.md`](frontend/takt-arm/README.md)
 
 Для `TAKT_FORENSIC_CRYPTO_MODE=gost_strict`:
 

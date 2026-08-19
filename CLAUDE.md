@@ -96,7 +96,7 @@ uvicorn takt.interface_adapters.api.main:app --reload --port 8090
 Для вывода кириллицы в консоль добавляй `PYTHONUTF8=1`. Системный `python` в Git Bash на машине
 разработчика может не содержать `pytest` — используй интерпретатор из окружения проекта.
 
-Фронтенд: `cd frontend/takt-arm && npm ci && npm run test:frontend`.
+Фронтенд (вспомогательный React-АРМ): `cd frontend/takt-arm && npm ci && npm run test:frontend`.
 
 Полезные скрипты: `eval_detection.py`, `eval_correlation.py`, `verify_audit_ledger.py`,
 `verify_operation_ledger.py`, `generate_sbom.py`, `release_finalize.py`, `build_release_package.py`,

@@ -1,6 +1,6 @@
 # Прототип: запуск и демо-сценарий
 
-Полнофункциональный прототип состоит из **backend** (FastAPI, ядро TAKT) и **АРМ аналитика** (React + TypeScript). Ниже — воспроизводимый запуск на предоставленных fixture-данных четырёх классов источников.
+Полнофункциональный прототип состоит из **backend** (FastAPI, ядро TAKT) и **АРМ аналитика** ([`frontend/takt-pt-arm`](../../frontend/takt-pt-arm), статический HTML/CSS/JS). Ниже — воспроизводимый запуск на предоставленных fixture-данных четырёх классов источников.
 
 ## 1. Backend
 
@@ -33,17 +33,37 @@ python -m takt.tools.load_dataset --source ot   --path tests/fixtures/pt_techlab
 
 ## 3. АРМ аналитика (frontend)
 
+Канонический интерфейс заявки — **[`frontend/takt-pt-arm`](../../frontend/takt-pt-arm)**
+(решение от 2026-08-03, зафиксировано в [`CLAUDE.md`](../../CLAUDE.md), раздел
+«Два фронтенда — не перепутать»). Это статический АРМ без сборочного фреймворка:
+`index.html`, `styles.css`, `app.js`.
+
+```powershell
+cd frontend/takt-pt-arm
+node build-production.mjs        # пересборка app.min.js / styles.min.css
+```
+
+АРМ рассчитан на раздачу веб-сервером по пути `/takt_pt_arm/` — он обращается к API
+по тому же origin (см. [`nginx.takt-pt-arm.conf`](../../frontend/takt-pt-arm/nginx.takt-pt-arm.conf)).
+Открытие `index.html` файлом с диска не является поддерживаемым режимом.
+
+> АРМ не выполняет активное управление оборудованием, не отправляет команды на ПЛК,
+> не блокирует учётные записи и не закрывает кейсы автоматически. Пакет реагирования —
+> это рекомендации, итоговое решение остаётся за аналитиком.
+
+### Вспомогательный React-АРМ
+
+[`frontend/takt-arm`](../../frontend/takt-arm) (React + TypeScript + Vite) —
+**вспомогательный, не для демонстрации жюри**. Он полностью подключён к REST-контуру
+этого репозитория и несёт собственный релизный гейт (`npm run test:frontend`), поэтому
+остаётся в проекте как рабочая среда разработки и проверки API:
+
 ```powershell
 cd frontend/takt-arm
 npm install
-# API-режим: указать адрес backend
 $env:VITE_TAKT_API_BASE_URL = "http://127.0.0.1:8090"
 npm run dev
 ```
-
-АРМ откроется на `http://127.0.0.1:5173`. В API-режиме рабочие экраны читают backend: очередь инцидентов, рабочий стол кейса, граф/таймлайн, карточки сущностей, журнал находок, единый поиск.
-
-> АРМ не выполняет активное управление оборудованием, не отправляет команды на ПЛК, не блокирует учётные записи и не закрывает кейсы автоматически. Итоговое решение остаётся за оператором.
 
 ## 4. Основной демо-сценарий: INC-002
 
@@ -104,6 +124,7 @@ python -m takt.tools.load_dataset --source ot   --path tests/fixtures/pt_techlab
 | Реконструкция цепочки | `src/takt/application/use_cases/reconstruct_chain.py` |
 | Находки и обогащение | `src/takt/application/use_cases/case_findings.py`, `enrichment.py` |
 | API-роутеры SOC-слоя | `src/takt/interface_adapters/api/routers/` (events, correlation, entities, findings, attack_chain, enrichment, workspace) |
-| АРМ аналитика | `frontend/takt-arm/` |
+| АРМ аналитика (канонический) | `frontend/takt-pt-arm/` |
+| Вспомогательный React-АРМ (не для демо) | `frontend/takt-arm/` |
 | CLI загрузки датасета | `src/takt/tools/load_dataset.py` |
 | Тесты SOC-слоя | `tests/test_pt_techlab_*.py` |
