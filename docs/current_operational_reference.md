@@ -5,6 +5,25 @@
 
 ---
 
+## Числа-факты (единственное место хранения)
+
+Эти значения нельзя дублировать в других документах и во внешних инструкциях — только ссылаться на этот раздел. Дублирование уже приводило к расхождению (документация утверждала «25 инвариантов» при 26 в коде).
+
+| Факт | Значение | Где проверяется |
+|---|---|---|
+| Версия пакета | `0.6.23` | `pyproject.toml`, `tests/test_package_version.py` |
+| Поддерживаемый Python | `>=3.11`, матрица CI 3.11–3.14 | `pyproject.toml`, `.github/workflows/ci.yml` |
+| Python в Docker-образе | 3.13 | `Dockerfile` |
+| Доменных инвариантов | 26 (enum `InvariantId`, 26 файлов `config/invariants/*.yaml`) | `tests/test_invariant_catalog.py`, `tests/test_invariant_catalog_yaml.py`, `tests/test_docs_invariant_count_consistency.py` |
+| Инвариантов с baseline-протоколом детектирования | 11 из 26, синтетический корпус | `docs/detection_quality.md` |
+| Инвариантов отключено в проде (`builtin:noop`) | 7 из 26, известный разрыв | `docs/invariant_matrix.md` |
+| Версия схемы SQLite | `LATEST_SCHEMA_VERSION = 8` | `scripts/db_migrate.py`, `sqlite_schema_version` в `GET /health` |
+| Объём backend-прогона | порядка 840 тестов, ~1,5–4 мин | точное значение — вывод `python -m pytest` |
+
+Число тестов намеренно не фиксируется точно: оно меняется каждым коммитом, а устаревшая цифра в документации хуже её отсутствия.
+
+---
+
 ## API блоки (production-ready в текущем коде)
 
 - `POST /cases/{id}/compliance/remediations`

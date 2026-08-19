@@ -3,6 +3,8 @@
 Автономный проект по **ТЗ MPV 2.0** и спринтам из `docs/` (извлечённые тексты из DOCX):
 
 - `Такт ТЗ MPV 2.0.txt` — концепция, слои L1–L5, 25 инвариантов (+ слияние кейсов как отдельный L2-пайплайн), Chaos Predictor (δ≈4.669), Causal Mesh, Risk/XAI.
+  Цифра 25 относится к исходному ТЗ; в текущем коде каталог содержит 26 записей — источник правды
+  `InvariantId` и `config/invariants/*.yaml`, сверка автоматическая (`tests/test_docs_invariant_count_consistency.py`).
 - `ТАКТ чек-листы 13.txt` — спринты 0–12.
 - `Такт Спринты 13.txt` — детальный план.
 
@@ -10,7 +12,7 @@
 
 | Слой | Каталог | Назначение |
 |------|---------|------------|
-| L1 Domain | `src/takt/domain` | Сущности, движки, каталог 25 инвариантов, **`invariants/evaluator`** (расширенные правила), DQ, порты |
+| L1 Domain | `src/takt/domain` | Сущности, движки, каталог 26 инвариантов, **`invariants/evaluator`** (расширенные правила), DQ, порты |
 | L2 Application | `src/takt/application/use_cases` | Assess (+ **InvariantContext**), ProcessEvent, CaseDecision, Backtest |
 | L3 | `src/takt/interface_adapters/api` | REST (FastAPI) |
 | L4 | `src/takt/infrastructure` | YAML, CSV, stores, **export (PDF, SIEM webhook)** |
