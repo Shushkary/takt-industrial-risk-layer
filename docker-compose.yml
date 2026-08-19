@@ -1,4 +1,4 @@
-# Локальный запуск API с персистентным SQLite (том takt_sqlite).
+# Локальный запуск API + Frontend АРМ с персистентным SQLite (том takt_sqlite).
 # docker compose up --build
 # Опционально (PowerShell): $env:TAKT_BUILD_REVISION = (git rev-parse HEAD) — попадёт в build.arg (аналог export в bash).
 
@@ -36,3 +36,17 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      # API URL для frontend (через nginx проксирование /api/ -> backend:8090)
+      VITE_TAKT_API_BASE_URL: http://localhost:3000
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

@@ -1,0 +1,35 @@
+# ДЕМО-СТЕНД TAKT: синтетические данные + фронтенд АРМ, полностью рабочая связка.
+#
+#   docker compose -f docker-compose.stand.yml up --build
+#
+# После старта:
+#   • Фронтенд АРМ:                 http://localhost:3000
+#   • Экран «Сравнение» (метрика):  http://localhost:3000/compare
+#   • Синтетический API стенда:     http://localhost:8090   (Swagger: /docs)
+#
+# Сервис называется `backend`, потому что frontend/nginx.conf проксирует
+# /api/ → http://backend:8090 (единый origin, без CORS-проблем и SSE работает).
+
+services:
+  backend:
+    build:
+      context: ./stand
+      dockerfile: Dockerfile
+    ports:
+      - "8090:8090"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Прямые запросы браузера на стенд (CORS открыт). Для удалённого хоста
+        # (напр. ralta.ru) укажите публичный адрес API стенда.
+        VITE_TAKT_API_BASE_URL: ${VITE_TAKT_API_BASE_URL:-http://localhost:8090}
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
