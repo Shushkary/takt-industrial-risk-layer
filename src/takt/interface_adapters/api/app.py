@@ -148,6 +148,7 @@ from takt.interface_adapters.api.routers.catalog import register_catalog_routes
 from takt.interface_adapters.api.routers.correlation import register_correlation_routes
 from takt.interface_adapters.api.routers.compliance import register_compliance_routes
 from takt.interface_adapters.api.routers.events import register_event_routes
+from takt.interface_adapters.api.routers.assemble import register_assemble_routes
 from takt.interface_adapters.api.routers.entities import register_entity_routes
 from takt.interface_adapters.api.routers.enrichment import register_enrichment_routes
 from takt.interface_adapters.api.routers.export import register_export_routes
@@ -720,6 +721,7 @@ def create_app() -> FastAPI:
     register_system_routes(api_ctx)
     register_catalog_routes(api_ctx)
     register_event_routes(api_ctx)
+    register_assemble_routes(api_ctx)
     register_entity_routes(api_ctx)
     register_audit_ledger_routes(api_ctx)
     register_export_routes(api_ctx)
