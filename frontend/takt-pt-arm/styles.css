@@ -502,3 +502,176 @@ ul.plain li {
 .toast[hidden] {
   display: none;
 }
+
+/* Вкладки */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: 24px;
+}
+
+.tab {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: #172033;
+}
+
+/* Симуляция */
+.simulation {
+  margin: 12px;
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.counter {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+
+.counter-label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.counter-value {
+  display: block;
+  margin: 4px 0 2px;
+  font-family: var(--mono);
+  font-size: 26px;
+}
+
+.counter-sub {
+  display: block;
+}
+
+.player {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.action.inline {
+  width: auto;
+  padding: 6px 12px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.legend-item i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+ol.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.step {
+  border-left: 3px solid var(--line);
+  opacity: 0.45;
+}
+
+.step.played {
+  opacity: 1;
+}
+
+.step.current {
+  background: #172033;
+}
+
+.step-open {
+  display: grid;
+  grid-template-columns: 160px 190px minmax(120px, 1fr) 110px 90px;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-open:hover {
+  background: #161e2b;
+}
+
+.graph-wrap {
+  overflow-x: auto;
+}
+
+#attackGraph {
+  width: 100%;
+  min-width: 720px;
+  height: 320px;
+}
+
+#attackGraph .edge-line {
+  stroke: var(--line);
+  stroke-width: 1.5;
+  opacity: 0.35;
+}
+
+#attackGraph .edge-line.played {
+  stroke: var(--accent);
+  opacity: 1;
+}
+
+#attackGraph .edge-label {
+  fill: var(--muted);
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+#attackGraph .graph-node {
+  opacity: 0.4;
+  cursor: pointer;
+}
+
+#attackGraph .graph-node.played {
+  opacity: 1;
+}
+
+#attackGraph .node-label {
+  fill: var(--text);
+  font-size: 11px;
+  text-anchor: middle;
+}

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260820-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260820-02" />
   </head>
   <body>
     <header class="top">
@@ -13,6 +13,10 @@
         <strong>ТАКТ</strong>
         <span class="top-sub">рабочее место аналитика</span>
       </div>
+      <nav class="tabs" aria-label="Режим работы">
+        <button id="tabInvestigation" class="tab active" type="button" aria-pressed="true">Расследование</button>
+        <button id="tabSimulation" class="tab" type="button" aria-pressed="false">Симуляция</button>
+      </nav>
       <div class="top-state">
         <span id="connection" class="conn">подключение</span>
         <span id="lastSync" class="muted small">—</span>
@@ -147,6 +151,79 @@
       </section>
     </main>
 
+    <section id="simulationView" class="panel simulation" hidden aria-labelledby="simTitle">
+      <div class="panel-head">
+        <h2 id="simTitle">Симуляция цепочки атаки</h2>
+        <button class="help" type="button" data-help="simulation" aria-label="Пояснение: вкладка симуляции">?</button>
+      </div>
+
+      <p id="simEmpty" class="muted pad">Выберите кейс в очереди на вкладке «Расследование».</p>
+
+      <div id="simBody" hidden>
+        <div class="block">
+          <div class="block-head">
+            <h4>Трудоёмкость разбора</h4>
+            <div class="head-actions">
+              <button id="methodButton" class="link" type="button" data-help="effort_method">Методика расчёта</button>
+              <button class="help" type="button" data-help="counters" aria-label="Пояснение: счётчики трудоёмкости">?</button>
+            </div>
+          </div>
+          <div class="counters">
+            <div class="counter">
+              <span class="counter-label">Аналитик вручную (модель) <button class="help sm" type="button" data-help="counter_manual" aria-label="Пояснение: счётчик ручного процесса">?</button></span>
+              <span id="manualActions" class="counter-value">0</span>
+              <span id="manualSeconds" class="counter-sub muted small">—</span>
+            </div>
+            <div class="counter">
+              <span class="counter-label">Аналитик в ТАКТ <button class="help sm" type="button" data-help="counter_takt" aria-label="Пояснение: счётчик действий в ТАКТ">?</button></span>
+              <span id="taktActions" class="counter-value">0</span>
+              <span id="taktSeconds" class="counter-sub muted small">—</span>
+            </div>
+            <div class="counter">
+              <span class="counter-label">Сокращение действий <button class="help sm" type="button" data-help="reduction" aria-label="Пояснение: сокращение">?</button></span>
+              <span id="reductionValue" class="counter-value">—</span>
+              <span class="counter-sub muted small">итог совпадает с /simulation</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="block-head">
+            <h4>Плеер цепочки</h4>
+            <button class="help" type="button" data-help="player" aria-label="Пояснение: плеер цепочки">?</button>
+          </div>
+          <div class="player">
+            <button id="playPause" class="action inline" type="button">Воспроизвести</button>
+            <button id="stepBack" class="action inline" type="button">← Шаг</button>
+            <button id="stepForward" class="action inline" type="button">Шаг →</button>
+            <button id="resetPlayer" class="action inline" type="button">Сброс</button>
+            <span id="playerPosition" class="muted small">0 / 0</span>
+          </div>
+          <div id="phaseLegend" class="legend"></div>
+          <ol id="stepList" class="steps"></ol>
+        </div>
+
+        <div class="block">
+          <div class="block-head">
+            <h4>Граф атаки</h4>
+            <button class="help" type="button" data-help="attack_graph" aria-label="Пояснение: граф атаки">?</button>
+          </div>
+          <div class="graph-wrap">
+            <svg id="attackGraph" viewBox="0 0 960 320" role="img" aria-label="Граф сущностей цепочки атаки"></svg>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="block-head">
+            <h4>Итог разбора</h4>
+            <button class="help" type="button" data-help="sim_summary" aria-label="Пояснение: итог разбора">?</button>
+          </div>
+          <dl id="simSummary" class="facts"></dl>
+          <p class="muted small">ТАКТ не выполняет действия реагирования и не отправляет команды.</p>
+        </div>
+      </div>
+    </section>
+
     <div id="modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-card">
         <div class="modal-head">
@@ -159,6 +236,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260820-01"></script>
+    <script src="./app.min.js?v=20260820-02"></script>
   </body>
 </html>

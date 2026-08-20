@@ -15,6 +15,96 @@ const POLL_MS = 15000;
 // Пояснения к блокам и значениям. Ключ совпадает с data-help в разметке.
 // Каждая запись отвечает на три вопроса: что это, откуда берётся, что с этим делать.
 const HELP = {
+  // --- Вкладка «Симуляция» ---------------------------------------------
+  simulation: {
+    title: 'Вкладка «Симуляция»',
+    body: [
+      'Хронология цепочки атаки по этому кейсу: шаги в порядке времени, фаза каждого шага и то, каким механизмом ТАКТ его выделил.',
+      'В хронологию попадают только события с разметкой фазы. Разметка приходит от источника или от датасета, ТАКТ её не вычисляет: события без фазы остаются в кейсе, но шагом цепочки не считаются, и их число показано отдельно.',
+      'Что делать: пройти цепочку по шагам и проверить, каждый ли шаг объясняется тем основанием, которое назвал продукт.',
+    ],
+  },
+  counters: {
+    title: 'Трудоёмкость разбора',
+    body: [
+      'Два счётчика: сколько действий потребовал бы ручной разбор того же инцидента и сколько их записано в ТАКТ.',
+      'Числа растут по мере проигрывания, итог совпадает с ответом /simulation.',
+      'Что делать: смотреть на разницу как на порядок величины, а не как на точный замер — откуда берётся каждое число, показывает «Методика расчёта».',
+    ],
+  },
+  counter_manual: {
+    title: 'Счётчик «Аналитик вручную»',
+    body: [
+      'Расчёт по модели: открыть консоль каждого источника, найти каждую отличительную сущность в каждой системе, перенести идентификаторы между системами, занести относящиеся события в заметку, свести итог.',
+      'Это оценка с явными коэффициентами, а не наблюдение за живым аналитиком.',
+      'Что делать: если процесс в вашей организации устроен иначе — коэффициенты меняются, и расчёт нужно повторить.',
+    ],
+  },
+  counter_takt: {
+    title: 'Счётчик «Аналитик в ТАКТ»',
+    body: [
+      'Замер по append-only журналу кейса: считаются записи с меткой актора, то есть действия человека. Автоматические операции конвейера не считаются.',
+      'В журнал попадают действия, меняющие состояние кейса. Навигация — открыть кейс, открыть карточку сущности — состояние не меняет и не записывается.',
+      'Что делать: считать это число нижней границей, а сокращение — верхней.',
+    ],
+  },
+  reduction: {
+    title: 'Сокращение действий',
+    body: [
+      'Разница между расчётом ручного процесса и замером в ТАКТ, в процентах от ручного.',
+      'Целевой ориентир ТЗ — не менее 30%.',
+      'Что делать: подтверждать парным прогоном с наблюдателем; до него это оценка.',
+    ],
+  },
+  effort_method: {
+    title: 'Методика расчёта счётчиков',
+    body: [
+      'Сторона ТАКТ — замер. Источник: append-only журнал кейса с цепочкой хэшей. Ручным считается действие с меткой actor= : её несут только записи человека.',
+      'Сторона ручного процесса — расчёт. Модель: (число источников) + (сущности × источники) + (сущности × (источники − 1)) + (события) + 1. Коэффициенты явные и заменяются наблюдением.',
+      'Сокращение = (ручные − ТАКТ) / ручные × 100%.',
+      'Время — модельная оценка. Коэффициент «секунд на действие» в методике не задан и никем не измерялся, поэтому по умолчанию время не показывается вовсе; при заданном коэффициенте оно помечается как модельное.',
+      'Границы: журнал не отражает навигационные клики, поэтому число действий в ТАКТ занижено; в модели преобладает шаг «фиксация событий в заметке». Расчёт не заменяет парный прогон с наблюдателем — docs/pt_techlab/baseline_methodology.md.',
+    ],
+  },
+  player: {
+    title: 'Плеер цепочки',
+    body: [
+      'Пошаговое или автоматическое проигрывание событий в порядке времени. Цвет шага — фаза цепочки атаки.',
+      'При проигрывании подсвечивается путь на графе и растут счётчики трудоёмкости.',
+      'Что делать: остановиться на шаге и открыть его — в окне шага видно, что произошло и почему ТАКТ это выделил.',
+    ],
+  },
+  attack_graph: {
+    title: 'Граф атаки',
+    body: [
+      'Сущности цепочки и переходы между ними: учётная запись, узел, адрес, объект конвейера. Цвет узла — фаза, в которой он впервые появился.',
+      'Граф строится только по событиям цепочки этого кейса, связи вне кейса в нём не видны.',
+      'Что делать: смотреть на переходы между узлами и смену учётной записи — по ним читается перемещение внутри сети.',
+    ],
+  },
+  sim_summary: {
+    title: 'Итог разбора',
+    body: [
+      'Класс риска, сработавшие инварианты и применимые варианты реагирования по отличительным сущностям инцидента.',
+      'Варианты реагирования — рекомендации. ТАКТ их не выполняет и команд не отправляет, исполняет внешняя система после подтверждения аналитика.',
+    ],
+  },
+  step: {
+    title: 'Шаг цепочки',
+    body: [
+      'Одно событие инцидента: что зафиксировал источник, к какой фазе атаки оно относится и какая техника ATT&CK ему сопоставлена.',
+      'Отдельно показано, чем ТАКТ выделил это событие: пивотом по отличительной сущности, расширением до уровня узла или срабатыванием инварианта.',
+      'Что делать: проверить основание. Событие, добранное расширением, требует отсева аналитиком — оно попало в кейс по узлу, а не по признаку атаки.',
+    ],
+  },
+  mitre: {
+    title: 'Техника MITRE ATT&CK',
+    body: [
+      'Идентификатор техники из матрицы ATT&CK, сопоставленный событию разметкой источника.',
+      'ТАКТ технику не определяет: значение приходит с данными.',
+      'Что делать: использовать как общий язык при передаче инцидента и при сверке покрытия детектирования.',
+    ],
+  },
   queue: {
     title: 'Очередь инцидентов',
     body: [
@@ -576,6 +666,329 @@ document.addEventListener('keydown', (event) => {
 
 $('#modalClose').addEventListener('click', closeHelp);
 $('#addFinding').addEventListener('click', addFinding);
+
+// ---------------------------------------------------------------------------
+// Вкладка «Симуляция»: хронология цепочки, счётчики трудоёмкости, граф атаки
+// ---------------------------------------------------------------------------
+
+// Цвета фаз. Порядок соответствует доменному перечню KillChainPhase — по нему строится
+// легенда и раскраска графа.
+const PHASE_COLORS = {
+  recon: '#64748b',
+  initial_access: '#38bdf8',
+  execution: '#22d3ee',
+  c2: '#a78bfa',
+  privilege_escalation: '#fbbf24',
+  lateral_movement: '#fb923c',
+  persistence: '#f472b6',
+  exfiltration: '#f87171',
+  impact: '#ef4444',
+};
+
+const PLAY_INTERVAL_MS = 1200;
+
+let simulation = null;
+let simCursor = 0;
+let simTimer = null;
+
+// Значение счётчика на шаге: ровное распределение с остатком на последнем шаге.
+// Так итог после проигрывания совпадает с числом из /simulation, а не «примерно».
+function cumulative(total, steps, index) {
+  if (steps <= 0) return 0;
+  if (index >= steps) return total;
+  return Math.round((total * index) / steps);
+}
+
+function phaseColor(phase) {
+  return PHASE_COLORS[phase] || '#64748b';
+}
+
+async function openSimulation() {
+  if (!selectedCaseId) return;
+  $('#simEmpty').hidden = true;
+  $('#simBody').hidden = false;
+  try {
+    simulation = await api(`/cases/${encodeURIComponent(selectedCaseId)}/simulation`);
+  } catch (error) {
+    $('#simBody').hidden = true;
+    $('#simEmpty').hidden = false;
+    $('#simEmpty').textContent = `Симуляция недоступна: ${error.message}`;
+    return;
+  }
+  simCursor = 0;
+  renderLegend();
+  renderSteps();
+  renderGraph();
+  renderSummary();
+  updateCounters();
+  updatePosition();
+}
+
+function renderLegend() {
+  const box = $('#phaseLegend');
+  box.replaceChildren();
+  for (const phase of simulation.phases || []) {
+    const item = document.createElement('span');
+    item.className = 'legend-item';
+    item.innerHTML = `<i style="background:${phaseColor(phase.phase)}"></i>${escapeHtml(phase.title_ru)} · ${phase.events}`;
+    box.appendChild(item);
+  }
+}
+
+function renderSteps() {
+  const list = $('#stepList');
+  list.replaceChildren();
+  for (const step of simulation.steps || []) {
+    const row = document.createElement('li');
+    row.className = 'step';
+    row.dataset.order = String(step.order);
+    row.style.borderLeftColor = phaseColor(step.attack_phase);
+    row.innerHTML = `
+      <button type="button" class="step-open">
+        <span class="step-time mono">${escapeHtml(utc(step.observed_at))}</span>
+        <span class="step-phase" style="color:${phaseColor(step.attack_phase)}">${escapeHtml(step.attack_phase_title_ru)}</span>
+        <span class="step-op mono">${escapeHtml(step.operation)}</span>
+        <span class="chip sm">${escapeHtml(step.source)}</span>
+        <span class="muted small">${escapeHtml(step.mitre_technique || '')}</span>
+      </button>`;
+    row.querySelector('.step-open').addEventListener('click', () => openStep(step.order));
+    list.appendChild(row);
+  }
+  paintProgress();
+}
+
+// Узлы и переходы цепочки: сущности в порядке первого появления.
+function chainGraph() {
+  const nodes = new Map();
+  const edges = [];
+  const add = (id, type, phase, order) => {
+    if (!id) return null;
+    if (!nodes.has(id)) nodes.set(id, { id, type, phase, order });
+    return id;
+  };
+  for (const step of simulation.steps || []) {
+    const parts = step.entities || {};
+    const user = add(parts.user_id, 'user', step.attack_phase, step.order);
+    const host = add(parts.host_id, 'host', step.attack_phase, step.order);
+    const dst = add(parts.dst_address, 'address', step.attack_phase, step.order);
+    if (user && host) edges.push({ from: user, to: host, label: 'действует на', order: step.order });
+    if (host && dst) edges.push({ from: host, to: dst, label: 'обращается к', order: step.order });
+  }
+  return { nodes: [...nodes.values()], edges };
+}
+
+function renderGraph() {
+  const svg = $('#attackGraph');
+  svg.replaceChildren();
+  const { nodes, edges } = chainGraph();
+  if (!nodes.length) return;
+
+  const perRow = 5;
+  const position = new Map();
+  nodes.forEach((node, index) => {
+    const row = Math.floor(index / perRow);
+    const col = index % perRow;
+    position.set(node.id, { x: 110 + col * 185, y: 60 + row * 90 });
+  });
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const seen = new Set();
+  for (const edge of edges) {
+    const key = `${edge.from}|${edge.to}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const from = position.get(edge.from);
+    const to = position.get(edge.to);
+    if (!from || !to) continue;
+    const line = document.createElementNS(ns, 'line');
+    line.setAttribute('x1', from.x);
+    line.setAttribute('y1', from.y);
+    line.setAttribute('x2', to.x);
+    line.setAttribute('y2', to.y);
+    line.setAttribute('class', 'edge-line');
+    line.dataset.order = String(edge.order);
+    svg.appendChild(line);
+    const label = document.createElementNS(ns, 'text');
+    label.setAttribute('x', (from.x + to.x) / 2);
+    label.setAttribute('y', (from.y + to.y) / 2 - 6);
+    label.setAttribute('class', 'edge-label');
+    label.textContent = edge.label;
+    svg.appendChild(label);
+  }
+
+  for (const node of nodes) {
+    const point = position.get(node.id);
+    const group = document.createElementNS(ns, 'g');
+    group.setAttribute('class', 'graph-node');
+    group.dataset.order = String(node.order);
+    const circle = document.createElementNS(ns, 'circle');
+    circle.setAttribute('cx', point.x);
+    circle.setAttribute('cy', point.y);
+    circle.setAttribute('r', 14);
+    circle.setAttribute('fill', phaseColor(node.phase));
+    group.appendChild(circle);
+    const text = document.createElementNS(ns, 'text');
+    text.setAttribute('x', point.x);
+    text.setAttribute('y', point.y + 30);
+    text.setAttribute('class', 'node-label');
+    text.textContent = node.id.length > 22 ? `${node.id.slice(0, 21)}…` : node.id;
+    group.appendChild(text);
+    group.addEventListener('click', () => openStep(node.order));
+    svg.appendChild(group);
+  }
+  paintProgress();
+}
+
+function paintProgress() {
+  for (const row of document.querySelectorAll('#stepList .step')) {
+    const order = Number(row.dataset.order);
+    row.classList.toggle('played', order <= simCursor);
+    row.classList.toggle('current', order === simCursor);
+  }
+  for (const element of document.querySelectorAll('#attackGraph .edge-line, #attackGraph .graph-node')) {
+    element.classList.toggle('played', Number(element.dataset.order) <= simCursor);
+  }
+}
+
+function updateCounters() {
+  const effort = simulation.effort || {};
+  const steps = (simulation.steps || []).length;
+  const manual = cumulative(effort.current_actions || 0, steps, simCursor);
+  const takt = cumulative(effort.takt_actions || 0, steps, simCursor);
+  $('#manualActions').textContent = String(manual);
+  $('#taktActions').textContent = String(takt);
+  const reduction = effort.reduction_actions_percent;
+  $('#reductionValue').textContent =
+    reduction === null || reduction === undefined ? '—' : `${reduction.toFixed(1)}%`;
+
+  const perAction = effort.seconds_per_action;
+  if (perAction) {
+    $('#manualSeconds').textContent = `${Math.round(manual * perAction)} с (модельная оценка)`;
+    $('#taktSeconds').textContent = `${Math.round(takt * perAction)} с (модельная оценка)`;
+  } else {
+    $('#manualSeconds').textContent = 'время не рассчитано';
+    $('#taktSeconds').textContent = 'время не рассчитано';
+  }
+}
+
+function updatePosition() {
+  const steps = (simulation && simulation.steps ? simulation.steps : []).length;
+  $('#playerPosition').textContent = `${simCursor} / ${steps}`;
+}
+
+function renderSummary() {
+  const facts = $('#simSummary');
+  facts.replaceChildren();
+  const rows = [
+    ['Класс риска', `${simulation.risk_class} · ${Number(simulation.risk_score).toFixed(3)}`],
+    ['Статус', simulation.status],
+    ['Событий в кейсе', `${simulation.events_total}, из них шагов цепочки ${simulation.chain_length}`],
+    ['Без разметки фазы', String(simulation.events_without_phase)],
+    ['Сработавшие инварианты', (simulation.invariants || []).join(', ') || 'нет'],
+  ];
+  for (const option of simulation.response_options || []) {
+    rows.push([option.title, option.objects || '—']);
+  }
+  for (const [label, value] of rows) {
+    const dt = document.createElement('dt');
+    dt.textContent = label;
+    const dd = document.createElement('dd');
+    dd.textContent = value;
+    facts.append(dt, dd);
+  }
+}
+
+function openStep(order) {
+  const step = (simulation.steps || []).find((item) => item.order === order);
+  if (!step) return;
+  setCursor(order);
+
+  const detection = step.detection_explanation || {};
+  const entities = Object.entries(step.entities || {})
+    .filter(([, value]) => value)
+    .map(([name, value]) => `${name}: ${value}`);
+  const artifacts = (step.artifacts || []).map((item) => `${item.type}: ${item.value}`);
+
+  lastFocused = document.activeElement;
+  $('#modalTitle').textContent = `Шаг ${step.order}. ${step.attack_phase_title_ru}`;
+  const body = $('#modalBody');
+  body.replaceChildren();
+  const paragraphs = [
+    `Что произошло: источник ${step.source} зафиксировал ${step.operation} в ${utc(step.observed_at)} UTC.`,
+    `Фаза цепочки: ${step.attack_phase_title_ru}. Техника ATT&CK: ${step.mitre_technique || 'не сопоставлена'}. Разметка приходит от источника, ТАКТ её не вычисляет.`,
+    `Чем выделено: ${detection.selected_by_title_ru || 'не зафиксировано'}. ${detection.reason || ''}`,
+    detection.invariants && detection.invariants.length
+      ? `Сработавшие инварианты на этом событии: ${detection.invariants.join(', ')}.`
+      : 'Инварианты на этом событии не срабатывали: оно попало в кейс по связи сущностей, а не по признаку правила.',
+    entities.length ? `Сущности: ${entities.join(', ')}.` : 'Сущности не заполнены.',
+    artifacts.length ? `Артефакты: ${artifacts.join(', ')}.` : 'Артефактов нет.',
+  ];
+  for (const text of paragraphs) {
+    const item = document.createElement('p');
+    item.textContent = text;
+    body.appendChild(item);
+  }
+  $('#modal').hidden = false;
+  $('#modalClose').focus();
+}
+
+function setCursor(next) {
+  const steps = (simulation && simulation.steps ? simulation.steps : []).length;
+  simCursor = Math.max(0, Math.min(steps, next));
+  paintProgress();
+  updateCounters();
+  updatePosition();
+}
+
+function stopPlayback() {
+  clearInterval(simTimer);
+  simTimer = null;
+  $('#playPause').textContent = 'Воспроизвести';
+}
+
+function togglePlayback() {
+  if (!simulation) return;
+  if (simTimer) {
+    stopPlayback();
+    return;
+  }
+  $('#playPause').textContent = 'Пауза';
+  simTimer = setInterval(() => {
+    if (simCursor >= simulation.steps.length) {
+      stopPlayback();
+      return;
+    }
+    setCursor(simCursor + 1);
+  }, PLAY_INTERVAL_MS);
+}
+
+function showTab(name) {
+  const isSimulation = name === 'simulation';
+  $('#tabSimulation').classList.toggle('active', isSimulation);
+  $('#tabSimulation').setAttribute('aria-pressed', String(isSimulation));
+  $('#tabInvestigation').classList.toggle('active', !isSimulation);
+  $('#tabInvestigation').setAttribute('aria-pressed', String(!isSimulation));
+  document.querySelector('.layout').hidden = isSimulation;
+  $('#simulationView').hidden = !isSimulation;
+  if (isSimulation) openSimulation();
+  else stopPlayback();
+}
+
+$('#tabSimulation').addEventListener('click', () => showTab('simulation'));
+$('#tabInvestigation').addEventListener('click', () => showTab('investigation'));
+$('#playPause').addEventListener('click', togglePlayback);
+$('#stepForward').addEventListener('click', () => {
+  stopPlayback();
+  setCursor(simCursor + 1);
+});
+$('#stepBack').addEventListener('click', () => {
+  stopPlayback();
+  setCursor(simCursor - 1);
+});
+$('#resetPlayer').addEventListener('click', () => {
+  stopPlayback();
+  setCursor(0);
+});
 
 refresh();
 pollTimer = setInterval(refresh, POLL_MS);
