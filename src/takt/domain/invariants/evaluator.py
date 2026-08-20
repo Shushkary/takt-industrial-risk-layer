@@ -44,6 +44,9 @@ class InvariantContext:
     stale_window_seconds: float = 90.0
     max_rate_of_change: float = 100.0
     trusted_admin_ips: frozenset[str] = frozenset()
+    # Реестр известных адресов изолированного сегмента. Пустой набор означает,
+    # что реестра нет и правило «новый узел в air-gap» неприменимо.
+    airgap_known_addresses: frozenset[str] = frozenset()
 
 
 def invariant_context_from_config(cfg: Mapping[str, Any] | None) -> InvariantContext:

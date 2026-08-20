@@ -308,16 +308,13 @@ def test_incident_risk_uses_union_of_invariants_when_weights_available() -> None
     assert result.case.risk_score > 0.05, "объединение срабатываний весомее любого отдельного кейса"
 
 
-def test_incident_score_is_capped_by_eps_calibration() -> None:
-    """Фиксация известного ограничения шкалы риска, а не желаемого поведения.
+def test_incident_score_is_not_capped_by_eps_calibration() -> None:
+    """Полнота признаков доходит до балла: прежний потолок 0.5 снят.
 
-    Множитель `(0.5 + 0.5 * burst)` в `combine_risk` при `eps_soft_cap = 100000` равен 0.5
-    на любой реальной частоте потока. Поэтому балл инцидента не может превысить 0.5, а
-    пороги HIGH (0.65) и CRITICAL (0.85) недостижимы, каким бы полным ни был набор
-    срабатываний. Разбор и варианты калибровки — `docs/risk_scale_calibration.md`.
-
-    Если тест упал — калибровку изменили. Это ожидаемое событие: обнови документ и цифры
-    в `docs/detection_quality.md`, а не ослабляй проверку.
+    До правки множитель `(0.5 + 0.5 * burst)` в `combine_risk` резал балл вдвое на любой
+    реальной частоте потока, и инцидент с полным набором признаков не мог выйти даже за
+    0.5. Теперь набор ниже даёт векторы 0.65 / 0.9 / 0.6 / 0.7 и балл около 0.575.
+    Решение и разбор — `docs/risk_scale_calibration.md`.
     """
     repo = InMemoryCaseStore()
     every_marker = [
@@ -336,8 +333,9 @@ def test_incident_score_is_capped_by_eps_calibration() -> None:
         weights=_WEIGHTS,
     )
     result = use_case.execute(case_id="INC-TEST", seeds=[IncidentSeed.parse("user:smirnov")])
-    assert result.case.risk_score <= 0.5
-    assert result.case.risk_class in {"LOW", "MEDIUM"}
+    assert result.case.risk_score > 0.5, "прежний потолок шкалы снят"
+    assert result.case.risk_score == pytest.approx(0.575, abs=0.01)
+    assert result.case.risk_class == "MEDIUM"
 
 
 def test_incident_risk_never_below_worst_contributing_case() -> None:

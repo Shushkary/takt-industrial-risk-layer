@@ -105,16 +105,58 @@ def test_combine_risk_class_buckets(
         "user": 0.18,
         "data_quality": 0.20,
     }
+    # Поток задаётся рабочим, а не предельным. Раньше здесь стояло 50 000 000 событий
+    # в секунду: только на такой частоте прежний множитель `(0.5 + 0.5 * burst)`
+    # приближался к 1.0 и лестница классов сходилась. На любом реальном потоке она не
+    # сходилась — балл делился пополам. См. `docs/risk_scale_calibration.md`.
     res = combine_risk(
         vectors,
         weights,
         dq_score=dq_score,
-        eps_estimate=50_000_000.0,
+        eps_estimate=100.0,
         mandel_cap=100.0,
         eps_soft_cap=100_000.0,
     )
     assert res.risk_class == want_class
     assert 0.0 <= res.score <= 1.0
+    # При рабочем потоке балл читается как уровень признаков.
+    assert res.score == pytest.approx(vectors.rhythm, abs=0.01)
+
+
+def test_extreme_eps_saturates_top_of_scale() -> None:
+    """При экстремальном потоке верх шкалы сплющивается — это принятая плата.
+
+    Множитель `(1.0 + burst)` доходит до 2.0, поэтому при очень плотном потоке разные
+    уровни признаков сходятся в один CRITICAL. Различать их в такой ситуации должен не
+    балл, а дедупликация кейсов (`alert_fatigue`).
+    """
+    weights = {
+        "rhythm": 0.22,
+        "graph": 0.22,
+        "context": 0.18,
+        "user": 0.18,
+        "data_quality": 0.20,
+    }
+    scores = []
+    for level in (0.7, 0.95):
+        vectors = RiskBreakdown(
+            rhythm=level,
+            graph=level,
+            context=level,
+            user=level,
+            data_quality=level,
+        )
+        res = combine_risk(
+            vectors,
+            weights,
+            dq_score=1.0,
+            eps_estimate=50_000_000.0,
+            mandel_cap=100.0,
+            eps_soft_cap=100_000.0,
+        )
+        scores.append(res.score)
+        assert res.risk_class == "CRITICAL"
+    assert scores == [pytest.approx(1.0), pytest.approx(1.0)]
 
 
 def test_combine_risk_higher_dq_score_increases_final_score():

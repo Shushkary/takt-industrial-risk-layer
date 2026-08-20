@@ -216,20 +216,30 @@ def pred_new_node_airgap(
     ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
-    """New Node в Air-Gap: MAC/IP отсутствует в реестре известных активов."""
+    """New Node в Air-Gap: MAC/IP отсутствует в реестре известных активов.
+
+    Активная детекция применима только к изолированному сегменту с объявленным реестром
+    адресов (`ctx.airgap_known_addresses`). Без реестра единственным доступным «реестром»
+    оказывались последние события буфера контекста — и в обычной сети из сотен узлов
+    правило объявляло новым почти каждый адрес: на фикстуре INC-002 это давало 82
+    срабатывания из 121 кейса, то есть шумовой пол вместо признака.
+
+    Правило, которое нечем проверить, молчит: остаётся путь по явному признаку от
+    внешнего средства обнаружения.
+    """
     # Флаг-чекер (внешний SIEM уже определил)
     if event.payload.get("new_node_airgap") in (True, "true", "1", 1):
         return [spec.id]
-    # Активная детекция: src_ip/mac не встречался в recent для того же сегмента
+    known = getattr(ctx, "airgap_known_addresses", frozenset()) or frozenset()
+    if not known:
+        return []
     src_ip = str(event.payload.get("src_ip") or "")
     mac = str(event.payload.get("mac") or "")
     if not src_ip and not mac:
         return []
-    known_ips = {str(e.payload.get("src_ip") or "") for e in recent}
-    known_macs = {str(e.payload.get("mac") or "") for e in recent}
-    if src_ip and src_ip not in known_ips:
+    if src_ip and src_ip not in known:
         return [spec.id]
-    if mac and mac not in known_macs:
+    if mac and mac not in known:
         return [spec.id]
     return []
 

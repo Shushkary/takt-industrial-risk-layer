@@ -16,7 +16,7 @@
   "cases_snapshot": [
     {
       "case_id": "aaaaaaaa",
-      "risk_score": 0.077762376238,
+      "risk_score": 0.155524752475,
       "risk_class": "LOW",
       "invariant_hits": [],
       "burst_fingerprint": "plc_polling|plc-01|POLL",
