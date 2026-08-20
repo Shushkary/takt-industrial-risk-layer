@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import logging
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from takt.domain.entities.event import (
@@ -13,7 +13,7 @@ from takt.domain.entities.event import (
     EventSource,
     NormalizedEvent,
 )
-from takt.infrastructure.importers.csv_events import _parse_ts
+from takt.infrastructure.importers.csv_events import _parse_ts, raw_row_to_normalized
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +94,35 @@ def map_ndr(row: dict[str, str], trust: float) -> NormalizedEvent:
                                dst_address=_value(row, "dst_ip")),
         artifacts=_artifacts((ArtifactType.DOMAIN, _value(row, "dns_query"))), ingest_trust=trust,
     )
+
+
+def map_netflow(row: dict[str, str], trust: float) -> NormalizedEvent:
+    """Сетевой поток как класс источника Netflow.
+
+    Отличается от `map_ndr` не данными, а трактовкой: NDR отдаёт вердикт средства
+    обнаружения, Netflow — сам поток без вердикта. Строка приводится к именам полей
+    интеграции (`flow_src_ip`, `flow_dst_ip`, `flow_bytes`) и проходит тот же
+    нормализатор, что и приём через `POST /integrations/ingest/netflow`, — иначе
+    загрузка датасета и боевой приём разошлись бы в разборе полей.
+    """
+    flow_row = {
+        "timestamp": row.get("start_time", ""),
+        "protocol": row.get("app_protocol", "") or "NETFLOW",
+        "operation": (row.get("verdict") or "NETFLOW_FLOW").upper(),
+        "asset_id": row.get("src_host", ""),
+        "flow_src_ip": row.get("src_ip", ""),
+        "flow_dst_ip": row.get("dst_ip", ""),
+        "flow_bytes": row.get("bytes", ""),
+        "payload_size": row.get("bytes", "0"),
+        "dns_query": row.get("dns_query", ""),
+        "collector": "netflow-collector",
+    }
+    event = raw_row_to_normalized(
+        flow_row,
+        source=EventSource.NETWORK,
+        event_id=row.get("flow_id") or None,
+    )
+    return replace(event, ingest_trust=trust)
 
 
 def map_ot(row: dict[str, str], trust: float) -> NormalizedEvent:

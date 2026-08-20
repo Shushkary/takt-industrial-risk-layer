@@ -8,12 +8,20 @@ from takt.infrastructure.importers.soc_csv import (
     CsvEventSourceReader,
     map_edr,
     map_ndr,
+    map_netflow,
     map_ot,
     map_siem,
 )
 from takt.interface_adapters.api.main import create_app
 
-MAPPERS = {"edr": map_edr, "siem": map_siem, "ndr": map_ndr, "ot": map_ot}
+MAPPERS = {
+    "edr": map_edr,
+    "siem": map_siem,
+    "ndr": map_ndr,
+    # Тот же файл потоков читается как Netflow: без вердикта средства обнаружения.
+    "netflow": map_netflow,
+    "ot": map_ot,
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
