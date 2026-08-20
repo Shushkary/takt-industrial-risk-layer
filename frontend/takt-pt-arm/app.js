@@ -24,6 +24,22 @@ const HELP = {
       'Что делать: пройти цепочку по шагам и проверить, каждый ли шаг объясняется тем основанием, которое назвал продукт.',
     ],
   },
+  seconds_per_action: {
+    title: 'Секунд на одно действие',
+    body: [
+      'Коэффициент, которым число действий переводится во время. Это объявленное допущение, а не измеренная величина: в методике измерения такого коэффициента нет и никто его не замерял.',
+      'Значение по умолчанию выбрано для наглядности и меняется здесь же. Любая цифра времени в интерфейсе пересчитывается от него.',
+      'Что делать: подставлять значение, полученное наблюдением за своим процессом. До этого относиться к времени как к иллюстрации, а не как к результату замера.',
+    ],
+  },
+  counter_time: {
+    title: 'Счётчики времени',
+    body: [
+      'Слева время разбора в ТАКТ, справа — расчётное время ручного разбора. Обе величины модельные: число действий умножено на коэффициент.',
+      'Отдельного сокращения времени здесь нет намеренно. Модельное время пропорционально действиям, поэтому его сокращение совпало бы с сокращением действий и выглядело бы вторым независимым доказательством, которым не является.',
+      'Что делать: сравнивать порядок величин. Настоящее время разбора даёт только парный прогон с наблюдателем — docs/pt_techlab/baseline_methodology.md.',
+    ],
+  },
   counters: {
     title: 'Трудоёмкость разбора',
     body: [
@@ -699,6 +715,20 @@ function cumulative(total, steps, index) {
   return Math.round((total * index) / steps);
 }
 
+// Коэффициент модельной оценки времени. Задаётся оператором: измеренного значения нет,
+// поэтому значение по умолчанию — объявленное допущение, а не величина из методики.
+function secondsPerAction() {
+  const raw = Number($('#secondsPerAction').value);
+  return Number.isFinite(raw) && raw > 0 ? raw : null;
+}
+
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds)) return '—';
+  const total = Math.round(seconds);
+  const minutes = Math.floor(total / 60);
+  return minutes ? `${minutes} мин ${String(total % 60).padStart(2, '0')} с` : `${total} с`;
+}
+
 function phaseColor(phase) {
   return PHASE_COLORS[phase] || '#64748b';
 }
@@ -708,7 +738,9 @@ async function openSimulation() {
   $('#simEmpty').hidden = true;
   $('#simBody').hidden = false;
   try {
-    simulation = await api(`/cases/${encodeURIComponent(selectedCaseId)}/simulation`);
+    const perAction = secondsPerAction();
+    const query = perAction ? `?seconds_per_action=${perAction}` : '';
+    simulation = await api(`/cases/${encodeURIComponent(selectedCaseId)}/simulation${query}`);
   } catch (error) {
     $('#simBody').hidden = true;
     $('#simEmpty').hidden = false;
@@ -863,11 +895,20 @@ function updateCounters() {
 
   const perAction = effort.seconds_per_action;
   if (perAction) {
-    $('#manualSeconds').textContent = `${Math.round(manual * perAction)} с (модельная оценка)`;
-    $('#taktSeconds').textContent = `${Math.round(takt * perAction)} с (модельная оценка)`;
+    const manualTime = manual * perAction;
+    const taktTime = takt * perAction;
+    $('#manualSeconds').textContent = `${formatDuration(manualTime)} (модель)`;
+    $('#taktSeconds').textContent = `${formatDuration(taktTime)} (модель)`;
+    $('#timeValue').textContent = `${formatDuration(taktTime)} / ${formatDuration(manualTime)}`;
+    // Модельное время пропорционально действиям, поэтому отдельного вывода о сокращении
+    // времени здесь нет: он совпал бы с сокращением действий и выглядел бы вторым
+    // независимым доказательством, которым не является.
+    $('#timeDelta').textContent = `ТАКТ / вручную · модельная оценка при ${perAction} с на действие`;
   } else {
     $('#manualSeconds').textContent = 'время не рассчитано';
     $('#taktSeconds').textContent = 'время не рассчитано';
+    $('#timeValue').textContent = '—';
+    $('#timeDelta').textContent = 'коэффициент не задан';
   }
 }
 
@@ -984,6 +1025,9 @@ $('#stepForward').addEventListener('click', () => {
 $('#stepBack').addEventListener('click', () => {
   stopPlayback();
   setCursor(simCursor - 1);
+});
+$('#secondsPerAction').addEventListener('change', () => {
+  if (!$('#simulationView').hidden) openSimulation();
 });
 $('#resetPlayer').addEventListener('click', () => {
   stopPlayback();

@@ -18,6 +18,14 @@
   box-sizing: border-box;
 }
 
+/* Атрибут hidden обязан скрывать элемент даже там, где авторское правило задаёт display.
+   Браузерное `[hidden] { display: none }` слабее правила по классу: без !important
+   `.layout { display: grid }` перебивал его, и вкладки «Расследование» и «Симуляция»
+   показывались одновременно. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -674,4 +682,24 @@ ol.steps {
   fill: var(--text);
   font-size: 11px;
   text-anchor: middle;
+}
+
+.assumption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.assumption input {
+  width: 78px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
 }

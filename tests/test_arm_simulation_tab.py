@@ -65,6 +65,8 @@ def test_simulation_help_topics_are_present() -> None:
         "attack_graph",
         "sim_summary",
         "step",
+        "seconds_per_action",
+        "counter_time",
     }
     assert required <= declared, f"не хватает пояснений: {sorted(required - declared)}"
 
@@ -101,6 +103,9 @@ def test_method_modal_states_what_is_measured_and_what_is_modelled() -> None:
         "attackGraph",
         "simSummary",
         "methodButton",
+        "secondsPerAction",
+        "timeValue",
+        "timeDelta",
     ],
 )
 def test_simulation_elements_exist(element_id: str) -> None:
@@ -118,7 +123,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260820-02"}, versions
+    assert versions >= {"20260820-03"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -166,3 +171,36 @@ def test_styles_define_phase_and_player_classes() -> None:
     styles = _STYLES.read_text(encoding="utf-8")
     for selector in (".legend-item", ".step.played", ".step.current", "#attackGraph .edge-line.played"):
         assert selector in styles, selector
+
+
+def test_hidden_attribute_is_enforced_over_author_display() -> None:
+    """Атрибут hidden обязан скрывать элемент, даже если класс задаёт display.
+
+    Прецедент: `.layout { display: grid }` перебивал браузерное `[hidden] { display: none }`,
+    и обе вкладки — «Расследование» и «Симуляция» — показывались одновременно. Разницы между
+    вкладками не было видно вообще.
+    """
+    styles = _STYLES.read_text(encoding="utf-8")
+    # Селектор ищется в начале строки: в комментарии рядом он тоже упоминается.
+    rule = re.search(r"^\[hidden\]\s*\{([^}]*)\}", styles, re.MULTILINE)
+    assert rule is not None, "правило для атрибута hidden отсутствует"
+    assert "display: none !important" in rule.group(1), rule.group(1)
+
+
+def test_tab_switch_hides_the_other_view() -> None:
+    """Переключение вкладки скрывает противоположный раздел, а не только показывает свой."""
+    app = _app()
+    start = app.index("function showTab(")
+    block = app[start : app.index("\n}", start)]
+    assert ".layout" in block and "hidden = isSimulation" in block
+    assert "$('#simulationView').hidden = !isSimulation" in block
+
+
+def test_time_is_labelled_as_model_everywhere() -> None:
+    """Время нигде не подаётся как измеренная величина."""
+    app = _app()
+    start = app.index("const perAction = effort.seconds_per_action;")
+    block = app[start : start + 1200]
+    assert "модель" in block
+    index = _index()
+    assert "допущение для оценки времени, не замер" in index

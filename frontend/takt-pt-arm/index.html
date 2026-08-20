@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260820-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260820-03" />
   </head>
   <body>
     <header class="top">
@@ -168,6 +168,12 @@
               <button class="help" type="button" data-help="counters" aria-label="Пояснение: счётчики трудоёмкости">?</button>
             </div>
           </div>
+          <div class="assumption">
+            <label for="secondsPerAction">Секунд на одно действие</label>
+            <input id="secondsPerAction" type="number" min="1" max="600" step="1" value="20" />
+            <span class="muted small">допущение для оценки времени, не замер</span>
+            <button class="help sm" type="button" data-help="seconds_per_action" aria-label="Пояснение: коэффициент времени">?</button>
+          </div>
           <div class="counters">
             <div class="counter">
               <span class="counter-label">Аналитик вручную (модель) <button class="help sm" type="button" data-help="counter_manual" aria-label="Пояснение: счётчик ручного процесса">?</button></span>
@@ -178,6 +184,11 @@
               <span class="counter-label">Аналитик в ТАКТ <button class="help sm" type="button" data-help="counter_takt" aria-label="Пояснение: счётчик действий в ТАКТ">?</button></span>
               <span id="taktActions" class="counter-value">0</span>
               <span id="taktSeconds" class="counter-sub muted small">—</span>
+            </div>
+            <div class="counter">
+              <span class="counter-label">Время разбора <button class="help sm" type="button" data-help="counter_time" aria-label="Пояснение: счётчики времени">?</button></span>
+              <span id="timeValue" class="counter-value">—</span>
+              <span id="timeDelta" class="counter-sub muted small">модельная оценка</span>
             </div>
             <div class="counter">
               <span class="counter-label">Сокращение действий <button class="help sm" type="button" data-help="reduction" aria-label="Пояснение: сокращение">?</button></span>
@@ -236,6 +247,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260820-02"></script>
+    <script src="./app.min.js?v=20260820-03"></script>
   </body>
 </html>
