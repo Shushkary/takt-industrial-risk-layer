@@ -30,3 +30,8 @@ dist/
 # IDE
 .idea/
 .vscode/
+
+# Разбор продуктов Positive Technologies и стратегия отстройки. Публикация в
+# репозитории, который читают эксперты PT, — решение владельца, не техническое.
+# Файл уже попадал в коммит случайной командой `git add -A docs`.
+docs/pt_techlab/sprint_plan_v2_pt_aligned.md
