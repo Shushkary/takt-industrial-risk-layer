@@ -5,7 +5,74 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from takt.domain.entities.event import EventSource, NormalizedEvent, RawEvent
+from takt.domain.entities.event import (
+    ArtifactType,
+    EventArtifact,
+    EventEntities,
+    EventSource,
+    NormalizedEvent,
+    RawEvent,
+)
+
+# Синонимы полей, встречающиеся у разных источников: CSV-выгрузки, тела интеграций
+# (netflow, ipfix, syslog, snmp) и ручной приём через `/events`. Порядок значим —
+# берётся первое непустое.
+_ENTITY_ALIASES: dict[str, tuple[str, ...]] = {
+    "host_id": ("host_id", "hostname", "asset_id", "device_host", "src_host", "plc_id", "node"),
+    "user_id": ("user_id", "username", "user", "subject_user", "account", "operator_id"),
+    "process_id": ("process_guid", "process_id", "process"),
+    "parent_process_id": ("parent_process_guid", "parent_process_id", "parent_process"),
+    # `flow_*` — поля потоков netflow/ipfix: интеграция кладёт адреса именно под ними.
+    "src_address": ("src_address", "src_ip", "flow_src_ip", "source_ip", "client_ip"),
+    "dst_address": ("dst_address", "dst_ip", "flow_dst_ip", "remote_ip", "destination_ip", "server_ip"),
+}
+
+# Артефакты, распознаваемые по имени поля. Значение артефакта — то же, что в payload.
+_ARTIFACT_ALIASES: tuple[tuple[ArtifactType, tuple[str, ...]], ...] = (
+    (ArtifactType.HASH, ("sha256", "hash", "file_hash")),
+    (ArtifactType.FILE, ("image_path", "file_path", "file")),
+    (ArtifactType.DOMAIN, ("dns_query", "domain", "fqdn")),
+)
+
+
+def _first_value(row: dict[str, str], names: tuple[str, ...]) -> str:
+    for name in names:
+        value = str(row.get(name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _entities_from_row(row: dict[str, str]) -> EventEntities | None:
+    """Сущности события из полей строки.
+
+    Без этого события интеграций (netflow, ipfix, syslog, snmp) приходили с
+    `entities = None`: они не попадали ни в корреляцию по сущностям, ни в граф кейса,
+    ни в поиск по узлу — то есть источник формально принимался, но в расследовании
+    не участвовал.
+    """
+    values = {field: _first_value(row, names) for field, names in _ENTITY_ALIASES.items()}
+    if not any(values.values()):
+        return None
+    return EventEntities(**{field: value or None for field, value in values.items()})
+
+
+def _artifacts_from_row(row: dict[str, str]) -> tuple[EventArtifact, ...]:
+    found: list[EventArtifact] = []
+    for artifact_type, names in _ARTIFACT_ALIASES:
+        value = _first_value(row, names)
+        if value:
+            found.append(EventArtifact(type=artifact_type, value=value))
+    # Индикатор SIEM несёт собственный тип в соседнем поле.
+    indicator = _first_value(row, ("indicator",))
+    if indicator:
+        raw_type = _first_value(row, ("indicator_type",)) or "address"
+        try:
+            found.append(EventArtifact(type=ArtifactType(raw_type.lower()), value=indicator))
+        except ValueError:
+            # Неизвестный тип индикатора не повод терять событие: он остаётся в payload.
+            pass
+    return tuple(found)
 
 
 def _parse_ts(value: str) -> datetime:
@@ -60,6 +127,8 @@ def raw_row_to_normalized(
         payload_size=payload_size,
         payload=payload,
         operator_id=str(operator_id).strip(),
+        entities=_entities_from_row(row),
+        artifacts=_artifacts_from_row(row),
     )
 
 

@@ -251,19 +251,30 @@ class SqliteRecentEventStore:
         return [_persistent_row_to_event(row) for row in rows]
 
     def list_recent_events(self, *, limit: int) -> list[NormalizedEvent]:
+        """Окно контекста для предикатов инвариантов — с сущностями и артефактами.
+
+        Таблица `recent_events` хранит только порядок и «скелет» события: колонок под
+        сущности и артефакты в ней нет. Пока окно читалось напрямую из неё, предикаты
+        получали события с `entities = None` и пустым списком артефактов, то есть при
+        `TAKT_STORAGE=sqlite` работали вслепую, а при хранилище в памяти — нет.
+        Полная запись лежит в `events`, поэтому окно берёт порядок из `recent_events`,
+        а данные — из `events`.
+        """
         if limit <= 0:
             return []
         with self._lock:
             self._raise_if_closed()
             rows = self._conn.execute(
                 """
-                SELECT * FROM recent_events
-                ORDER BY seq DESC
+                SELECT events.*, recent_events.seq AS recent_seq
+                FROM recent_events
+                JOIN events ON events.event_id = recent_events.event_id
+                ORDER BY recent_events.seq DESC
                 LIMIT ?
                 """,
                 (int(limit),),
             ).fetchall()
-        return [_row_to_event(row) for row in reversed(rows)]
+        return [_persistent_row_to_event(row) for row in reversed(rows)]
 
     def _trim(self, max_events: int) -> None:
         self._conn.execute(
