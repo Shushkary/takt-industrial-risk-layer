@@ -1,6 +1,6 @@
 """Оценка сокращения ручных действий: что считается замером, а что расчётом.
 
-Скрипт `scripts/eval_baseline_inc002.py` сводит две разнородные величины, и тесты держат
+Модуль `takt.application.use_cases.investigation_effort` сводит две разнородные величины, и тесты держат
 границу между ними: число действий в ТАКТ берётся из журнала кейса, число действий текущего
 процесса — из модели с явными коэффициентами. Время не моделируется вовсе: коэффициента
 «секунд на действие» никто не измерял, а `docs/product_boundary.md` запрещает цифры
@@ -15,11 +15,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from scripts.eval_baseline_inc002 import (
+from takt.application.use_cases.investigation_effort import (
     AnalystSession,
     ManualProcessModel,
     analyst_session_from_audit,
-    evaluate,
+    evaluate_effort,
     reduction_percent,
 )
 
@@ -78,7 +78,7 @@ def test_single_source_needs_no_identifier_transfer() -> None:
 
 def test_time_is_absent_until_observed() -> None:
     """Без наблюдённых значений время текущего процесса не появляется ниоткуда."""
-    result = evaluate(
+    result = evaluate_effort(
         sources=4,
         entities=6,
         events=41,
@@ -92,7 +92,7 @@ def test_time_is_absent_until_observed() -> None:
 
 def test_observed_values_replace_the_model() -> None:
     """Наблюдение имеет приоритет над расчётом и помечается как замер."""
-    result = evaluate(
+    result = evaluate_effort(
         sources=4,
         entities=6,
         events=41,

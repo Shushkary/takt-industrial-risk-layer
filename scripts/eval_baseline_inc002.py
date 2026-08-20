@@ -18,6 +18,10 @@
 значений (`--observed`); без них в таблице стоит прочерк. Выдуманная цифра
 производительности запрещена `docs/product_boundary.md`.
 
+Расчёт живёт в `takt.application.use_cases.investigation_effort`; здесь — только чтение
+кейса и вывод. Той же логикой пользуется эндпоинт `GET /cases/{id}/simulation`, поэтому
+цифры в отчёте и в интерфейсе не могут разойтись.
+
 Запуск:
 
     python -m scripts.eval_baseline_inc002 --case-id INC-002
@@ -29,139 +33,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# Метка ручного действия в записи журнала. Ставится `Case.append_audit`, когда действие
-# выполнил человек: `... | actor=<кто>`.
-_ACTOR_MARK = "| actor="
-
-
-@dataclass(frozen=True, slots=True)
-class ManualProcessModel:
-    """Модель ручного разбора того же инцидента без ТАКТ.
-
-    Каждый коэффициент — число действий по определению методики (клик, переключение между
-    системами, ручной ввод или копирование идентификатора, запуск поиска). Значения по
-    умолчанию равны единице: одно действие на один шаг. Менять их имеет смысл только по
-    результатам наблюдения за конкретным процессом заказчика.
-    """
-
-    open_system: int = 1
-    """Открыть консоль источника — по одному действию на класс источника."""
-
-    search_entity_in_system: int = 1
-    """Поиск одной отличительной сущности в одной системе."""
-
-    carry_identifier: int = 1
-    """Перенос идентификатора в следующую систему: копирование и вставка."""
-
-    note_event: int = 1
-    """Занести относящееся событие в рабочую заметку."""
-
-    summarize: int = 1
-    """Свести итог разбора."""
-
-    def actions(self, *, sources: int, entities: int, events: int) -> dict[str, int]:
-        """Разбор действий по шагам. Ключи попадают в вывод, чтобы модель была проверяема."""
-        carries = entities * max(sources - 1, 0)
-        return {
-            "открыть консоли источников": self.open_system * sources,
-            "поиск сущностей по системам": self.search_entity_in_system * entities * sources,
-            "перенос идентификаторов между системами": self.carry_identifier * carries,
-            "фиксация событий в заметке": self.note_event * events,
-            "сведение итога": self.summarize,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class AnalystSession:
-    """Ручные действия аналитика в ТАКТ по журналу кейса."""
-
-    actions: int
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
-    lines: tuple[str, ...] = field(default=())
-
-    @property
-    def seconds(self) -> float | None:
-        """Активное время сессии. None, если действий меньше двух — интервала нет."""
-        if self.started_at is None or self.finished_at is None:
-            return None
-        return (self.finished_at - self.started_at).total_seconds()
-
-
-def _parse_line_time(line: str) -> datetime | None:
-    """Время из префикса записи журнала: `<ISO> | <текст>`."""
-    prefix = line.split(" | ", 1)[0].strip()
-    try:
-        return datetime.fromisoformat(prefix)
-    except ValueError:
-        return None
-
-
-def analyst_session_from_audit(audit_lines: list[str]) -> AnalystSession:
-    """Ручные действия из журнала: только записи с меткой актора."""
-    manual = [line for line in audit_lines if _ACTOR_MARK in line]
-    moments = [moment for moment in (_parse_line_time(line) for line in manual) if moment is not None]
-    return AnalystSession(
-        actions=len(manual),
-        started_at=min(moments) if moments else None,
-        finished_at=max(moments) if moments else None,
-        lines=tuple(manual),
-    )
-
-
-def reduction_percent(current: float, takt: float) -> float | None:
-    """Сокращение в процентах. None, если базовое значение нулевое — делить не на что."""
-    if current <= 0:
-        return None
-    return (current - takt) / current * 100.0
-
-
-def evaluate(
-    *,
-    sources: int,
-    entities: int,
-    events: int,
-    session: AnalystSession,
-    model: ManualProcessModel | None = None,
-    observed: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Сводка по одному инциденту."""
-    model = model or ManualProcessModel()
-    breakdown = model.actions(sources=sources, entities=entities, events=events)
-    current_actions = sum(breakdown.values())
-    takt_actions = session.actions
-
-    observed = observed or {}
-    current_seconds = observed.get("current_seconds")
-    takt_seconds = observed.get("takt_seconds", session.seconds)
-    if observed.get("current_actions") is not None:
-        current_actions = int(observed["current_actions"])
-    if observed.get("takt_actions") is not None:
-        takt_actions = int(observed["takt_actions"])
-
-    return {
-        "sources": sources,
-        "entities": entities,
-        "events": events,
-        "model_breakdown": breakdown,
-        "current_actions": current_actions,
-        "current_actions_measured": observed.get("current_actions") is not None,
-        "takt_actions": takt_actions,
-        "takt_actions_measured": observed.get("takt_actions") is None,
-        "reduction_actions_percent": reduction_percent(current_actions, takt_actions),
-        "current_seconds": current_seconds,
-        "takt_seconds": takt_seconds,
-        "reduction_time_percent": (
-            reduction_percent(current_seconds, takt_seconds)
-            if current_seconds is not None and takt_seconds is not None
-            else None
-        ),
-    }
+from takt.application.use_cases.investigation_effort import (
+    analyst_session_from_audit,
+    evaluate_effort,
+)
 
 
 def _case_facts(case: Any, workspace_events: list[Any]) -> tuple[int, int, int]:
@@ -267,7 +145,7 @@ def main() -> int:
                 file=sys.stderr,
             )
         observed = json.loads(args.observed.read_text(encoding="utf-8")) if args.observed else None
-        result = evaluate(
+        result = evaluate_effort(
             sources=sources, entities=entities, events=events, session=session, observed=observed
         )
     finally:

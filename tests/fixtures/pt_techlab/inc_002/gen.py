@@ -81,12 +81,56 @@ for _ in range(30):
     ot.append([T(m,random.randint(0,59)),nid("ot"),a,ip["build-srv-01"],ip["git-srv-01"],"CI_PIPELINE",random.choice(["BUILD_OK","POLL","SIGN_OK"]),"build.ok",random.randint(40,120),"BACKGROUND"])
 print("chain+bg built")
 
+# ===== Фазы kill chain и техники MITRE ATT&CK для 27 событий цепочки =====
+# Ключ — event_id: он детерминирован (nid считает по порядку), а цепочка пишется до фона,
+# поэтому первые записи каждого источника принадлежат INC-002. Фоновые события фазы не
+# получают намеренно: это не шаги атаки, и приписывать им фазу означало бы разметить шум.
+#
+# Набор фаз задан контрактом окна симуляции: recon, initial_access, execution, c2,
+# privilege_escalation, lateral_movement, persistence, exfiltration, impact.
+PHASES = {
+    # Ф1 фишинг и запуск на рабочей станции
+    "edr-0001": ("initial_access", "T1566.001"),   # вложение в почте
+    "edr-0002": ("execution", "T1218.005"),        # mshta запускает нагрузку
+    "edr-0003": ("execution", "T1059.001"),        # powershell с обращением к C2
+    "edr-0004": ("execution", "T1204.002"),        # запись исполняемого файла
+    "edr-0005": ("execution", "T1204.002"),        # запуск записанного файла
+    # Ф2 управляющий канал по DoH
+    "ndr-0001": ("c2", "T1071.004"),
+    "ndr-0002": ("c2", "T1071.004"),
+    "ndr-0003": ("c2", "T1071.004"),
+    "ndr-0004": ("c2", "T1071.004"),
+    "ndr-0005": ("c2", "T1071.004"),
+    "ndr-0006": ("c2", "T1071.004"),
+    "siem-0001": ("c2", "T1071.004"),              # SUSPICIOUS_OUTBOUND
+    # Ф3 kerberoasting и захват служебной учётной записи
+    "edr-0006": ("privilege_escalation", "T1558.003"),
+    "siem-0002": ("privilege_escalation", "T1558.003"),
+    "siem-0003": ("privilege_escalation", "T1558.003"),
+    "siem-0004": ("privilege_escalation", "T1558.003"),
+    "siem-0005": ("privilege_escalation", "T1078.002"),
+    # Ф4 перемещение на сервер сборки
+    "ndr-0007": ("lateral_movement", "T1021.002"),
+    "edr-0007": ("lateral_movement", "T1047"),
+    "edr-0008": ("execution", "T1059.001"),
+    "siem-0006": ("lateral_movement", "T1047"),
+    # Ф5 доступ к репозиторию и подмена артефакта сборки
+    "ndr-0008": ("lateral_movement", "T1021"),
+    "edr-0009": ("execution", "T1059"),
+    "edr-0010": ("impact", "T1195.002"),
+    "ot-0001": ("impact", "T1195.002"),
+    "ot-0002": ("impact", "T1195.002"),
+    "siem-0007": ("persistence", "T1195.002"),
+}
+
 # ===== Запись CSV в формате существующих фикстур =====
 def wr(fn,header,rows):
+    # Исходные строки не меняются: колонки фазы дописываются в копию, поэтому подсчёт
+    # цепочки ниже по r[-1] продолжает читать incident_id.
     rows2=sorted(rows,key=lambda r:r[0])
     with open(fn,"w",newline="",encoding="utf-8") as f:
-        w=csv.writer(f);w.writerow(header)
-        for r in rows2: w.writerow(r)
+        w=csv.writer(f);w.writerow([*header,"attack_phase","mitre_technique"])
+        for r in rows2: w.writerow([*r,*PHASES.get(r[1],("",""))])
 wr("edr.csv",["timestamp","event_id","hostname","username","process_guid","parent_process_guid","remote_ip","sha256","image_path","event_type","incident_id"],edr)
 wr("siem.csv",["event_time","record_id","device_host","subject_user","src_ip","dst_ip","rule_name","indicator_type","indicator","incident_id"],siem)
 wr("ndr.csv",["start_time","flow_id","src_host","src_ip","dst_ip","app_protocol","verdict","dns_query","bytes","incident_id"],ndr)

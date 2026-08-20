@@ -116,6 +116,11 @@ def map_netflow(row: dict[str, str], trust: float) -> NormalizedEvent:
         "payload_size": row.get("bytes", "0"),
         "dns_query": row.get("dns_query", ""),
         "collector": "netflow-collector",
+        # Разметка фазы цепочки приходит из датасета и должна дожить до окна симуляции:
+        # без переноса поток Netflow терял фазу, и цепочка в интерфейсе была неполной.
+        "attack_phase": row.get("attack_phase", ""),
+        "mitre_technique": row.get("mitre_technique", ""),
+        "incident_id": row.get("incident_id", ""),
     }
     event = raw_row_to_normalized(
         flow_row,

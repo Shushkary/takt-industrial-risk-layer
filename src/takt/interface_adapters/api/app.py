@@ -156,6 +156,7 @@ from takt.interface_adapters.api.routers.findings import register_finding_routes
 from takt.interface_adapters.api.routers.forensic import register_forensic_routes
 from takt.interface_adapters.api.routers.ingest import register_ingest_routes
 from takt.interface_adapters.api.routers.integrations import register_integration_routes
+from takt.interface_adapters.api.routers.simulation import register_simulation_routes
 from takt.interface_adapters.api.routers.system import register_system_routes
 from takt.interface_adapters.api.routers.workspace import register_workspace_routes
 from takt.interface_adapters.api.schemas.case_actions import (
@@ -733,6 +734,7 @@ def create_app() -> FastAPI:
     register_compliance_routes(api_ctx)
     register_case_routes(api_ctx)
     register_attack_chain_routes(api_ctx)
+    register_simulation_routes(api_ctx)
     register_workspace_routes(api_ctx)
     register_enrichment_routes(api_ctx)
     register_case_action_routes(api_ctx)

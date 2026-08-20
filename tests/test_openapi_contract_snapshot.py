@@ -22,6 +22,7 @@ EXPECTED_ROUTE_CONTRACTS = [
     ("POST", "/backtest/fixture", ("Analytics",), "BacktestFixtureResponse"),
     ("GET", "/cases", ("Cases",), "CaseSummary"),
     ("POST", "/cases/assemble/pivot", ("Cases",), "AssembleIncidentResponse"),
+    ("GET", "/cases/{case_id}/simulation", ("Cases",), None),
     ("GET", "/cases/export/full.json", ("Export",), "CasesFullExportResponse"),
     ("POST", "/cases/import/full.json", ("Export",), "CasesImportResponse"),
     ("GET", "/cases/stats", ("Cases",), "CasesStatsResponse"),

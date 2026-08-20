@@ -25,9 +25,21 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 
-from takt.domain.engines.incident_pivot import PivotKey, assemble_by_pivot, expand_to_hosts
+from takt.domain.engines.incident_pivot import (
+    PivotKey,
+    assemble_by_pivot,
+    entity_keys,
+    expand_to_hosts,
+)
 from takt.domain.engines.risk_engine import combine_risk, worst_risk_class
-from takt.domain.entities.case import Case, CaseArtifact, CaseStatus, Observation
+from takt.domain.entities.case import (
+    Case,
+    CaseArtifact,
+    CaseStatus,
+    CorrelationEvidence,
+    InvariantHitRecord,
+    Observation,
+)
 from takt.domain.entities.event import NormalizedEvent
 from takt.domain.invariants.evaluator import risk_vectors_from_invariants
 from takt.domain.ports.case_repository import CaseRepositoryPort
@@ -260,6 +272,8 @@ class AssembleIncidentUseCase:
             last_event_source=assembled[-1].source.value if assembled else "",
             related_cases=sorted(item.case_id for item in contributing),
             artifacts=_seed_artifacts(seeds, now=now, actor=actor),
+            correlation_evidence=_evidence(assembled, seeds, core_ids, expand_hosts),
+            invariant_hit_records=_hit_records(contributing, set(event_ids)),
         )
         case.append_audit(
             _ASSEMBLY_MARKER
@@ -292,6 +306,75 @@ class AssembleIncidentUseCase:
 def _is_assembled(case: Case) -> bool:
     """Кейс собран этим же use case — по метке в журнале."""
     return any(_ASSEMBLY_MARKER in line for line in case.audit_log)
+
+
+def _evidence(
+    assembled: Sequence[NormalizedEvent],
+    seeds: Sequence[IncidentSeed],
+    core_ids: Sequence[str],
+    expand_hosts: Sequence[str],
+) -> list[CorrelationEvidence]:
+    """Почему каждое событие попало в кейс — по одной записи на событие.
+
+    Без этого окно расследования может показать состав инцидента, но не может ответить на
+    вопрос аналитика «почему здесь это событие». Ядро и расширение различаются по существу:
+    первое отобрано по отличительной сущности и надёжно, второе добрано по узлу и требует
+    отсева, и в интерфейсе это должно быть видно, а не подразумеваться.
+    """
+    core = set(core_ids)
+    by_key: dict[PivotKey, IncidentSeed] = {key: seed for seed in seeds for key in seed.pivot_keys}
+    hosts = ", ".join(expand_hosts)
+    evidence: list[CorrelationEvidence] = []
+    for event in assembled:
+        if event.event_id in core:
+            matched = sorted({str(by_key[key]) for key in entity_keys(event) & set(by_key)})
+            evidence.append(
+                CorrelationEvidence(
+                    event_id=event.event_id,
+                    fingerprint="",
+                    rule="pivot",
+                    fields=matched,
+                    reason=(
+                        "совпала отличительная сущность инцидента: " + ", ".join(matched)
+                        if matched
+                        else "отобрано пивотом по отличительной сущности"
+                    ),
+                )
+            )
+            continue
+        host = str(getattr(event.entities, "host_id", "") or "") if event.entities else ""
+        evidence.append(
+            CorrelationEvidence(
+                event_id=event.event_id,
+                fingerprint="",
+                rule="host-expansion",
+                fields=["host_id"] if host else [],
+                reason=(
+                    f"добрано расширением до уровня узла {host} в окне инцидента"
+                    if host
+                    else f"добрано расширением до уровня узла ({hosts}) в окне инцидента"
+                ),
+            )
+        )
+    return evidence
+
+
+def _hit_records(contributing: Sequence[Case], event_ids: set[str]) -> list[InvariantHitRecord]:
+    """Срабатывания инвариантов, относящиеся к событиям этого кейса.
+
+    Кейсы конвейера уже посчитаны, и запись срабатывания несёт ссылку на событие. Перенос
+    записей позволяет назвать в окне не только набор инвариантов, но и событие, на котором
+    сработал каждый.
+    """
+    seen: set[tuple[str, str]] = set()
+    records: list[InvariantHitRecord] = []
+    for case in contributing:
+        for record in case.invariant_hit_records:
+            key = (record.invariant_id, record.event_ref)
+            if record.event_ref in event_ids and key not in seen:
+                seen.add(key)
+                records.append(record)
+    return sorted(records, key=lambda item: (item.ts, item.invariant_id, item.event_ref))
 
 
 def _seed_artifacts(seeds: Sequence[IncidentSeed], *, now: datetime, actor: str) -> list[CaseArtifact]:
