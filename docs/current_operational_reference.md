@@ -16,7 +16,7 @@
 | Python в Docker-образе | 3.13 | `Dockerfile` |
 | Доменных инвариантов | 26 (enum `InvariantId`, 26 файлов `config/invariants/*.yaml`) | `tests/test_invariant_catalog.py`, `tests/test_invariant_catalog_yaml.py`, `tests/test_docs_invariant_count_consistency.py` |
 | Инвариантов с baseline-протоколом детектирования | 11 из 26, синтетический корпус | `docs/detection_quality.md` |
-| Инвариантов отключено в проде (`builtin:noop`) | 7 из 26, известный разрыв | `docs/invariant_matrix.md` |
+| Инвариантов отключено в проде (`builtin:noop`) | 6 из 26, известный разрыв | `docs/invariant_matrix.md` |
 | Версия схемы SQLite | `LATEST_SCHEMA_VERSION = 8` | `scripts/db_migrate.py`, `sqlite_schema_version` в `GET /health` |
 | Объём backend-прогона | порядка 840 тестов, ~1,5–4 мин | точное значение — вывод `python -m pytest` |
 

@@ -260,3 +260,106 @@ def test_previously_assembled_case_is_not_a_risk_source() -> None:
     assert "INC-FIRST" not in second.source_case_ids
     assert "INC-SECOND" not in second.source_case_ids
     assert first.case.case_id not in second.case.related_cases
+
+
+_WEIGHTS = {
+    "rhythm": 0.22,
+    "graph": 0.22,
+    "context": 0.18,
+    "user": 0.18,
+    "data_quality": 0.20,
+    "risk_class_thresholds": {"critical": 0.85, "high": 0.65, "medium": 0.4},
+    "eps_soft_cap": 100_000,
+    "mandelbrot_entropy_cap": 2.5,
+}
+
+
+def _pipeline_case(case_id: str, hits: list[str], score: float, risk_class: str) -> Case:
+    return Case(
+        case_id=case_id,
+        status=CaseStatus.NEW,
+        title=f"Risk {risk_class}",
+        risk_class=risk_class,
+        risk_score=score,
+        created_at=_START,
+        normalized_event_ids=["chain-1"],
+        invariant_hits=hits,
+    )
+
+
+def test_incident_risk_uses_union_of_invariants_when_weights_available() -> None:
+    """С весами инцидент оценивается по объединению срабатываний, а не по одному событию.
+
+    Оба вошедших кейса по отдельности слабые; вместе они дают и внешний управляющий канал
+    (`c2_external_dns` -> вектор графа 0.9), и работу вне окна (`out_of_shift_access` ->
+    пользовательский вектор 0.7). Взвешенная сумма 0.324 — заметно больше, чем даёт любое
+    из событий по отдельности.
+    """
+    repo = InMemoryCaseStore()
+    repo.save(_pipeline_case("pipeline-1", ["c2_external_dns"], 0.05, "LOW"))
+    repo.save(_pipeline_case("pipeline-2", ["out_of_shift_access"], 0.04, "LOW"))
+    use_case = AssembleIncidentUseCase(
+        events=_FakeEventStore(_chain_and_background()),
+        repo=repo,
+        weights=_WEIGHTS,
+    )
+    result = use_case.execute(case_id="INC-TEST", seeds=[IncidentSeed.parse("user:smirnov")])
+    assert set(result.case.invariant_hits) == {"c2_external_dns", "out_of_shift_access"}
+    assert result.case.risk_score > 0.05, "объединение срабатываний весомее любого отдельного кейса"
+
+
+def test_incident_score_is_capped_by_eps_calibration() -> None:
+    """Фиксация известного ограничения шкалы риска, а не желаемого поведения.
+
+    Множитель `(0.5 + 0.5 * burst)` в `combine_risk` при `eps_soft_cap = 100000` равен 0.5
+    на любой реальной частоте потока. Поэтому балл инцидента не может превысить 0.5, а
+    пороги HIGH (0.65) и CRITICAL (0.85) недостижимы, каким бы полным ни был набор
+    срабатываний. Разбор и варианты калибровки — `docs/risk_scale_calibration.md`.
+
+    Если тест упал — калибровку изменили. Это ожидаемое событие: обнови документ и цифры
+    в `docs/detection_quality.md`, а не ослабляй проверку.
+    """
+    repo = InMemoryCaseStore()
+    every_marker = [
+        "c2_external_dns",
+        "out_of_shift_access",
+        "lateral_movement",
+        "expert_dissonance",
+        "trust_index_drop",
+        "request_reply_dissonance",
+        "physical_invariant_breach",
+    ]
+    repo.save(_pipeline_case("pipeline-1", every_marker, 0.0, "LOW"))
+    use_case = AssembleIncidentUseCase(
+        events=_FakeEventStore(_chain_and_background()),
+        repo=repo,
+        weights=_WEIGHTS,
+    )
+    result = use_case.execute(case_id="INC-TEST", seeds=[IncidentSeed.parse("user:smirnov")])
+    assert result.case.risk_score <= 0.5
+    assert result.case.risk_class in {"LOW", "MEDIUM"}
+
+
+def test_incident_risk_never_below_worst_contributing_case() -> None:
+    """Инцидент не бывает безопаснее худшей своей части."""
+    repo = InMemoryCaseStore()
+    repo.save(_pipeline_case("pipeline-1", ["new_node_airgap"], 0.94, "CRITICAL"))
+    use_case = AssembleIncidentUseCase(
+        events=_FakeEventStore(_chain_and_background()),
+        repo=repo,
+        weights=_WEIGHTS,
+    )
+    result = use_case.execute(case_id="INC-TEST", seeds=[IncidentSeed.parse("user:smirnov")])
+    assert result.case.risk_score == pytest.approx(0.94)
+    assert result.case.risk_class == "CRITICAL"
+
+
+def test_incident_risk_without_weights_falls_back_to_worst_case() -> None:
+    """Без весов веса не выдумываются — берётся худший из вошедших кейсов."""
+    repo = InMemoryCaseStore()
+    repo.save(_pipeline_case("pipeline-1", ["c2_external_dns"], 0.33, "LOW"))
+    result = _use_case(_chain_and_background(), repo).execute(
+        case_id="INC-TEST",
+        seeds=[IncidentSeed.parse("user:smirnov")],
+    )
+    assert result.case.risk_score == pytest.approx(0.33)

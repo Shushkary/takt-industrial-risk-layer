@@ -35,8 +35,11 @@ TPR/FPR-протокол (`docs/detection_quality.md`) на момент обн�
 через `POST /events` в реальном приложении (`invariant_hits: []`), хотя тот же предикат корректно срабатывает в
 изолированном unit-тесте, использующем код-дефолтные `rule_specs` вместо конфига из `config/invariants/`.
 
-Список: `jump_server_bypass`, `out_of_shift_access`, `context_dissonance`, `source_reputation_drift`,
+Список: `jump_server_bypass`, `context_dissonance`, `source_reputation_drift`,
 `stale_data`, `telemetry_gap`, `polling_period_doubling_suspect`.
+
+`out_of_shift_access` из списка выведен: предикат включён, а сопоставление вердиктов источников
+(`params.source_operations`) поднимает его на правиле SIEM `CODE_REPO_WRITE_OFFHOURS`.
 
 Это не проектное решение (см. отсутствие `experimental: true`), а рассогласование между декларативным конфигом
 и кодом — исправление вынесено отдельной задачей, см. `spawn_task` в этой же сессии /
@@ -67,7 +70,7 @@ TPR/FPR-протокол (`docs/detection_quality.md`) на момент обн�
 |---|---|---|---|
 | `untrusted_ip_admin` | Админ-действия с недоверенного IP | последние **5** событий | prod-active, unit only |
 | `brute_force` | Серия неуспешных аутентификаций (порог `invariants.auth_fail_threshold`, окно `invariants.auth_fail_window` в `risk_weights.yaml`) | последние **20** событий | prod-active, unit only |
-| `out_of_shift_access` | Администрирование вне штатной фазы/смены | последние **5** событий | ⚠ NOOP (config), нет прямого теста предиката |
+| `out_of_shift_access` | Администрирование вне штатной фазы/смены | последние **5** событий | включён; вердикты источников — `tests/test_source_verdict_mapping.py` |
 | `protocol_escalation` | Эскалация «тяжёлого» протокола по активу | последние **5** событий | prod-active, unit only |
 
 ## Блок 4 — Физическая логика

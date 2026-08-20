@@ -46,7 +46,11 @@ def register_assemble_routes(ctx: ApiContext) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        use_case = AssembleIncidentUseCase(events=store, repo=ctx.repo)
+        use_case = AssembleIncidentUseCase(
+            events=store,
+            repo=ctx.repo,
+            weights=getattr(app.state, "risk_weights", {}),
+        )
         try:
             assembled = use_case.execute(
                 case_id=request.case_id,

@@ -4,5 +4,10 @@ block_label_ru: "Блок 2 — Топология"
 title_ru: "Разведка: скан, SNMP walk, топология"
 context_window_events: 5
 predicate_ref: builtin:reconnaissance
+# Сканирование, размеченное NDR. Санкционированный сканер тоже попадает —
+# признак фиксируется, решение о легитимности принимает аналитик.
+params:
+  source_operations:
+    - SCAN_SUSPECT
 inputs: []
 severity_curve: null

@@ -68,6 +68,13 @@ def combine_risk(
     )
     dq_factor = _clamp(dq_score if dq_score >= 0.5 else dq_score * 1.2)
     burst = asymptotic_normalize(eps_estimate, eps_soft_cap)
+    # ВНИМАНИЕ при калибровке. Множитель растёт с интенсивностью потока — это намеренное
+    # свойство, закреплённое `tests/test_risk_engine_100k_eps.py::test_risk_monotonic_with_eps`.
+    # Следствие, о котором легко забыть: при `eps_soft_cap = 100000` (config/risk_weights.yaml)
+    # `burst` не отрывается от нуля на достижимых частотах (10 000 соб/с — 0.09), множитель
+    # равен 0.5, и потолок оценки — 0.5. Пороги HIGH (0.65) и CRITICAL (0.85) при такой
+    # калибровке недостижимы: в `tests/test_risk_engine.py` они проверяются на
+    # `eps_estimate=50_000_000`. Разбор и варианты — `docs/risk_scale_calibration.md`.
     adj = wsum * dq_factor * (0.5 + 0.5 * burst)
     trust = mandelbrot_entropy_proxy(
         [vectors.rhythm, vectors.graph, vectors.context, vectors.user, vectors.data_quality],

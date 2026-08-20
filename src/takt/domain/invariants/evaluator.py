@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 from takt.domain.entities.event import NormalizedEvent
 from takt.domain.entities.maintenance import ServiceTicket
 from takt.domain.engines.causal_mesh import GraphEdge
+from takt.domain.engines.risk_engine import RiskBreakdown
 from takt.domain.invariants.catalog import InvariantId
 from takt.domain.invariants.rule_predicates import PREDICATE_REGISTRY
 from takt.domain.invariants.rule_spec import InvariantRuleSpec, default_extended_rule_specs
@@ -199,3 +200,36 @@ def trust_boost(invariant_ids: list[str]) -> float:
 
 def request_reply_boost(invariant_ids: list[str]) -> float:
     return 0.6 if InvariantId.REQUEST_REPLY_DISSONANCE.value in invariant_ids else 0.0
+
+
+def risk_vectors_from_invariants(
+    invariant_ids: Sequence[str],
+    *,
+    base_rhythm: float = 0.0,
+    base_context: float = 0.0,
+    data_quality: float = 0.0,
+) -> RiskBreakdown:
+    """Векторы Risk = F(R, G, C, U, DQ) по набору сработавших инвариантов.
+
+    Одно место, где срабатывания превращаются в векторы риска. Раньше это правило жило
+    внутри оценки одного события; при появлении оценки собранного инцидента копия правила
+    неизбежно разошлась бы с оригиналом, а расхождение здесь означает два разных ответа
+    на один вопрос «насколько это опасно».
+
+    Базовые значения (`base_rhythm`, `base_context`, `data_quality`) приходят из измерений
+    по самому событию или кейсу; срабатывания могут только поднять их, но не опустить.
+    """
+    ids = list(invariant_ids)
+    graph = 0.8 if InvariantId.JUMP_SERVER_BYPASS.value in ids else 0.1
+    graph = max(graph, integrity_boost(ids), graph_topology_boost(ids))
+    rhythm = max(base_rhythm, rhythm_boost(ids), physics_boost(ids), request_reply_boost(ids))
+    context = max(base_context, hitl_context_boost(ids))
+    user = 0.7 if InvariantId.OUT_OF_SHIFT_ACCESS.value in ids else 0.1
+    user = max(user, user_boost(ids), trust_boost(ids))
+    return RiskBreakdown(
+        rhythm=rhythm,
+        graph=graph,
+        context=context,
+        user=user,
+        data_quality=data_quality,
+    )

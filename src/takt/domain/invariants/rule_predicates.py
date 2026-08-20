@@ -40,6 +40,29 @@ def _recent_same_asset(recent: Sequence[NormalizedEvent], asset_key: str) -> lis
     return [e for e in recent if str(e.payload.get("asset_id") or e.payload.get("plc_id") or "") == asset_key]
 
 
+def _declared_source_operations(spec: InvariantRuleSpec) -> frozenset[str]:
+    """Операции-вердикты, объявленные для правила в `config/invariants/<id>.yaml`."""
+    raw = spec.params.get("source_operations") or ()
+    return frozenset(str(item).strip().upper() for item in raw if str(item).strip())
+
+
+def _matches_declared_operation(event: NormalizedEvent, spec: InvariantRuleSpec) -> bool:
+    """Событие несёт вердикт вышестоящей автоматики, сопоставленный этому инварианту.
+
+    ТАКТ работает **после** средств обнаружения: NDR отдаёт `verdict`, SIEM — `rule_name`,
+    и импортёры кладут их в `operation` нормализованного события. Пока сопоставления не было,
+    предикаты искали промышленные поля (`asset_id`, `function_code`, флаг `lateral_movement`),
+    которых в событиях SOC нет, — и весь поток SOC проходил мимо риск-слоя: на фикстуре
+    INC-002 все 122 кейса получали одинаковый LOW.
+
+    Сопоставление объявляется в каталоге, а не зашивается в предикат: набор вердиктов у
+    каждого заказчика свой, и решение «этот вердикт означает этот инвариант» должно быть
+    предметом ревью конфигурации, а не правки кода.
+    """
+    declared = _declared_source_operations(spec)
+    return bool(declared) and event.operation.strip().upper() in declared
+
+
 def pred_noop(
     _event: NormalizedEvent,
     _recent: list[NormalizedEvent],
@@ -145,6 +168,8 @@ def pred_c2_external_dns(
     _ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
+    if _matches_declared_operation(event, spec):
+        return [spec.id]
     pl = event.payload
     dom = str(pl.get("domain") or pl.get("dns_query") or "").lower()
     if dom.endswith((".onion", ".tk")) or "malware" in dom:
@@ -177,6 +202,8 @@ def pred_reconnaissance(
     _ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
+    if _matches_declared_operation(event, spec):
+        return [spec.id]
     op = event.operation.upper()
     if any(x in op for x in ("PORT_SCAN", "TOPOLOGY_SCAN", "RECON", "SNMP_WALK")):
         return [spec.id]
@@ -383,6 +410,8 @@ def pred_lateral_movement(
     _ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
+    if _matches_declared_operation(event, spec):
+        return [spec.id]
     if event.payload.get("lateral_movement") in (True, "true", "1", 1):
         return [spec.id]
     return []
@@ -459,6 +488,8 @@ def pred_out_of_shift_access(
     spec: InvariantRuleSpec,
 ) -> list[str]:
     """Админская активность вне дневной смены (ночь/выходной)."""
+    if _matches_declared_operation(event, spec):
+        return [spec.id]
     if "admin" not in event.operation.lower():
         return []
     label = tag_phase(event.observed_at)

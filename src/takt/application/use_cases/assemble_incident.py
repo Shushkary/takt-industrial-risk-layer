@@ -20,14 +20,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 
 from takt.domain.engines.incident_pivot import PivotKey, assemble_by_pivot, expand_to_hosts
+from takt.domain.engines.risk_engine import combine_risk, worst_risk_class
 from takt.domain.entities.case import Case, CaseStatus, Observation
 from takt.domain.entities.event import NormalizedEvent
+from takt.domain.invariants.evaluator import risk_vectors_from_invariants
 from takt.domain.ports.case_repository import CaseRepositoryPort
 
 # Разбор за один запрос к хранилищу: фикстура INC-002 — 1030 событий, страничный
@@ -43,6 +45,9 @@ _SEED_KINDS = ("host", "user", "address", "artifact")
 # Метка в журнале собранного кейса. По ней сборка отличает кейсы конвейера от кейсов,
 # собранных ранее ею же: иначе повторная сборка агрегировала бы риск сама с себя.
 _ASSEMBLY_MARKER = "incident assembled by pivot"
+
+# Ключи весов, без которых нельзя посчитать F(R, G, C, U, DQ).
+_RISK_VECTOR_WEIGHTS = frozenset({"rhythm", "graph", "context", "user", "data_quality"})
 
 
 class IncidentEventSearchPort(Protocol):
@@ -125,6 +130,7 @@ class AssembleIncidentUseCase:
 
     events: IncidentEventSearchPort
     repo: CaseRepositoryPort
+    weights: Mapping[str, float] = field(default_factory=dict)
     page_size: int = _PAGE
     max_pages: int = _MAX_PAGES
 
@@ -234,8 +240,8 @@ class AssembleIncidentUseCase:
     ) -> Case:
         event_ids = [event.event_id for event in assembled]
         contributing = self._contributing_cases(set(event_ids), exclude_case_id=case_id)
-        risk_score, risk_class = _aggregate_risk(contributing)
         invariant_hits = sorted({hit for case in contributing for hit in case.invariant_hits})
+        risk_score, risk_class = _incident_risk(invariant_hits, contributing, assembled, self.weights)
 
         case = Case(
             case_id=case_id,
@@ -316,12 +322,64 @@ def _observations(events: Sequence[NormalizedEvent]) -> list[Observation]:
     ]
 
 
-def _aggregate_risk(contributing: Sequence[Case]) -> tuple[float, str]:
-    """Риск не вычисляется заново: берётся максимум по кейсам, уже оценённым конвейером."""
+def _incident_risk(
+    invariant_hits: Sequence[str],
+    contributing: Sequence[Case],
+    assembled: Sequence[NormalizedEvent],
+    weights: Mapping[str, float],
+) -> tuple[float, str]:
+    """Риск собранного инцидента — по той же модели F(R, G, C, U, DQ), что и у события.
+
+    Смысл сборки в том, что набор срабатываний инцидента больше любого отдельного из них:
+    канал управления, перемещение между узлами и работа вне окна по отдельности дают
+    слабый сигнал, вместе — картину атаки. Поэтому векторы строятся по объединению
+    сработавших инвариантов (общая функция `risk_vectors_from_invariants`), а не берутся
+    от самого «тяжёлого» события.
+
+    Новая модель риска при этом не вводится: те же веса из `config/risk_weights.yaml`,
+    та же `combine_risk`, те же пороги классов. Результат не может оказаться ниже самого
+    опасного из вошедших кейсов — инцидент не бывает безопаснее своей худшей части.
+    """
+    if not contributing and not invariant_hits:
+        return 0.0, "UNKNOWN"
+    if not _RISK_VECTOR_WEIGHTS <= set(weights):
+        # Без весов из `config/risk_weights.yaml` модель F(R, G, C, U, DQ) неприменима.
+        # Выдумывать веса нельзя, поэтому берётся худший из вошедших кейсов —
+        # оценка заведомо не завышена.
+        return _worst_of(contributing)
+
+    dq_score = min((case.dq_score for case in contributing), default=1.0)
+    assessment = combine_risk(
+        risk_vectors_from_invariants(invariant_hits, data_quality=1.0 - dq_score),
+        weights,
+        dq_score=dq_score,
+        eps_estimate=_events_per_second(assembled),
+        mandel_cap=float(weights.get("mandelbrot_entropy_cap", 2.5)),
+        eps_soft_cap=float(weights.get("eps_soft_cap", 100_000)),
+        risk_class_thresholds=weights.get("risk_class_thresholds"),
+    )
+    if not contributing:
+        return assessment.score, assessment.risk_class
+    top_score, top_class = _worst_of(contributing)
+    return (
+        max(assessment.score, top_score),
+        worst_risk_class(assessment.risk_class, top_class),
+    )
+
+
+def _worst_of(contributing: Sequence[Case]) -> tuple[float, str]:
     if not contributing:
         return 0.0, "UNKNOWN"
     top = max(contributing, key=lambda case: case.risk_score)
     return top.risk_score, top.risk_class
+
+
+def _events_per_second(events: Sequence[NormalizedEvent]) -> float:
+    """Интенсивность потока инцидента; при нулевом интервале — по числу событий."""
+    if len(events) < 2:
+        return float(len(events))
+    span = (max(e.observed_at for e in events) - min(e.observed_at for e in events)).total_seconds()
+    return len(events) / span if span > 0 else float(len(events))
 
 
 def _summary(

@@ -453,6 +453,7 @@ def create_app() -> FastAPI:
     app.state.webhook_backoff_sec = wh_backoff
     raw_font = exp.get("pdf_unicode_font")
     app.state.pdf_unicode_font = str(raw_font).strip() if raw_font else None
+    app.state.risk_weights = weights
     app.state.trust_by_source = trust_by_source_from_weights(weights)
 
     sqlite_security_path: Path | None = None

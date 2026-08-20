@@ -4,5 +4,12 @@ block_label_ru: "Блок 2 — Топология"
 title_ru: "Признаки lateral movement"
 context_window_events: 5
 predicate_ref: builtin:lateral_movement
+# Удалённое исполнение и потоки, размеченные NDR как перемещение между узлами.
+# Срабатывание на санкционированной админской активности ожидаемо: это признак,
+# а не вердикт, отсев выполняет аналитик.
+params:
+  source_operations:
+    - LATERAL_SUSPECT
+    - REMOTE_EXEC_WMI
 inputs: []
 severity_curve: null

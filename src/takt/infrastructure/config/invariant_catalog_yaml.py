@@ -19,6 +19,24 @@ _DEFAULT_CONTEXT_EVENTS = 5
 _RHYTHM_SERIES_CONTEXT = 24
 """Достаточная глубина для джиттера / опроса / дрейфа в одном буфере оценки."""
 
+_VERDICT_MAPPED_IDS: frozenset[str] = frozenset(
+    {
+        InvariantId.C2_EXTERNAL_DNS.value,
+        InvariantId.LATERAL_MOVEMENT.value,
+        InvariantId.RECONNAISSANCE.value,
+        InvariantId.OUT_OF_SHIFT_ACCESS.value,
+    }
+)
+"""Инварианты, для которых допустимо сопоставление вердиктов вышестоящей автоматики.
+
+ТАКТ разбирает инцидент после средств обнаружения: `verdict` от NDR и `rule_name` от SIEM
+попадают в `operation` нормализованного события. Список `source_operations` объявляет,
+какие вердикты означают этот инвариант у конкретного заказчика. Ограничение перечнем — чтобы
+сопоставление не расползлось на промышленные правила, где операция значит другое.
+"""
+
+_ALLOWED_PARAM_KEYS: frozenset[str] = frozenset({"auth_fail_threshold", "source_operations"})
+
 _PER_RULE_CONTEXT_CAP: dict[str, int] = {
     InvariantId.POLLING_JITTER.value: _RHYTHM_SERIES_CONTEXT,
     InvariantId.PAYLOAD_LENGTH_DRIFT.value: _RHYTHM_SERIES_CONTEXT,
@@ -57,19 +75,43 @@ class InvariantYamlRecord(BaseModel):
     def _params_schema(self) -> InvariantYamlRecord:
         if not self.params:
             return self
-        if self.id != InvariantId.BRUTE_FORCE.value:
-            msg = f"params are only supported for brute_force in MVP catalog (got {self.id})"
-            raise ValueError(msg)
-        allowed = frozenset({"auth_fail_threshold"})
-        extra = set(self.params) - allowed
+        extra = set(self.params) - _ALLOWED_PARAM_KEYS
         if extra:
-            msg = f"unknown brute_force params: {sorted(extra)}"
+            msg = f"unknown params for {self.id}: {sorted(extra)}"
             raise ValueError(msg)
-        t = self.params.get("auth_fail_threshold")
-        if t is not None and (not isinstance(t, int) or int(t) < 1):
-            msg = "auth_fail_threshold must be int >= 1"
-            raise ValueError(msg)
+        if "auth_fail_threshold" in self.params:
+            if self.id != InvariantId.BRUTE_FORCE.value:
+                msg = f"auth_fail_threshold is only supported for brute_force (got {self.id})"
+                raise ValueError(msg)
+            t = self.params.get("auth_fail_threshold")
+            if t is not None and (not isinstance(t, int) or int(t) < 1):
+                msg = "auth_fail_threshold must be int >= 1"
+                raise ValueError(msg)
+        if "source_operations" in self.params:
+            if self.id not in _VERDICT_MAPPED_IDS:
+                msg = (
+                    "source_operations are only supported for "
+                    f"{sorted(_VERDICT_MAPPED_IDS)} (got {self.id})"
+                )
+                raise ValueError(msg)
+            self._validate_source_operations()
         return self
+
+    def _validate_source_operations(self) -> None:
+        raw = self.params.get("source_operations")
+        if not isinstance(raw, list) or not raw:
+            msg = "source_operations must be a non-empty list of operation names"
+            raise ValueError(msg)
+        seen: set[str] = set()
+        for item in raw:
+            if not isinstance(item, str) or not item.strip():
+                msg = f"source_operations must contain non-empty strings, got {item!r}"
+                raise ValueError(msg)
+            normalized = item.strip().upper()
+            if normalized in seen:
+                msg = f"duplicate source operation {normalized!r} in {self.id}"
+                raise ValueError(msg)
+            seen.add(normalized)
 
     @model_validator(mode="after")
     def _predicate_ref_schema(self) -> InvariantYamlRecord:

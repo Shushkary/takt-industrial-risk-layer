@@ -3,6 +3,11 @@ block_key: identity
 block_label_ru: "Блок 3 — Идентификация"
 title_ru: "Администрирование вне штатной фазы/смены"
 context_window_events: 5
-predicate_ref: builtin:noop
+predicate_ref: builtin:out_of_shift_access
+# Правило SIEM уже содержит вывод о работе вне окна. Предикат был отключён
+# (builtin:noop) и не срабатывал ни на промышленных, ни на SOC-событиях.
+params:
+  source_operations:
+    - CODE_REPO_WRITE_OFFHOURS
 inputs: []
 severity_curve: null

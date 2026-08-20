@@ -75,7 +75,11 @@ def run(
         )
         return 2
     try:
-        use_case = AssembleIncidentUseCase(events=store, repo=app.state.repo)
+        use_case = AssembleIncidentUseCase(
+            events=store,
+            repo=app.state.repo,
+            weights=getattr(app.state, "risk_weights", {}),
+        )
         assembled = use_case.execute(
             case_id=case_id,
             seeds=parsed,

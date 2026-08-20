@@ -26,14 +26,7 @@ from takt.domain.invariants.evaluator import (
     InvariantContext,
     InvariantRuleOverrides,
     collect_extended_invariants,
-    graph_topology_boost,
-    hitl_context_boost,
-    integrity_boost,
-    physics_boost,
-    request_reply_boost,
-    rhythm_boost,
-    trust_boost,
-    user_boost,
+    risk_vectors_from_invariants,
 )
 from takt.domain.invariants.rule_spec import InvariantRuleSpec, default_extended_rule_specs, max_rule_context_window
 from takt.domain.ports.baseline import ExpectedBehaviorPort
@@ -177,19 +170,17 @@ class AssessRiskUseCase:
         if eff_lab:
             inv = [i for i in inv if i not in eff_lab]
 
-        graph_signal = 0.8 if InvariantId.JUMP_SERVER_BYPASS.value in inv else 0.1
-        graph_signal = max(graph_signal, integrity_boost(inv), graph_topology_boost(inv))
-        rhythm_signal = max(
-            rhythm_signal,
-            rhythm_boost(inv),
-            physics_boost(inv),
-            request_reply_boost(inv),
+        vectors_from_rules = risk_vectors_from_invariants(
+            inv,
+            base_rhythm=rhythm_signal,
+            base_context=1.0 - ctx.context_score,
+            data_quality=1.0 - dq.dq_score,
         )
-        context_signal = 1.0 - ctx.context_score
-        context_signal = max(context_signal, hitl_context_boost(inv))
-        user_signal = 0.7 if InvariantId.OUT_OF_SHIFT_ACCESS.value in inv else 0.1
-        user_signal = max(user_signal, user_boost(inv), trust_boost(inv))
-        dq_signal = 1.0 - dq.dq_score
+        graph_signal = vectors_from_rules.graph
+        rhythm_signal = vectors_from_rules.rhythm
+        context_signal = vectors_from_rules.context
+        user_signal = vectors_from_rules.user
+        dq_signal = vectors_from_rules.data_quality
 
         if self._expected and asset_id and self._expected.is_expected(asset_id, event.operation):
             user_signal = min(user_signal, 0.08)
