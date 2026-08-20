@@ -27,7 +27,7 @@ from typing import Any, Protocol
 
 from takt.domain.engines.incident_pivot import PivotKey, assemble_by_pivot, expand_to_hosts
 from takt.domain.engines.risk_engine import combine_risk, worst_risk_class
-from takt.domain.entities.case import Case, CaseStatus, Observation
+from takt.domain.entities.case import Case, CaseArtifact, CaseStatus, Observation
 from takt.domain.entities.event import NormalizedEvent
 from takt.domain.invariants.evaluator import risk_vectors_from_invariants
 from takt.domain.ports.case_repository import CaseRepositoryPort
@@ -259,6 +259,7 @@ class AssembleIncidentUseCase:
             observations=_observations(assembled),
             last_event_source=assembled[-1].source.value if assembled else "",
             related_cases=sorted(item.case_id for item in contributing),
+            artifacts=_seed_artifacts(seeds, now=now, actor=actor),
         )
         case.append_audit(
             _ASSEMBLY_MARKER
@@ -291,6 +292,27 @@ class AssembleIncidentUseCase:
 def _is_assembled(case: Case) -> bool:
     """Кейс собран этим же use case — по метке в журнале."""
     return any(_ASSEMBLY_MARKER in line for line in case.audit_log)
+
+
+def _seed_artifacts(seeds: Sequence[IncidentSeed], *, now: datetime, actor: str) -> list[CaseArtifact]:
+    """Отличительные сущности инцидента как артефакты кейса.
+
+    Нужны не для украшения карточки: по ним строится перечень применимых действий.
+    Пока их не было, интерфейс выводил варианты реагирования по всем сущностям кейса,
+    включая те, что пришли расширением до уровня узла, — и предлагал сбросить учётные
+    записи людей, которые в это время просто работали на том же узле.
+    """
+    return [
+        CaseArtifact(
+            type=seed.kind,
+            value=seed.value,
+            source="pivot-seed",
+            verification_status="unverified",
+            added_by=actor,
+            created_at=now,
+        )
+        for seed in seeds
+    ]
 
 
 def _latest(events: Sequence[NormalizedEvent]) -> datetime:

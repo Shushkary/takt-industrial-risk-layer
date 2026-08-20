@@ -131,8 +131,14 @@ def pred_protocol_escalation(
     same_asset_recent = [e for e in recent if asset_id and str(e.payload.get("asset_id") or e.payload.get("plc_id") or "") == asset_id]
     if same_asset_recent:
         prev = same_asset_recent[-1]
-        pt = tiers.get(prev.protocol.upper(), 0)
-        ct = tiers.get(proto, 0)
+        # Уровни сравнимы только если оба протокола описаны в таблице. Раньше неизвестный
+        # протокол получал уровень 0, и любой переход к описанному протоколу читался как
+        # эскалация: на потоках Netflow обычная последовательность DNS -> HTTPS давала
+        # срабатывание на штатном трафике.
+        pt = tiers.get(prev.protocol.upper())
+        ct = tiers.get(proto)
+        if pt is None or ct is None:
+            return []
         if ct > pt + 1:
             return [spec.id]
     return []

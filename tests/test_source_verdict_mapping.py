@@ -160,3 +160,30 @@ def test_repository_catalog_declares_soc_verdicts() -> None:
         InvariantId.OUT_OF_SHIFT_ACCESS.value,
     }
     assert "C2_SUSPECT" in mapped[InvariantId.C2_EXTERNAL_DNS.value]
+
+
+def test_protocol_escalation_needs_both_protocols_known() -> None:
+    """Неизвестный протокол не считается низшим уровнем.
+
+    Прежде `tiers.get(proto, 0)` давал неизвестному протоколу уровень 0, и обычная
+    последовательность потоков DNS -> HTTPS на одном узле читалась как эскалация: на
+    корпусе Netflow срабатывание получал штатный трафик.
+    """
+    predicate = PREDICATE_REGISTRY[InvariantId.PROTOCOL_ESCALATION.value]
+    spec = _spec(InvariantId.PROTOCOL_ESCALATION.value)
+
+    def flow(protocol: str) -> NormalizedEvent:
+        return NormalizedEvent(
+            event_id=f"e-{protocol}",
+            observed_at=datetime(2026, 8, 17, 6, 0, tzinfo=UTC),
+            source=EventSource.NETWORK,
+            protocol=protocol,
+            operation="ALLOWED",
+            payload_size=10,
+            payload={"asset_id": "ws-17"},
+        )
+
+    # DNS в таблице уровней отсутствует — сравнивать не с чем.
+    assert predicate(flow("HTTPS"), [flow("DNS")], _Ctx(), spec) == []
+    # Оба протокола известны и разрыв больше одного уровня — срабатывание остаётся.
+    assert predicate(flow("SMB"), [flow("MODBUS")], _Ctx(), spec) == [spec.id]
