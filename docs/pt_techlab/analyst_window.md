@@ -1,0 +1,94 @@
+# Окно расследования: запуск на четырёх источниках
+
+Воспроизводимый прогон демонстрационного сценария INC-002 от загрузки данных до окна
+аналитика. Все числа ниже — результат прогона, а не ожидание.
+
+## 1. Загрузка четырёх источников
+
+Хранилище обязано быть постоянным: загрузчик и API — разные процессы, при хранилище
+в памяти загруженное некому передать.
+
+```powershell
+$env:TAKT_STORAGE = "sqlite"; $env:PYTHONPATH = "src"; $env:PYTHONUTF8 = "1"
+python -m takt.tools.load_dataset --source edr     --path tests/fixtures/pt_techlab/inc_002/edr.csv
+python -m takt.tools.load_dataset --source siem    --path tests/fixtures/pt_techlab/inc_002/siem.csv
+python -m takt.tools.load_dataset --source netflow --path tests/fixtures/pt_techlab/inc_002/ndr.csv
+python -m takt.tools.load_dataset --source ot      --path tests/fixtures/pt_techlab/inc_002/ot.csv
+```
+
+Принято 1030 событий: EDR 531, SIEM 240, Netflow 227, OT 32.
+
+Источник `netflow` читает тот же файл потоков, что и `ndr`, но как поток без вердикта
+средства обнаружения: строка приводится к полям интеграции (`flow_src_ip`, `flow_dst_ip`,
+`flow_bytes`) и проходит тот же нормализатор, что и приём через
+`POST /integrations/ingest/netflow`.
+
+## 2. Сборка инцидента
+
+```powershell
+python -m takt.tools.assemble_incident --case-id INC-002 `
+  --seed user:smirnov --seed user:svc_build --seed address:185.220.101.34 `
+  --seed artifact:domain:cdn-metrics.example-analytics.com `
+  --seed host:artifact:app-setup.msi --seed host:pipeline:release-prod `
+  --expand-host ws-17 --expand-host build-srv-01 `
+  --title "Компрометация конвейера сборки: фишинг, C2, подмена артефакта"
+```
+
+Результат: ядро 25 событий по отличительным сущностям, расширение до уровня узла
+добирает 16, итого 41.
+
+## 3. Backend и АРМ
+
+```powershell
+python -m uvicorn takt.interface_adapters.api.main:app --host 127.0.0.1 --port 8090
+```
+
+АРМ — статические файлы `frontend/takt-pt-arm`, раздаются веб-сервером по пути, где
+`/<путь>/api/` проксируется на backend (см. `nginx.takt-pt-arm.conf`). Для локальной
+проверки без nginx достаточно любого статического сервера с тем же прокси; адрес API
+можно переопределить, задав `window.TAKT_API_BASE` до загрузки `app.min.js`.
+
+После правки `app.js` или `styles.css` обязательна пересборка `node build-production.mjs`
+и подъём параметра `?v=` в `index.html` и `app.js`.
+
+## Что показывает окно
+
+| Блок | Источник данных |
+|---|---|
+| Очередь инцидентов | `GET /cases`, порядок: балл риска, при равенстве — число событий |
+| Сводка, инварианты, находки | `GET /cases/{id}/workspace`, поле `case` |
+| Состав по источникам | те же события, сгруппированные по `source` |
+| Цепочка событий | `events`, по возрастанию `observed_at`, время в UTC |
+| Связи сущностей | `graph.edges` |
+| Варианты реагирования | артефакты кейса с `source = pivot-seed` |
+| Карточка сущности | `GET /entities/{type}/{id}/card` |
+
+У каждого блока и каждого ключевого значения есть кнопка пояснения: что это, откуда
+берётся и что с этим делать. Реестр пояснений — константа `HELP` в `app.js`, 22 записи.
+
+## Измерено на прогоне
+
+| Показатель | Значение |
+|---|---|
+| Кейс INC-002 | 41 событие, класс MEDIUM, балл 0.467 |
+| Состав по источникам | edr 16, siem 12, network_events 11, ot 2 |
+| Сработавшие инварианты кейса | `c2_external_dns`, `lateral_movement`, `out_of_shift_access` |
+| Цепочка событий | 41 строка, от `2026-08-17 06:00:00 UTC` |
+| Связи сущностей | 58 |
+| Карточка `ws-17` | 29 событий, три класса источников |
+
+Почему MEDIUM, а не выше: три из пяти векторов модели риска на этом корпусе равны нулю.
+Разбор — [risk_scale_calibration.md](../risk_scale_calibration.md).
+
+## Дефекты, найденные этой проверкой
+
+Все исправлены, на каждый есть регрессия.
+
+| Что было | Следствие |
+|---|---|
+| `raw_row_to_normalized` не заполнял сущности | Весь HTTP-приём (netflow, ipfix, syslog, snmp, `/events`) давал события без узлов и адресов: источник принимался, но в разборе не участвовал |
+| Окно контекста читалось из таблицы без колонок сущностей | Предикаты инвариантов при `TAKT_STORAGE=sqlite` работали вслепую |
+| `dt_to_sql` писал время в зоне машины | Цепочка попадала в другие сутки; сортировка по текстовой колонке ломалась при разных смещениях |
+| `protocol_escalation` считал неизвестный протокол нулевым уровнем | Обычная последовательность DNS → HTTPS читалась как эскалация |
+| Реагирование строилось по всем сущностям кейса | Интерфейс предлагал сбросить учётные записи непричастных |
+| АРМ обращался к `/api/v1/*` | Такого контура в продукте нет: каждый запрос отдавал 404 |
