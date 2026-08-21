@@ -114,6 +114,83 @@ class CaseForensicVerdictDetail(BaseModel):
     counterfactual: str = ""
 
 
+class ConfidenceComponentDetail(BaseModel):
+    key: str
+    title_ru: str
+    value: float
+    weight: float
+    contribution: float
+    reasons: list[str] = Field(default_factory=list)
+
+
+class MissingContextItemDetail(BaseModel):
+    """Чего не хватает, чтобы снять неопределённость, и где это взять."""
+
+    kind: str
+    text: str
+    required_document: str | None = None
+    sanctioning_party: str | None = None
+    admissible_window: str | None = None
+
+
+class VerdictConfidenceDetail(BaseModel):
+    """Обоснованность вывода: одна величина, её разложение и маршрут добора контекста.
+
+    `missing` непуст ровно тогда, когда `verdict` = `UNDET`.
+    """
+
+    verdict: str
+    score: float
+    grade: str
+    components: list[ConfidenceComponentDetail] = Field(default_factory=list)
+    missing: list[MissingContextItemDetail] = Field(default_factory=list)
+
+
+class EvidenceSummaryDetail(BaseModel):
+    raw_evidence_count: int
+    organizational_documents: int
+    audit_entries: int
+    forensic_bundle_exported: bool
+
+
+class BriefDecisionDetail(BaseModel):
+    ts: str
+    actor: str
+    prev_status: str
+    next_status: str
+    reason: str = ""
+
+
+class BriefMeasureDetail(BaseModel):
+    kind: str
+    status: str
+    action: str = ""
+    result: str = ""
+    actor: str = ""
+
+
+class DecisionBriefDetail(BaseModel):
+    """Сводка для лица, принимающего решение: что произошло, чему верить, чем подтверждено, чего не хватает."""
+
+    case_id: str
+    title: str
+    status: str
+    created_at: str
+    risk_class: str
+    risk_score: float
+    verdict: str
+    verdict_value: str
+    confidence_score: float
+    confidence_grade: str
+    invariants: list[str] = Field(default_factory=list)
+    explanation: str = ""
+    evidence: EvidenceSummaryDetail
+    missing: list[MissingContextItemDetail] = Field(default_factory=list)
+    measures: list[BriefMeasureDetail] = Field(default_factory=list)
+    last_decision: BriefDecisionDetail | None = None
+    boundary_note: str
+
+
 class RemediationAttemptDetail(BaseModel):
     attempt_id: str
     case_id: str
@@ -177,6 +254,7 @@ class CaseDetail(BaseModel):
     findings: list[FindingDetail] = Field(default_factory=list)
     manual_permits: list[ManualPermitDetail] = Field(default_factory=list)
     formal_verdict: CaseForensicVerdictDetail | None = None
+    verdict_confidence: VerdictConfidenceDetail | None = None
     formal_verdict_records: list[FormalVerdictRecordDetail] = Field(default_factory=list)
     decision_records: list[CaseDecisionRecordDetail] = Field(default_factory=list)
     remediation_attempts: list[RemediationAttemptDetail] = Field(default_factory=list)

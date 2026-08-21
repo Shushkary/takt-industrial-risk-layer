@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from takt.domain.entities.case import (
@@ -16,21 +17,30 @@ from takt.domain.entities.case import (
     RemediationAttempt,
 )
 from takt.domain.invariants.catalog import invariant_titles_by_id
+from takt.domain.services.decision_brief import decision_brief
 from takt.domain.services.forensic_verdict import case_forensic_verdict
+from takt.domain.services.verdict_confidence import MissingContextItem, verdict_confidence
 from takt.interface_adapters.api.schemas.cases import (
+    BriefDecisionDetail,
+    BriefMeasureDetail,
     CaseArtifactDetail,
     CaseDecisionRecordDetail,
     CaseDetail,
     CaseForensicVerdictDetail,
+    ConfidenceComponentDetail,
     ContextMatchDetail,
     CorrelationEvidenceDetail,
+    DecisionBriefDetail,
+    EvidenceSummaryDetail,
     FindingDetail,
     FormalVerdictRecordDetail,
     InvariantHitDetail,
     InvariantHitRecordDetail,
     ManualPermitDetail,
+    MissingContextItemDetail,
     ObservationDetail,
     RemediationAttemptDetail,
+    VerdictConfidenceDetail,
 )
 
 
@@ -110,6 +120,87 @@ def case_forensic_verdict_to_detail(c: Case) -> CaseForensicVerdictDetail:
             source=verdict.match.source,
         ),
         counterfactual=verdict.counterfactual,
+    )
+
+
+def verdict_confidence_to_detail(c: Case) -> VerdictConfidenceDetail:
+    confidence = verdict_confidence(c)
+    return VerdictConfidenceDetail(
+        verdict=confidence.verdict,
+        score=round(confidence.score, 4),
+        grade=confidence.grade,
+        components=[
+            ConfidenceComponentDetail(
+                key=component.key,
+                title_ru=component.title_ru,
+                value=round(component.value, 4),
+                weight=component.weight,
+                contribution=round(component.contribution, 4),
+                reasons=list(component.reasons),
+            )
+            for component in confidence.components
+        ],
+        missing=_missing_to_detail(confidence.missing),
+    )
+
+
+def _missing_to_detail(items: Sequence[MissingContextItem]) -> list[MissingContextItemDetail]:
+    return [
+        MissingContextItemDetail(
+            kind=item.kind,
+            text=item.text,
+            required_document=item.required_document,
+            sanctioning_party=item.sanctioning_party,
+            admissible_window=item.admissible_window,
+        )
+        for item in items
+    ]
+
+
+def decision_brief_to_detail(c: Case) -> DecisionBriefDetail:
+    brief = decision_brief(c)
+    return DecisionBriefDetail(
+        case_id=brief.case_id,
+        title=brief.title,
+        status=brief.status,
+        created_at=brief.created_at.astimezone(UTC).isoformat(timespec="seconds"),
+        risk_class=brief.risk_class,
+        risk_score=brief.risk_score,
+        verdict=brief.verdict,
+        verdict_value=brief.verdict_value,
+        confidence_score=round(brief.confidence_score, 4),
+        confidence_grade=brief.confidence_grade,
+        invariants=list(brief.invariants),
+        explanation=brief.explanation,
+        evidence=EvidenceSummaryDetail(
+            raw_evidence_count=brief.evidence.raw_evidence_count,
+            organizational_documents=brief.evidence.organizational_documents,
+            audit_entries=brief.evidence.audit_entries,
+            forensic_bundle_exported=brief.evidence.forensic_bundle_exported,
+        ),
+        missing=_missing_to_detail(brief.missing),
+        measures=[
+            BriefMeasureDetail(
+                kind=measure.kind,
+                status=measure.status,
+                action=measure.action,
+                result=measure.result,
+                actor=measure.actor,
+            )
+            for measure in brief.measures
+        ],
+        last_decision=(
+            BriefDecisionDetail(
+                ts=brief.last_decision.ts.astimezone(UTC).isoformat(timespec="seconds"),
+                actor=brief.last_decision.actor,
+                prev_status=brief.last_decision.prev_status,
+                next_status=brief.last_decision.next_status,
+                reason=brief.last_decision.reason,
+            )
+            if brief.last_decision is not None
+            else None
+        ),
+        boundary_note=brief.boundary_note,
     )
 
 
@@ -340,6 +431,7 @@ def case_to_detail(c: Case) -> CaseDetail:
         ],
         manual_permits=[manual_permit_to_detail(p) for p in c.manual_permits],
         formal_verdict=case_forensic_verdict_to_detail(c),
+        verdict_confidence=verdict_confidence_to_detail(c),
         formal_verdict_records=[formal_verdict_record_to_detail(r) for r in c.formal_verdict_records],
         decision_records=[decision_record_to_detail(r) for r in c.decision_records],
         remediation_attempts=[remediation_attempt_to_detail(a) for a in c.remediation_attempts],
