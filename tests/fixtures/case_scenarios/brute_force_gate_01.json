@@ -1,0 +1,194 @@
+{
+  "confirmation_reason": "подтверждено дежурным аналитиком",
+  "confirmed_at": "2026-08-21T06:15:03+00:00",
+  "confirmed_by": "testclient",
+  "context_events": [
+    {
+      "artifacts": [],
+      "entities": {
+        "dst_address": null,
+        "host_id": "gate-01",
+        "parent_process_id": null,
+        "process_id": null,
+        "src_address": "203.0.113.7",
+        "user_id": "svc-admin"
+      },
+      "event_id": "1509ce88-18d7-43b3-90da-0fcaacc4e6b9",
+      "ingest_trust": 1.0,
+      "observed_at": "2026-06-01T02:00:00+00:00",
+      "operation": "AUTH_FAIL",
+      "operator_id": "svc-admin",
+      "payload": {
+        "asset_id": "gate-01",
+        "operation": "AUTH_FAIL",
+        "operator_id": "svc-admin",
+        "payload_size": "96",
+        "protocol": "SSH",
+        "src_address": "203.0.113.7",
+        "timestamp": "2026-06-01T02:00:00+00:00",
+        "user_id": "svc-admin"
+      },
+      "payload_size": 96,
+      "protocol": "SSH",
+      "source": "auth_logs"
+    },
+    {
+      "artifacts": [],
+      "entities": {
+        "dst_address": null,
+        "host_id": "gate-01",
+        "parent_process_id": null,
+        "process_id": null,
+        "src_address": "203.0.113.7",
+        "user_id": "svc-admin"
+      },
+      "event_id": "da9f438a-0d32-4974-ac98-2bfa6f8f7a19",
+      "ingest_trust": 1.0,
+      "observed_at": "2026-06-01T02:01:00+00:00",
+      "operation": "AUTH_FAIL",
+      "operator_id": "svc-admin",
+      "payload": {
+        "asset_id": "gate-01",
+        "operation": "AUTH_FAIL",
+        "operator_id": "svc-admin",
+        "payload_size": "96",
+        "protocol": "SSH",
+        "src_address": "203.0.113.7",
+        "timestamp": "2026-06-01T02:01:00+00:00",
+        "user_id": "svc-admin"
+      },
+      "payload_size": 96,
+      "protocol": "SSH",
+      "source": "auth_logs"
+    },
+    {
+      "artifacts": [],
+      "entities": {
+        "dst_address": null,
+        "host_id": "gate-01",
+        "parent_process_id": null,
+        "process_id": null,
+        "src_address": "203.0.113.7",
+        "user_id": "svc-admin"
+      },
+      "event_id": "4716fbc4-b78e-4355-b372-e3be7a7fd9da",
+      "ingest_trust": 1.0,
+      "observed_at": "2026-06-01T02:02:00+00:00",
+      "operation": "AUTH_FAIL",
+      "operator_id": "svc-admin",
+      "payload": {
+        "asset_id": "gate-01",
+        "operation": "AUTH_FAIL",
+        "operator_id": "svc-admin",
+        "payload_size": "96",
+        "protocol": "SSH",
+        "src_address": "203.0.113.7",
+        "timestamp": "2026-06-01T02:02:00+00:00",
+        "user_id": "svc-admin"
+      },
+      "payload_size": 96,
+      "protocol": "SSH",
+      "source": "auth_logs"
+    },
+    {
+      "artifacts": [],
+      "entities": {
+        "dst_address": null,
+        "host_id": "gate-01",
+        "parent_process_id": null,
+        "process_id": null,
+        "src_address": "203.0.113.7",
+        "user_id": "svc-admin"
+      },
+      "event_id": "8add62a4-1633-4e41-bc98-562c1058d62c",
+      "ingest_trust": 1.0,
+      "observed_at": "2026-06-01T02:03:00+00:00",
+      "operation": "AUTH_FAIL",
+      "operator_id": "svc-admin",
+      "payload": {
+        "asset_id": "gate-01",
+        "operation": "AUTH_FAIL",
+        "operator_id": "svc-admin",
+        "payload_size": "96",
+        "protocol": "SSH",
+        "src_address": "203.0.113.7",
+        "timestamp": "2026-06-01T02:03:00+00:00",
+        "user_id": "svc-admin"
+      },
+      "payload_size": 96,
+      "protocol": "SSH",
+      "source": "auth_logs"
+    },
+    {
+      "artifacts": [],
+      "entities": {
+        "dst_address": null,
+        "host_id": "gate-01",
+        "parent_process_id": null,
+        "process_id": null,
+        "src_address": "203.0.113.7",
+        "user_id": "svc-admin"
+      },
+      "event_id": "12901e0c-6031-461f-9d08-2cf0de0156a4",
+      "ingest_trust": 1.0,
+      "observed_at": "2026-06-01T02:04:00+00:00",
+      "operation": "AUTH_FAIL",
+      "operator_id": "svc-admin",
+      "payload": {
+        "asset_id": "gate-01",
+        "operation": "AUTH_FAIL",
+        "operator_id": "svc-admin",
+        "payload_size": "96",
+        "protocol": "SSH",
+        "src_address": "203.0.113.7",
+        "timestamp": "2026-06-01T02:04:00+00:00",
+        "user_id": "svc-admin"
+      },
+      "payload_size": 96,
+      "protocol": "SSH",
+      "source": "auth_logs"
+    }
+  ],
+  "events": [
+    {
+      "artifacts": [],
+      "entities": {
+        "dst_address": null,
+        "host_id": "gate-01",
+        "parent_process_id": null,
+        "process_id": null,
+        "src_address": "203.0.113.7",
+        "user_id": "svc-admin"
+      },
+      "event_id": "de1a201a-9645-4383-b582-cfee6a13c8fa",
+      "ingest_trust": 1.0,
+      "observed_at": "2026-06-01T02:05:00+00:00",
+      "operation": "AUTH_FAIL",
+      "operator_id": "svc-admin",
+      "payload": {
+        "asset_id": "gate-01",
+        "operation": "AUTH_FAIL",
+        "operator_id": "svc-admin",
+        "payload_size": "96",
+        "protocol": "SSH",
+        "src_address": "203.0.113.7",
+        "timestamp": "2026-06-01T02:05:00+00:00",
+        "user_id": "svc-admin"
+      },
+      "payload_size": 96,
+      "protocol": "SSH",
+      "source": "auth_logs"
+    }
+  ],
+  "expected": {
+    "invariant_hits": [
+      "brute_force"
+    ],
+    "risk_class": "LOW",
+    "verdict": "ILLEG"
+  },
+  "organizational_context": [],
+  "schema_version": 1,
+  "source_case_id": "65150c05",
+  "title": "Risk LOW: AUTH_FAIL"
+}

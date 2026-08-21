@@ -4,25 +4,14 @@ from datetime import datetime
 
 from fastapi import Query, Response
 
+from takt.application.use_cases.case_scenario import event_to_dict
 from takt.domain.entities.event import NormalizedEvent
 from takt.interface_adapters.api.dependencies import ApiContext
 
 
 def _event_dict(event: NormalizedEvent) -> dict:
-    entities = event.entities
-    return {
-        "event_id": event.event_id,
-        "observed_at": event.observed_at.isoformat(),
-        "source": event.source.value,
-        "protocol": event.protocol,
-        "operation": event.operation,
-        "payload_size": event.payload_size,
-        "payload": dict(event.payload),
-        "operator_id": event.operator_id,
-        "entities": ({name: getattr(entities, name) for name in entities.__slots__} if entities else None),
-        "artifacts": [{"type": item.type.value, "value": item.value} for item in event.artifacts],
-        "ingest_trust": event.ingest_trust,
-    }
+    """Тот же вид, что уходит в фикстуру сценария — одно представление на оба выхода."""
+    return event_to_dict(event)
 
 
 def register_event_routes(ctx: ApiContext) -> None:
