@@ -57,6 +57,7 @@ class ApiContext:
     cases_import_body_model: Any | None = None
     cases_import_response_model: Any | None = None
     case_to_detail: Callable[[Any], Any] | None = None
+    decision_brief_to_detail: Callable[[Any], Any] | None = None
     domain_case_from_detail: Callable[[Any], Any] | None = None
     coerce_event_source: Callable[[str | None], Any] | None = None
     manual_permit_uc: Any | None = None

@@ -40,6 +40,7 @@ def test_siem_async_forward_is_bounded_by_semaphore() -> None:
         repo=repo,
         clock=_Clock(),
         render_case_pdf=lambda *args, **kwargs: b"%PDF",
+        render_decision_brief_pdf=lambda *args, **kwargs: b"%PDF",
         post_case_to_webhook_sync=lambda *args, **kwargs: 204,
         post_case_to_webhook=fake_post,
         case_to_siem_payload=lambda *args, **kwargs: {},

@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from takt.application.use_cases.cases_query_service import CasesListQuery
 from takt.interface_adapters.api.dependencies import ApiContext
+from takt.interface_adapters.api.schemas.cases import DecisionBriefDetail
 
 
 def register_case_routes(ctx: ApiContext) -> None:
@@ -25,6 +26,7 @@ def register_case_routes(ctx: ApiContext) -> None:
             ctx.cases_import_response_model,
             ctx.cases_query_service,
             ctx.case_to_detail,
+            ctx.decision_brief_to_detail,
             ctx.domain_case_from_detail,
             ctx.offset_limit_link_header,
         )
@@ -251,3 +253,11 @@ def register_case_routes(ctx: ApiContext) -> None:
         if c is None:
             raise HTTPException(status_code=404, detail="case not found")
         return ctx.case_to_detail(c)
+
+    @app.get("/cases/{case_id}/decision-brief", response_model=DecisionBriefDetail, tags=["Cases"])
+    def get_case_decision_brief(case_id: str):
+        """Сводка для лица, принимающего решение: без разбора карточки аналитика."""
+        c = ctx.cases_query_service.get_case_or_none(case_id)
+        if c is None:
+            raise HTTPException(status_code=404, detail="case not found")
+        return ctx.decision_brief_to_detail(c)

@@ -24,6 +24,7 @@ class ExportFacade:
         repo: CaseRepositoryPort,
         clock: SystemClockPort,
         render_case_pdf: Callable[..., bytes],
+        render_decision_brief_pdf: Callable[..., bytes],
         post_case_to_webhook_sync: Callable[..., int],
         post_case_to_webhook: Callable[..., Awaitable[int]],
         case_to_siem_payload: Callable[..., Any],
@@ -36,6 +37,7 @@ class ExportFacade:
         self._repo = repo
         self._clock = clock
         self._render_case_pdf = render_case_pdf
+        self._render_decision_brief_pdf = render_decision_brief_pdf
         self._post_case_to_webhook_sync = post_case_to_webhook_sync
         self._post_case_to_webhook = post_case_to_webhook
         self._case_to_siem_payload = case_to_siem_payload
@@ -67,6 +69,32 @@ class ExportFacade:
             headers={
                 "Content-Disposition": f'attachment; filename="takt-case-{case_id}.pdf"',
                 "X-TAKT-PDF-SHA256": sha,
+            },
+        )
+
+    def export_decision_brief_pdf(
+        self, *, case_id: str, unicode_font_path: str | None = None
+    ) -> BinaryExportResponse:
+        """Сводка для ЛПР одним листом.
+
+        В отличие от паспорта инцидента, состояние дела не меняется: сводка — производный
+        документ, её выгрузка не является событием жизненного цикла и в журнал не пишется.
+        Момент формирования берётся из тех же часов, поэтому один и тот же кейс даёт один и
+        тот же документ в пределах секунды.
+        """
+        case = self._get_case(case_id)
+        generated_at = self._pdf_generated_at(case)
+        content = self._render_decision_brief_pdf(
+            case,
+            generated_at=generated_at,
+            unicode_font_path=unicode_font_path,
+        )
+        return BinaryExportResponse(
+            content=content,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="takt-decision-brief-{case_id}.pdf"',
+                "X-TAKT-PDF-SHA256": hashlib.sha256(content).hexdigest(),
             },
         )
 
