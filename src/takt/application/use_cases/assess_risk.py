@@ -30,6 +30,7 @@ from takt.domain.invariants.evaluator import (
 )
 from takt.domain.invariants.rule_spec import InvariantRuleSpec, default_extended_rule_specs, max_rule_context_window
 from takt.domain.ports.baseline import ExpectedBehaviorPort
+from takt.domain.vocabulary import WORK_PHASE_RU, risk_class_ru
 from takt.domain.ports.hasher import HasherPort
 from takt.domain.ports.system_ports import IdProviderPort, SystemClockPort
 
@@ -205,7 +206,13 @@ class AssessRiskUseCase:
         xai = build_xai(
             assessment,
             invariant_hits=inv,
-            context_note=f"Фаза: {phase.phase}, окно ТО: {ctx.in_maintenance_window}",
+            # Фаза и признак окна ТО — наши обозначения, и объяснение читает человек.
+            # Код фазы (`NIGHT`) и питоновский `True`/`False` в тексте объяснения были
+            # обозначениями для машины, а не для аналитика.
+            context_note=(
+                f"Фаза: {WORK_PHASE_RU.get(phase.phase.value, phase.phase.value)},"
+                f" окно ТО: {'да' if ctx.in_maintenance_window else 'нет'}"
+            ),
         )
         cid = self._ids.new_case_id_short()
         af_mode, af_bucket = self._alert_fatigue_options()
@@ -230,7 +237,9 @@ class AssessRiskUseCase:
         case = Case(
             case_id=cid,
             status=CaseStatus.NEW,
-            title=f"Risk {assessment.risk_class}: {event.operation}",
+            # Класс риска — наше обозначение, показывается словом. Операция приходит из данных
+            # источника и остаётся как есть: перевод исказил бы то, что зафиксировано в журнале.
+            title=f"Риск {risk_class_ru(assessment.risk_class)}: {event.operation}",
             risk_class=assessment.risk_class,
             risk_score=assessment.score,
             created_at=ts,

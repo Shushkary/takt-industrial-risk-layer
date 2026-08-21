@@ -4,6 +4,7 @@ from fastapi import HTTPException, Query
 
 from takt.domain.engines.causal_mesh import detect_jump_server_bypass
 from takt.domain.entities.event import EventSource
+from takt.domain.vocabulary import EVENT_SOURCE_RU, vocabulary
 from takt.interface_adapters.api.dependencies import ApiContext
 from takt.interface_adapters.api.schemas.catalog import (
     DemoGraphEdgeOut,
@@ -44,22 +45,29 @@ def register_catalog_routes(ctx: ApiContext) -> None:
         tbs = app.state.trust_by_source or {}
         store = getattr(app.state, "recent_event_store", None)
         counts = store.event_counts_by_source() if store is not None else {}
-        names = {
-            EventSource.EDR: "Endpoint Detection and Response",
-            EventSource.SIEM: "SIEM",
-            EventSource.NDR: "Network Detection and Response",
-            EventSource.OT: "Промышленная телеметрия / PT ISIM",
-        }
         return [
             EventSourceCatalogItem(
                 id=s.value,
                 source_class=s.value,
-                display_name=names.get(s, s.value.replace("_", " ").title()),
+                # Названия берутся из общего словаря, а не из локальной таблицы: иначе каталог
+                # и карточка дела называли бы один и тот же источник по-разному.
+                display_name=EVENT_SOURCE_RU.get(s.value, s.value),
                 event_count=counts.get(s.value, 0),
                 ingest_trust=(float(tbs[s.value]) if s.value in tbs else None),
             )
             for s in EventSource
         ]
+
+    @app.get("/catalog/vocabulary", tags=["Catalog"])
+    def vocabulary_catalog():
+        """Русские названия обозначений продукта для интерфейсов.
+
+        Один источник правды ([`vocabulary.py`](../../domain/vocabulary.py)): свой словарь в
+        АРМ разошёлся бы с продуктом при первом же добавлении статуса или источника.
+        Значения из данных источника — операция, протокол, идентификаторы — сюда не входят
+        и не переводятся.
+        """
+        return vocabulary()
 
     @app.get("/topology/demo-graph", response_model=DemoTopologyResponse, tags=["Catalog"])
     def demo_topology():

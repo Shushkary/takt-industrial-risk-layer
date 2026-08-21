@@ -1,9 +1,32 @@
+"""Объяснение оценки риска (XAI).
+
+ВНИМАНИЕ: движок входит в алгоритмическое ядро под патентной защитой (заявка № 2026112859),
+см. `CLAUDE.md`. Правка от 2026-08-21 — **текстовая**: класс риска и сработавшие инварианты
+печатаются русскими названиями вместо кодов. Состав объяснения, порядок выбора рекомендации и
+контрфакта, а также любые вычисления не менялись; сверка с формулой изобретения выполнена —
+формула описывает контрфактическое объяснение вердикта, а не язык подписей.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from takt.domain.engines.risk_engine import RiskAssessment
-from takt.domain.invariants.catalog import InvariantId
+from takt.domain.invariants.catalog import InvariantId, invariant_titles_by_id
+from takt.domain.vocabulary import risk_class_ru
+
+# Заголовки правил из кодового каталога. Считаются один раз: `build_xai` вызывается на каждом
+# событии, а таблица неизменна в пределах процесса.
+_TITLES_BY_ID: dict[str, str] = invariant_titles_by_id()
+
+
+def _invariant_title(invariant_id: str) -> str:
+    """Название правила. Неизвестный идентификатор возвращается как есть.
+
+    Каталог здесь кодовый: домен не читает YAML. Если в боевом каталоге правило переименовано,
+    объяснение покажет идентификатор — это честнее, чем подставить устаревшее название.
+    """
+    return _TITLES_BY_ID.get(invariant_id, invariant_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,8 +99,15 @@ def build_xai(
     invariant_hits: list[str],
     context_note: str,
 ) -> XAIReport:
-    hits = ", ".join(invariant_hits) if invariant_hits else "нет срабатываний инвариантов"
-    what = f"Агрегированный риск {assessment.score:.2f}, класс {assessment.risk_class}."
+    # Объяснение читает человек: класс риска и правила называются словами. Идентификаторы
+    # правил остаются ключами `_REC_MAP` и `_CF_MAP` ниже — подменять их названиями нельзя,
+    # иначе рекомендация и контрфакт перестанут находиться.
+    hits = (
+        ", ".join(_invariant_title(iid) for iid in invariant_hits)
+        if invariant_hits
+        else "нет срабатываний инвариантов"
+    )
+    what = f"Агрегированный риск {assessment.score:.2f}, класс {risk_class_ru(assessment.risk_class)}."
     why = (
         f"Вклады: ритм={assessment.breakdown.rhythm:.2f}, граф={assessment.breakdown.graph:.2f}, "
         f"контекст={assessment.breakdown.context:.2f}, пользователь={assessment.breakdown.user:.2f}, "

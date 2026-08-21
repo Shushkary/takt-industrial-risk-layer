@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from takt.domain.entities.event import EventSource
-from takt.domain.invariants.catalog import InvariantId
+from takt.domain.invariants.catalog import InvariantId, invariant_titles_by_id
 from takt.infrastructure.config.weights_loader import load_risk_weights
 from takt.interface_adapters.api.main import create_app
 
@@ -749,9 +749,19 @@ def test_list_cases_min_invariant_hits_and_xai_contains():
     assert len(one) >= 1
     assert all(c["invariant_hits_count"] >= 1 for c in one)
     assert client.get("/cases", params={"min_invariant_hits": 50}).json() == []
-    xai_rows = client.get("/cases", params={"xai_contains": "trust_index_drop"}).json()
+
+    # `xai_contains` ищет по тексту объяснения, а объяснение читает человек: с 2026-08-21
+    # инварианты в нём называются, а не перечисляются кодами. Фильтр по идентификатору правила —
+    # это отдельный `has_invariant`, и он остаётся точным способом отобрать дела по правилу.
+    title = invariant_titles_by_id()["trust_index_drop"]
+    xai_rows = client.get("/cases", params={"xai_contains": title}).json()
     assert len(xai_rows) >= 1
     assert all("plc-inv-xai" == c["primary_asset_id"] for c in xai_rows)
+    assert client.get("/cases", params={"xai_contains": "trust_index_drop"}).json() == []
+
+    by_id = client.get("/cases", params={"has_invariant": "trust_index_drop"}).json()
+    assert len(by_id) >= 1
+    assert all("plc-inv-xai" == c["primary_asset_id"] for c in by_id)
 
 
 def test_list_cases_max_invariant_hits_and_sort_invariant_hits():
