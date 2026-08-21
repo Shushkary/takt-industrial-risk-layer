@@ -750,7 +750,7 @@ async function openSimulation() {
   simCursor = 0;
   renderLegend();
   renderSteps();
-  renderGraph();
+  renderAttackGraph();
   renderSummary();
   updateCounters();
   updatePosition();
@@ -809,7 +809,11 @@ function chainGraph() {
   return { nodes: [...nodes.values()], edges };
 }
 
-function renderGraph() {
+// Имя намеренно отличается от `renderGraph` панели «Связи сущностей». Обе функции лежат в
+// одной области видимости, и объявление ниже перекрывало объявление выше: открытие кейса
+// вызывало отрисовку графа атаки, читало `simulation.steps` у ещё не загруженной симуляции и
+// падало — вкладка «Расследование» не открывалась вообще.
+function renderAttackGraph() {
   const svg = $('#attackGraph');
   svg.replaceChildren();
   const { nodes, edges } = chainGraph();
