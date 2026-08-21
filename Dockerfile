@@ -11,11 +11,11 @@ WORKDIR /app
 
 # PYTHONPATH обязателен. Корень проекта вычисляется от расположения модуля
 # (`app.py`, `_ROOT = parents[4]`) — это верно для раскладки `src/`, но у пакета,
-# установленного в `site-packages`, корнем оказывается каталог интерпретатора, и
-# `config/risk_weights.yaml` там отсутствует. Контейнер падал на старте с
+# установленного в каталог библиотек интерпретатора, корнем оказывается сам этот
+# каталог, где `config/risk_weights.yaml` отсутствует. Контейнер падал на старте с
 # FileNotFoundError; `TAKT_CONFIG` не помогал, потому что проверка требует путь
-# внутри того же (ложного) корня. Каталог `/app/src` идёт в sys.path раньше
-# site-packages, поэтому импортируется исходная раскладка и корнем становится `/app`.
+# внутри того же (ложного) корня. Каталог `/app/src` идёт в `sys.path` раньше
+# установленной копии, поэтому импортируется исходная раскладка и корнем становится `/app`.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app/src \
@@ -30,6 +30,19 @@ COPY config ./config
 # **export** — **fpdf2** для паспорта инцидента и сводки для ЛПР. Без него
 # `GET /cases/{id}/export.pdf` и `/decision-brief.pdf` отвечают **501**.
 RUN pip install --no-cache-dir ".[metrics,export]"
+
+# Шрифт с кириллицей для PDF. Без него `case_pdf` откатывается на Helvetica (latin-1),
+# и русский текст сводки превращается в «?». Файл кладётся под корень проекта: путь к шрифту
+# проверяется на принадлежность корню, файл извне каталога отвергается.
+# DejaVu — свободный (Bitstream Vera / Arev), поэтому берётся системный пакет, а не бинарник
+# в репозитории: шрифт не попадает в git и не тянет за собой вопрос лицензии в SBOM.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && mkdir -p /app/assets/fonts \
+    && cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf /app/assets/fonts/ \
+    && apt-get purge -y fonts-dejavu-core \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 8090
 

@@ -6,13 +6,14 @@
     /usr/local/lib/python3.13/config/risk_weights.yaml
 
 Корень проекта вычисляется от расположения модуля (`app.py`, `_ROOT = parents[4]`). Для
-раскладки `src/` это верно, но у пакета, установленного в `site-packages`, корнем оказывается
-каталог интерпретатора, где `config/` нет. `TAKT_CONFIG` не спасал: `ensure_explicit_takt_config_under_project`
-требует, чтобы путь лежал внутри того же — ложного — корня.
+раскладки `src/` это верно, но у пакета, установленного в каталог библиотек интерпретатора,
+корнем оказывается сам этот каталог, где `config/` нет. `TAKT_CONFIG` не спасал:
+`ensure_explicit_takt_config_under_project` требует, чтобы путь лежал внутри того же — ложного —
+корня.
 
-Лечится тем, что исходная раскладка идёт в `sys.path` раньше `site-packages`. Тест закрепляет
-оба конца связки: и вычисление корня, и переменную в образе. Проверка статическая — сборка
-образа в тестах не запускается.
+Лечится тем, что исходная раскладка идёт в `sys.path` раньше установленной копии. Тест
+закрепляет оба конца связки: и вычисление корня, и переменную в образе. Проверка статическая —
+сборка образа в тестах не запускается.
 """
 
 from __future__ import annotations
@@ -50,6 +51,31 @@ def test_image_installs_the_export_extra() -> None:
     assert match is not None, "не найдена установка пакета с extras"
     extras = set(match.group(1).split(","))
     assert {"metrics", "export"} <= extras, extras
+
+
+def test_image_provides_a_cyrillic_font_under_the_project_root() -> None:
+    """Путь к шрифту проверяется на принадлежность корню проекта — файл обязан лежать в /app."""
+    text = _DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "fonts-dejavu-core" in text
+    assert "/app/assets/fonts/" in text
+
+
+def test_config_points_at_that_font() -> None:
+    """Иначе шрифт в образе есть, а PDF всё равно выходит в latin-1."""
+    import yaml
+
+    weights = yaml.safe_load((_ROOT / "config" / "risk_weights.yaml").read_text(encoding="utf-8"))
+    font = str(weights.get("export", {}).get("pdf_unicode_font", ""))
+
+    dockerfile = _DOCKERFILE.read_text(encoding="utf-8")
+
+    assert font, "export.pdf_unicode_font не задан — кириллица в PDF станет «?»"
+    assert not Path(font).is_absolute(), "путь обязан быть относительным корню проекта"
+    # Имя файла и каталог назначения обязаны совпасть с тем, что кладёт образ: разъехавшись,
+    # они дадут «шрифт есть, но не найден» — то есть тихий откат на latin-1.
+    assert Path(font).name in dockerfile, Path(font).name
+    assert f"/app/{Path(font).parent.as_posix()}/" in dockerfile
 
 
 def test_project_root_is_four_levels_above_the_api_module() -> None:

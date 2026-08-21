@@ -102,4 +102,8 @@ siem_webhook:
 
 # Экспорт: путь к TTF с кириллицей внутри репозитория (напр. assets/fonts/DejaVuSans.ttf); пусто — только Helvetica + latin-1 fallback
 export:
-  pdf_unicode_font: ""
+  # Шрифт с кириллицей для PDF: путь относительно корня проекта. Без него текст сводится
+  # к latin-1 и русские буквы превращаются в «?». В образе файл кладёт Dockerfile из
+  # системного пакета fonts-dejavu-core. При запуске из исходников файла может не быть —
+  # тогда экспорт молча откатывается на Helvetica, это ожидаемое поведение.
+  pdf_unicode_font: "assets/fonts/DejaVuSans.ttf"

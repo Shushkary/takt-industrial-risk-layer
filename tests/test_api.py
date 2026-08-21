@@ -277,7 +277,11 @@ def test_health_includes_case_counts(monkeypatch: pytest.MonkeyPatch):
     assert h["siem_webhook_retries"] == 3
     assert h["siem_webhook_backoff_sec"] == 0.35
     assert h["siem_webhook_allowlist_prefixes_count"] == 0
-    assert h["export_pdf_unicode_font_configured"] is False
+    # С 2026-08-21 шрифт с кириллицей задан в `config/risk_weights.yaml` по умолчанию:
+    # без него PDF сводился к latin-1 и русский текст превращался в «?». Файл кладёт в образ
+    # Dockerfile; при запуске из исходников его может не быть — экспорт тогда откатывается
+    # на Helvetica, но сам факт настройки от наличия файла не зависит.
+    assert h["export_pdf_unicode_font_configured"] is True
     assert h["prometheus_metrics_enabled"] is False
     assert h["forensic_crypto_mode"] == "mvp"
     assert h["forensic_strict_ready"] is True
@@ -315,7 +319,7 @@ def test_health_includes_case_counts(monkeypatch: pytest.MonkeyPatch):
     assert h2["siem_webhook_retries"] == 3
     assert h2["siem_webhook_backoff_sec"] == 0.35
     assert h2["siem_webhook_allowlist_prefixes_count"] == 0
-    assert h2["export_pdf_unicode_font_configured"] is False
+    assert h2["export_pdf_unicode_font_configured"] is True
     assert h2["prometheus_metrics_enabled"] is False
 
 
