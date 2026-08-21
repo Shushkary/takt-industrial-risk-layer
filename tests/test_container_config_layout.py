@@ -42,6 +42,16 @@ def test_dockerfile_copies_the_config_next_to_the_source() -> None:
     assert re.search(r"^WORKDIR\s+/app\s*$", text, re.MULTILINE), text
 
 
+def test_image_installs_the_export_extra() -> None:
+    """Без `export` выгрузка PDF отвечает 501, а сводка для ЛПР — её основной выход."""
+    text = _DOCKERFILE.read_text(encoding="utf-8")
+
+    match = re.search(r'pip install --no-cache-dir "\.\[([a-z,]+)\]"', text)
+    assert match is not None, "не найдена установка пакета с extras"
+    extras = set(match.group(1).split(","))
+    assert {"metrics", "export"} <= extras, extras
+
+
 def test_project_root_is_four_levels_above_the_api_module() -> None:
     """Вторая половина связки: если правило вычисления корня изменится, PYTHONPATH не поможет."""
     from takt.interface_adapters.api import app as api_app

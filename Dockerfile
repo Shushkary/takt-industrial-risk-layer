@@ -26,8 +26,10 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY config ./config
 
-# extras **metrics** — **prometheus-client** для **TAKT_METRICS** / **GET /metrics**
-RUN pip install --no-cache-dir ".[metrics]"
+# extras: **metrics** — **prometheus-client** для **TAKT_METRICS** / **GET /metrics**;
+# **export** — **fpdf2** для паспорта инцидента и сводки для ЛПР. Без него
+# `GET /cases/{id}/export.pdf` и `/decision-brief.pdf` отвечают **501**.
+RUN pip install --no-cache-dir ".[metrics,export]"
 
 EXPOSE 8090
 
