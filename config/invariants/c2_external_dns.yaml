@@ -7,9 +7,17 @@ predicate_ref: builtin:c2_external_dns
 # Вердикты NDR/SIEM, означающие внешний управляющий канал. Домен C2 в реальном
 # трафике выглядит обычным (в фикстуре INC-002 — cdn-metrics.example-analytics.com),
 # поэтому блоклист доменов сам по себе такой канал не находит.
+#
+# NEW_CHARACTERS_IN_DNS_DOMAIN — вердикт AMiner из AIT-ADS: в имени домена появились
+# символы, не встречавшиеся в эталонном профиле. Это классический признак DGA или
+# туннелирования через DNS, и означает он это независимо от датасета.
+#
+# Намеренно НЕ добавлен NEW_IP_ADDRESS_IN_DNS_LOGS: новый адрес в журнале DNS —
+# обычное дело при смене хостинга или балансировке, а таких событий в EXT-001 тридцать пять.
 params:
   source_operations:
     - C2_SUSPECT
     - SUSPICIOUS_OUTBOUND
+    - NEW_CHARACTERS_IN_DNS_DOMAIN
 inputs: []
 severity_curve: null

@@ -6,8 +6,19 @@ context_window_events: 5
 predicate_ref: builtin:reconnaissance
 # Сканирование, размеченное NDR. Санкционированный сканер тоже попадает —
 # признак фиксируется, решение о легитимности принимает аналитик.
+#
+# Вердикты AMiner/Wazuh из AIT-ADS добавлены по разметке авторов корпуса (техники
+# T1595.002 «Active Scanning» и T1046 «Network Service Discovery»), а не по нашей догадке.
+# Взяты только те, чьё имя означает прощупывание независимо от датасета.
+#
+# Намеренно НЕ добавлен WEB_SERVER_400_ERROR_CODE: одиночная 400 — рутина веб-сервера,
+# и 32 таких события из EXT-001 дали бы поток ложных срабатываний. Признаком разведки
+# служит их серия с одного адреса — она объявлена отдельным вердиктом ниже.
 params:
   source_operations:
     - SCAN_SUSPECT
+    - INSECURE_CONNECTION_ATTEMPT_SCAN
+    - MULTIPLE_WEB_SERVER_400_ERROR_CODES_FROM_SAME_SOURCE_IP
+    - ATTEMPT_TO_ACCESS_FORBIDDEN_DIRECTORY_INDEX
 inputs: []
 severity_curve: null
