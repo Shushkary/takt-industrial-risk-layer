@@ -199,6 +199,112 @@ def record_business_assessment(
         _BIZ_EVENT_TO_CASE_LATENCY.observe(event_to_case_latency_seconds)
 
 
+_BIZ_CASE_TO_DECISION: Any = None
+_BIZ_VERDICTS: Any = None
+_BIZ_UNDET_RESOLVED: Any = None
+_BIZ_FORENSIC_BUNDLES: Any = None
+
+_TRIAD = ("LEG", "ILLEG", "UNDET")
+
+
+def _triad_label(verdict: str) -> str:
+    """Метка триады. Всё непонятное считается неопределённым, а не теряется."""
+    value = (verdict or "").strip().upper()
+    return value if value in _TRIAD else "UNDET"
+
+
+def record_business_decision(
+    *,
+    verdict: str,
+    next_status: str,
+    seconds_to_first_decision: float | None,
+) -> None:
+    """Метрики пути клиента в момент решения по делу.
+
+    Отвечают на вопрос «стало ли лучше»: сколько прошло от заведения дела до решения и в каком
+    соотношении расходятся вердикты триады. Разрыв G-4 из ``docs/customer_value_map.md``.
+
+    Время берётся из журнала дела (создание → первое решение), а не из момента скрапа: иначе
+    показатель мерил бы работу Prometheus, а не работу аналитика.
+    """
+    if not metrics_enabled_from_env():
+        return
+    global _BIZ_CASE_TO_DECISION, _BIZ_VERDICTS
+    try:
+        from prometheus_client import Counter, Histogram
+    except ImportError:
+        return
+    if _BIZ_CASE_TO_DECISION is None:
+        _BIZ_CASE_TO_DECISION = Histogram(
+            "takt_business_case_to_decision_seconds",
+            "Time from case creation to the first operator decision, taken from the case journal",
+            buckets=(60.0, 300.0, 900.0, 1800.0, 3600.0, 4 * 3600.0, 8 * 3600.0, 24 * 3600.0, 3 * 24 * 3600.0),
+        )
+    if _BIZ_VERDICTS is None:
+        _BIZ_VERDICTS = Counter(
+            "takt_business_verdicts_total",
+            "Decisions by triad verdict (LEG / ILLEG / UNDET) and resulting case status",
+            ("verdict", "status"),
+        )
+    _BIZ_VERDICTS.labels(_triad_label(verdict), (next_status or "").upper() or "UNKNOWN").inc()
+    if seconds_to_first_decision is not None and seconds_to_first_decision >= 0.0:
+        _BIZ_CASE_TO_DECISION.observe(seconds_to_first_decision)
+
+
+def record_business_verdict_transition(*, prev: str, next_value: str) -> None:
+    """Снятая неопределённость: дело вышло из ``UNDET`` после добора контекста.
+
+    Главный показатель обещания продукта — не «сколько сработало», а «сколько неопределённых
+    случаев доведено до определённого вывода».
+    """
+    if not metrics_enabled_from_env():
+        return
+    global _BIZ_UNDET_RESOLVED
+    try:
+        from prometheus_client import Counter
+    except ImportError:
+        return
+    if _BIZ_UNDET_RESOLVED is None:
+        _BIZ_UNDET_RESOLVED = Counter(
+            "takt_business_undet_resolved_total",
+            "Cases moved out of the undetermined verdict after organizational context was added",
+            ("resolved_to",),
+        )
+    was_undetermined = _forensic_triad(prev) == "UNDET"
+    resolved_to = _forensic_triad(next_value)
+    if was_undetermined and resolved_to != "UNDET":
+        _BIZ_UNDET_RESOLVED.labels(resolved_to).inc()
+
+
+def record_business_forensic_bundle(*, status: str) -> None:
+    """Доказательные пакеты по исходу: собран, проверен, отклонён."""
+    if not metrics_enabled_from_env():
+        return
+    global _BIZ_FORENSIC_BUNDLES
+    try:
+        from prometheus_client import Counter
+    except ImportError:
+        return
+    if _BIZ_FORENSIC_BUNDLES is None:
+        _BIZ_FORENSIC_BUNDLES = Counter(
+            "takt_business_forensic_bundles_total",
+            "Forensic evidence bundles by outcome (built / verified / rejected)",
+            ("status",),
+        )
+    _BIZ_FORENSIC_BUNDLES.labels((status or "unknown").strip().lower() or "unknown").inc()
+
+
+_FORENSIC_TRIAD_BY_VALUE = {
+    "легитимное": "LEG",
+    "нелегитимное": "ILLEG",
+    "неопределённое": "UNDET",
+}
+
+
+def _forensic_triad(value: str) -> str:
+    return _FORENSIC_TRIAD_BY_VALUE.get((value or "").strip().lower(), "UNDET")
+
+
 def _http_requests_counter() -> Any:
     global _Counter
     if _Counter is None:

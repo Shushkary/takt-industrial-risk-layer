@@ -110,8 +110,8 @@ class CaseActionsFacade:
         actor: str,
         reason: str,
         request_id: str,
-    ) -> None:
-        self._decision_uc.execute(
+    ) -> Any:
+        return self._decision_uc.execute(
             case_id,
             status,
             self._clock.now_utc(),

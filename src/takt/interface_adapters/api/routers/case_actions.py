@@ -3,6 +3,10 @@ from fastapi import HTTPException, Request
 from takt.application.use_cases.case_actions_facade import OperatorActionCommand
 from takt.application.use_cases.formal_verdict_confirmation import ConfirmFormalVerdictCommand
 from takt.application.use_cases.manual_permit import AttachManualPermitCommand
+from takt.infrastructure.http.prometheus_metrics import (
+    record_business_decision,
+    record_business_verdict_transition,
+)
 from takt.infrastructure.security.request_actor import security_actor_from_request
 from takt.interface_adapters.api.dependencies import ApiContext
 
@@ -55,7 +59,21 @@ def register_case_action_routes(ctx: ApiContext) -> None:
             detail = str(e)
             code = 400 if "work_order_number" in detail else 404
             raise HTTPException(status_code=code, detail=detail) from e
+        _record_verdict_transition(case_id)
         return {"permit": ctx.manual_permit_to_detail(permit).model_dump()}
+
+    def _record_verdict_transition(case_id: str) -> None:
+        """Снятая неопределённость после добора организационного документа.
+
+        Переход берётся из последней записи формального вердикта — её пишет сам сценарий
+        приложения наряда, отдельного источника правды здесь не заводится.
+        """
+        case = ctx.repo.get(case_id)
+        records = getattr(case, "formal_verdict_records", None) if case is not None else None
+        if not records:
+            return
+        latest = records[-1]
+        record_business_verdict_transition(prev=latest.prev, next_value=latest.next)
 
     def _record_operator_action(case_id: str, action: str, body: OperatorActionBody, request: Request) -> dict[str, str]:
         try:
@@ -97,6 +115,7 @@ def register_case_action_routes(ctx: ApiContext) -> None:
             detail = str(e)
             code = 400 if "unknown case" not in detail else 404
             raise HTTPException(status_code=code, detail=detail) from e
+        record_business_verdict_transition(prev=record.prev, next_value=record.next)
         return {"case_id": case_id, "record": ctx.formal_verdict_record_to_detail(record).model_dump()}
 
     @app.get("/cases/{case_id}/operator-actions/history", tags=["Cases"])
@@ -123,7 +142,7 @@ def register_case_action_routes(ctx: ApiContext) -> None:
     @app.post("/cases/{case_id}/decision", response_model=CaseDecisionResponse, tags=["Cases"])
     def post_decision(case_id: str, body: DecisionBody, request: Request):
         try:
-            facade.submit_decision(
+            outcome = facade.submit_decision(
                 case_id=case_id,
                 status=body.status,
                 actor=security_actor_from_request(request),
@@ -132,4 +151,10 @@ def register_case_action_routes(ctx: ApiContext) -> None:
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        if outcome is not None:
+            record_business_decision(
+                verdict=outcome.verdict,
+                next_status=outcome.next_status,
+                seconds_to_first_decision=outcome.seconds_to_first_decision,
+            )
         return CaseDecisionResponse(case_id=case_id, status=body.status.value)

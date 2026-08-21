@@ -23,6 +23,12 @@ def test_grafana_dashboard_json_valid_and_contains_business_metrics() -> None:
     assert "takt_business_dq_degraded_ratio" in joined
     assert "takt_business_event_to_case_latency_seconds_bucket" in joined
     assert "takt_business_case_merges_total" in joined
+    # Разрыв G-4 (`docs/customer_value_map.md`): дашборд обязан отвечать на вопрос клиента
+    # «стало ли лучше», а не только на вопрос эксплуатации «жив ли конвейер».
+    assert "takt_business_case_to_decision_seconds_bucket" in joined
+    assert "takt_business_verdicts_total" in joined
+    assert "takt_business_undet_resolved_total" in joined
+    assert "takt_business_forensic_bundles_total" in joined
 
 
 def test_prometheus_alert_rules_yaml_valid_and_references_business_metrics() -> None:

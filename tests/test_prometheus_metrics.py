@@ -87,6 +87,70 @@ def test_metrics_endpoint_and_health_when_enabled(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.skipif(not prometheus_client_available(), reason="prometheus-client not installed")
+def test_metrics_expose_customer_journey_business_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Разрыв G-4 из `docs/customer_value_map.md`: «стало ли лучше» должно быть измеримо.
+
+    Задержка конвейера (`event_to_case_latency`) на этот вопрос не отвечает — клиент считает
+    время от появления дела до решения по нему и долю неопределённых вердиктов.
+    """
+    monkeypatch.setenv("TAKT_METRICS", "1")
+    with TestClient(create_app()) as client:
+        assessed = client.post(
+            "/assess",
+            json={
+                "observed_at": "2026-04-30T21:00:00+00:00",
+                "operation": "WRITE_REGISTER",
+                "asset_id": "plc-journey-metrics",
+            },
+        )
+        assert assessed.status_code == 200
+        case_id = assessed.json()["case_id"]
+
+        decided = client.post(
+            f"/cases/{case_id}/decision",
+            json={"status": "CONFIRMED", "reason": "подтверждено аналитиком"},
+        )
+        assert decided.status_code == 200
+
+        body = client.get("/metrics").text
+
+    assert "takt_business_case_to_decision_seconds" in body
+    assert "takt_business_verdicts_total" in body
+    # Дело без организационного документа не может дать определённый вердикт — метрика обязана
+    # показывать именно это, иначе неопределённость снова прячется.
+    assert 'verdict="UNDET"' in body
+
+
+@pytest.mark.skipif(not prometheus_client_available(), reason="prometheus-client not installed")
+def test_case_to_decision_seconds_comes_from_the_case_journal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Время считается по журналу дела, а не по моменту скрапа.
+
+    Дело заведено в 2026-04-30, решение принято сейчас: если бы показатель мерил разницу
+    между HTTP-вызовами, он был бы близок к нулю.
+    """
+    import re
+
+    monkeypatch.setenv("TAKT_METRICS", "1")
+    with TestClient(create_app()) as client:
+        case_id = client.post(
+            "/assess",
+            json={
+                "observed_at": "2026-04-30T21:00:00+00:00",
+                "operation": "READ",
+                "asset_id": "plc-journey-clock",
+            },
+        ).json()["case_id"]
+        client.post(f"/cases/{case_id}/decision", json={"status": "TRIAGE", "reason": "разбор"})
+        text = client.get("/metrics").text
+
+    total = re.search(r"^takt_business_case_to_decision_seconds_sum ([0-9.+-eE]+)\s*$", text, re.MULTILINE)
+    count = re.search(r"^takt_business_case_to_decision_seconds_count ([0-9.+-eE]+)\s*$", text, re.MULTILINE)
+    assert total is not None and count is not None
+    assert float(count.group(1)) >= 1.0
+    assert float(total.group(1)) >= 0.0
+
+
+@pytest.mark.skipif(not prometheus_client_available(), reason="prometheus-client not installed")
 def test_metrics_head_ok_empty_body_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TAKT_METRICS", "1")
     with TestClient(create_app()) as client:
