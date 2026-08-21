@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from takt.domain.entities.event import EventSource
+from takt.domain.services.invariant_feedback import invariant_feedback
 from takt.infrastructure.importers.csv_events import load_normalized_from_csv
 from takt.interface_adapters.api.dependencies import ApiContext
 from takt.interface_adapters.api.schemas.analytics import BacktestFixtureResponse
@@ -10,6 +11,18 @@ from takt.interface_adapters.api.schemas.analytics import BacktestFixtureRespons
 
 def register_analytics_routes(ctx: ApiContext) -> None:
     app = ctx.app
+
+    @app.get("/analytics/invariant-feedback", tags=["Analytics"])
+    def invariant_feedback_report():
+        """Разметка аналитика по инвариантам и предложения по правилам.
+
+        Только чтение. Продукт ничего не применяет сам: автоматический пересчёт сделал бы
+        вердикт невоспроизводимым (`docs/customer_value_map.md`, G-2).
+        """
+        return invariant_feedback(
+            ctx.repo.list_all(),
+            weights_version=str(getattr(app.state, "risk_weights_version", "") or ""),
+        ).to_dict()
 
     @app.post("/backtest/fixture", response_model=BacktestFixtureResponse, tags=["Analytics"])
     def backtest_fixture():

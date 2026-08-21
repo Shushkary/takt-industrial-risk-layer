@@ -38,6 +38,10 @@ class _ExportCfg(BaseModel):
 
 class _RiskWeightsSchema(BaseModel):
     model_config = ConfigDict(extra="allow")
+    version: str = ""
+    """Метка версии конфигурации. Попадает в отчёт разметки (`docs/customer_value_map.md`, G-2):
+    предложение изменить правило осмысленно только вместе с версией, против которой оно
+    посчитано. На расчёт риска не влияет."""
     rhythm: float = Field(default=0.0, ge=0.0, le=1.0)
     graph: float = Field(default=0.0, ge=0.0, le=1.0)
     context: float = Field(default=0.0, ge=0.0, le=1.0)
