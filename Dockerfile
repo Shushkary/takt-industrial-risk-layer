@@ -9,8 +9,16 @@ LABEL org.opencontainers.image.revision="${TAKT_BUILD_REVISION}"
 
 WORKDIR /app
 
+# PYTHONPATH обязателен. Корень проекта вычисляется от расположения модуля
+# (`app.py`, `_ROOT = parents[4]`) — это верно для раскладки `src/`, но у пакета,
+# установленного в `site-packages`, корнем оказывается каталог интерпретатора, и
+# `config/risk_weights.yaml` там отсутствует. Контейнер падал на старте с
+# FileNotFoundError; `TAKT_CONFIG` не помогал, потому что проверка требует путь
+# внутри того же (ложного) корня. Каталог `/app/src` идёт в sys.path раньше
+# site-packages, поэтому импортируется исходная раскладка и корнем становится `/app`.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src \
     TAKT_BUILD_REVISION=${TAKT_BUILD_REVISION}
 
 
