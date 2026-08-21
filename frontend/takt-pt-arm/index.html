@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260820-03" />
+    <link rel="stylesheet" href="./styles.css?v=20260821-02" />
   </head>
   <body>
     <header class="top">
@@ -71,6 +71,31 @@
 
             <p id="caseXai" class="xai"></p>
             <button class="link" type="button" data-help="xai">как собран кейс</button>
+          </div>
+
+          <div class="block confidence-block">
+            <div class="block-head">
+              <h4>Обоснованность вывода</h4>
+              <div class="head-actions">
+                <button id="briefButton" class="link" type="button">Сводка для руководителя</button>
+                <button class="help" type="button" data-help="confidence" aria-label="Пояснение: обоснованность вывода">?</button>
+              </div>
+            </div>
+            <div class="verdict-line">
+              <span id="verdictBadge" class="verdict">—</span>
+              <span id="confidenceGrade" class="grade">—</span>
+              <span id="confidenceScore" class="muted small">—</span>
+            </div>
+            <div id="confidenceComponents" class="components"></div>
+          </div>
+
+          <div id="missingBlock" class="block missing-block" hidden>
+            <div class="block-head">
+              <h4>Чего не хватает</h4>
+              <button class="help" type="button" data-help="missing" aria-label="Пояснение: маршрут добора контекста">?</button>
+            </div>
+            <ul id="missingList" class="plain"></ul>
+            <p class="muted small">Пока перечень непуст, вердикт остаётся неопределённым.</p>
           </div>
 
           <div class="block">
@@ -247,6 +272,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260820-03"></script>
+    <script src="./app.min.js?v=20260821-02"></script>
   </body>
 </html>

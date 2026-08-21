@@ -140,7 +140,7 @@ const HELP = {
   sources: {
     title: 'Состав по источникам',
     body: [
-      'Сколько событий кейса пришло от каждого класса источников: edr — агент на узле, siem — правило корреляции, network_events — сетевой поток Netflow, ot — телеметрия и конвейер сборки.',
+      'Сколько событий кейса пришло от каждого класса источников: «защита рабочих станций» — агент на узле, «система сбора событий» — правило корреляции, «сетевые события» — поток Netflow, «промышленная телеметрия» — телеметрия и конвейер сборки.',
       'Что делать: инцидент, видимый из нескольких источников, надёжнее того же инцидента из одного. Если источник отсутствует — сначала проверить, подключён ли он, и только потом считать это признаком.',
     ],
   },
@@ -209,9 +209,9 @@ const HELP = {
   status: {
     title: 'Статус кейса',
     body: [
-      'NEW — принят конвейером, никто не смотрел. TRIAGE — в разборе. CONFIRMED — подтверждён аналитиком. FALSE_POSITIVE — ложное срабатывание. EXPECTED_BEHAVIOR — объяснён штатной работой. MERGED — влит в другой кейс.',
-      'Статус меняет человек; сборка инцидента ставит TRIAGE и вердикта не выносит.',
-      'Что делать: не оставлять кейс в TRIAGE после завершения разбора — по статусу видно, что уже закрыто.',
+      '«Новое» — принято конвейером, никто не смотрел. «В разборе» — взято аналитиком. «Подтверждено» — инцидент подтверждён. «Ложное срабатывание» — дефект правила. «Штатное действие» — сработало верно, но действие объяснено штатной работой. «Объединено» — влито в другой кейс.',
+      'Разница между «ложным срабатыванием» и «штатным действием» важна: первое правят в правиле, второе — добором организационного контекста. Эта же разметка идёт в отчёт по правилам.',
+      'Статус меняет человек; сборка инцидента ставит «в разборе» и вердикта не выносит. Что делать: не оставлять кейс в разборе после завершения — по статусу видно, что уже закрыто.',
     ],
   },
   time_utc: {
@@ -225,8 +225,8 @@ const HELP = {
   source: {
     title: 'Источник события',
     body: [
-      'edr — агент на узле, siem — правило корреляции, network_events — сетевой поток Netflow, ot — телеметрия и конвейер сборки.',
-      'Что делать: помнить разную природу свидетельств. EDR показывает, что произошло на узле; Netflow — что ушло по сети; SIEM — что уже решило вышестоящее средство.',
+      '«Защита рабочих станций» — агент на узле, «система сбора событий» — правило корреляции, «сетевые события» — поток Netflow, «промышленная телеметрия» — телеметрия и конвейер сборки. Исходный код класса источника остаётся в подсказке при наведении.',
+      'Что делать: помнить разную природу свидетельств. Агент показывает, что произошло на узле; сетевой поток — что ушло по сети; система сбора событий — что уже решило вышестоящее средство.',
     ],
   },
   operation: {
@@ -277,6 +277,22 @@ const HELP = {
       'Сколько событий отнесено к кейсу.',
       'Большое число само по себе не означает опасность: расширение разбора до уровня узла намеренно добирает и штатную активность этих узлов.',
       'Что делать: смотреть не количество, а состав по источникам и цепочку.',
+    ],
+  },
+  confidence: {
+    title: 'Обоснованность вывода',
+    body: [
+      'Одна величина вместо четырёх разбросанных признаков достоверности: полнота организационного контекста (вес 0.40), качество данных (0.25), доверие к источникам (0.20) и обоснование корреляции (0.15). Рядом — вердикт триады и разложение по составляющим с причинами, по которым составляющая не равна единице.',
+      'Организационный контекст весит больше остальных: без него безупречные по качеству данные всё равно не дают вывода о легитимности. Доверие к источникам считается по слабейшему звену — вывод не крепче худшего из каналов.',
+      'Пока перечень «Чего не хватает» непуст, обоснованность не бывает высокой, каким бы ни было качество данных. Что делать: называть эту величину в разговоре с руководителем и регулятором вместо перечисления отдельных метрик.',
+    ],
+  },
+  missing: {
+    title: 'Чего не хватает',
+    body: [
+      'Маршрут добора контекста: какой документ нужен, у кого он утверждается и за какое окно работ. Появляется ровно тогда, когда вердикт неопределённый.',
+      'Неполная наблюдаемость сюда не попадает: она снижает обоснованность и объясняется в составляющей, но организационный документ не заменяет и не требует.',
+      'Что делать: запросить перечисленное. После приложения документа вердикт пересчитывается, а оба состояния остаются в журнале.',
     ],
   },
   xai: {
@@ -332,9 +348,62 @@ function score(value) {
   return Number.isFinite(Number(value)) ? Number(value).toFixed(3) : '—';
 }
 
+// --- Русские названия обозначений -----------------------------------------
+//
+// Словарь приходит из продукта (GET /catalog/vocabulary), а не хранится здесь. Свой словарь в
+// АРМ разошёлся бы с продуктом при первом же добавлении статуса или источника — и разошёлся бы
+// молча. Пока словарь не загружен или API недоступен, показывается исходный код: выдуманный
+// перевод хуже кода, потому что его нельзя сверить с ответом API.
+//
+// Переводятся только обозначения продукта. Операция, протокол, идентификаторы узлов и учётных
+// записей приходят из данных источника и остаются как есть: это материал доказательства.
+let vocabulary = {};
+let invariantTitles = new Map();
+
+async function loadVocabulary() {
+  try {
+    vocabulary = (await api('/catalog/vocabulary')) || {};
+  } catch (error) {
+    vocabulary = {};
+  }
+  try {
+    // Названия правил живут в каталоге инвариантов — том же, по которому работает движок.
+    const catalog = (await api('/invariants')) || [];
+    invariantTitles = new Map(catalog.map((item) => [item.id, item.title_ru]));
+  } catch (error) {
+    invariantTitles = new Map();
+  }
+}
+
+function invariantTitle(id) {
+  return invariantTitles.get(id) || id;
+}
+
+// Поля сущностей нормализованного события. Это состав нашей модели L1, а не значения из
+// данных источника, поэтому названия здесь, а не в словаре продукта: словарь отдаёт типы
+// сущностей (`entity_type`), а тут перечислены именно поля события.
+const ENTITY_FIELD_RU = {
+  host_id: 'узел',
+  user_id: 'учётная запись',
+  process_id: 'процесс',
+  parent_process_id: 'родительский процесс',
+  src_address: 'адрес источника',
+  dst_address: 'адрес назначения',
+};
+
+function entityFieldTitle(name) {
+  return ENTITY_FIELD_RU[name] || name;
+}
+
+function term(table, code) {
+  const value = String(code ?? '').trim();
+  if (!value) return '—';
+  return (vocabulary[table] || {})[value] || value;
+}
+
 function firstArtifact(event) {
   const item = (event.artifacts || [])[0];
-  return item ? `${item.type}: ${item.value}` : '';
+  return item ? `${term('artifact_type', item.type)}: ${item.value}` : '';
 }
 
 function addressOf(entities) {
@@ -361,10 +430,10 @@ function renderQueue() {
     button.innerHTML = `
       <span class="queue-top">
         <span class="case-id">${escapeHtml(item.case_id)}</span>
-        <span class="risk ${escapeHtml(String(item.risk_class || '').toLowerCase())}">${escapeHtml(item.risk_class || '—')}</span>
+        <span class="risk ${escapeHtml(String(item.risk_class || '').toLowerCase())}">${escapeHtml(term('risk_class', item.risk_class))}</span>
       </span>
       <span class="queue-title">${escapeHtml(item.title || '—')}</span>
-      <span class="queue-meta">${escapeHtml(item.status || '')} · ${escapeHtml(String(item.event_count ?? 0))} соб. · ${escapeHtml(score(item.risk_score))}</span>`;
+      <span class="queue-meta">${escapeHtml(term('case_status', item.status))} · ${escapeHtml(String(item.event_count ?? 0))} соб. · ${escapeHtml(score(item.risk_score))}</span>`;
     button.addEventListener('click', () => openCase(item.case_id));
     list.appendChild(button);
   }
@@ -390,21 +459,119 @@ async function openCase(caseId) {
 function renderCase(workspace) {
   const item = workspace.case || {};
   $('#caseId').textContent = item.case_id || '—';
-  $('#caseStatus').textContent = item.status || '—';
+  $('#caseStatus').textContent = term('case_status', item.status);
   $('#caseTitle').textContent = item.title || '—';
-  $('#riskClass').textContent = item.risk_class || '—';
+  $('#riskClass').textContent = term('risk_class', item.risk_class);
   $('#riskClass').className = `metric-value risk ${String(item.risk_class || '').toLowerCase()}`;
   $('#riskScore').textContent = score(item.risk_score);
   $('#eventCount').textContent = String((workspace.events || []).length);
   $('#dqScore').textContent = `${score(item.dq_score)}${item.dq_partial ? ' (неполные)' : ''}`;
   $('#caseXai').textContent = item.xai_summary || '';
 
+  renderConfidence(item.verdict_confidence);
   renderSources(workspace.events || []);
-  renderInvariants(item.invariant_hits || []);
+  // Названия инвариантов приходят из каталога продукта (`invariant_details`), а не собираются
+  // здесь: каталог правил — источник правды и для API, и для АРМ.
+  renderInvariants(item.invariant_details || [], item.invariant_hits || []);
   renderChain(workspace.events || []);
   renderGraph(workspace.graph || { nodes: [], edges: [] });
   renderResponse(workspace.events || [], workspace.artifacts || []);
   renderFindings(item.findings || []);
+}
+
+// --- Обоснованность вывода -------------------------------------------------
+//
+// Одна величина вместо четырёх разбросанных признаков достоверности плюс маршрут добора
+// контекста. Расчёт целиком на стороне продукта (`verdict_confidence` в GET /cases/{id});
+// здесь только показ — второй, «свой» расчёт в интерфейсе разошёлся бы с доказательным
+// контуром и с тем, что уходит руководителю.
+
+const VERDICT_TEXT = {
+  LEG: 'легитимное',
+  ILLEG: 'нелегитимное',
+  UNDET: 'неопределённое',
+};
+
+function renderConfidence(confidence) {
+  const badge = $('#verdictBadge');
+  const grade = $('#confidenceGrade');
+  const scoreBox = $('#confidenceScore');
+  const components = $('#confidenceComponents');
+  components.replaceChildren();
+
+  if (!confidence) {
+    badge.textContent = '—';
+    badge.className = 'verdict';
+    grade.textContent = '—';
+    grade.className = 'grade';
+    scoreBox.textContent = 'показатель недоступен';
+    renderMissing([]);
+    return;
+  }
+
+  const verdict = String(confidence.verdict || 'UNDET');
+  badge.textContent = VERDICT_TEXT[verdict] || verdict;
+  badge.className = `verdict ${verdict.toLowerCase()}`;
+  grade.textContent = confidence.grade || '—';
+  grade.className = `grade ${gradeClass(confidence.grade)}`;
+  scoreBox.textContent = `${score(confidence.score)} из 1.00`;
+
+  for (const part of confidence.components || []) {
+    const row = document.createElement('div');
+    row.className = 'component';
+    const share = Math.max(0, Math.min(1, Number(part.value) || 0));
+    // Вес показан рядом с долей: без него две составляющие с одинаковым заполнением
+    // выглядели бы равнозначными, хотя вклад в итог у них разный.
+    row.innerHTML = `
+      <span class="component-name">${escapeHtml(part.title_ru || part.key)}</span>
+      <span class="component-bar"><span class="component-fill" style="width:${(share * 100).toFixed(0)}%"></span></span>
+      <span class="component-value mono small">${score(part.value)} × ${score(part.weight)}</span>`;
+    if ((part.reasons || []).length) {
+      const why = document.createElement('p');
+      why.className = 'component-reasons muted small';
+      why.textContent = part.reasons.join('; ');
+      row.appendChild(why);
+    }
+    components.appendChild(row);
+  }
+
+  renderMissing(confidence.missing || []);
+}
+
+function gradeClass(grade) {
+  if (grade === 'высокая') return 'high';
+  if (grade === 'средняя') return 'medium';
+  return 'low';
+}
+
+function renderMissing(items) {
+  const block = $('#missingBlock');
+  const list = $('#missingList');
+  list.replaceChildren();
+  block.hidden = !items.length;
+  for (const item of items) {
+    const line = document.createElement('li');
+    const address = [
+      item.required_document ? `документ: ${item.required_document}` : '',
+      item.sanctioning_party ? `утверждающий: ${item.sanctioning_party}` : '',
+      item.admissible_window ? `окно: ${item.admissible_window}` : '',
+    ].filter(Boolean);
+    line.innerHTML = `<strong>${escapeHtml(item.text)}</strong>`;
+    if (address.length) {
+      const hint = document.createElement('span');
+      hint.className = 'muted small';
+      hint.textContent = ` — ${address.join(' · ')}`;
+      line.appendChild(hint);
+    }
+    list.appendChild(line);
+  }
+}
+
+function openDecisionBrief() {
+  if (!selectedCaseId) return;
+  // Сводка открывается как отдельный документ: её адресат — руководитель, и он получает
+  // ссылку, а не пересказ из интерфейса аналитика.
+  window.open(`${API_BASE}/cases/${encodeURIComponent(selectedCaseId)}/decision-brief.pdf`, '_blank', 'noopener');
 }
 
 function renderSources(events) {
@@ -419,22 +586,27 @@ function renderSources(events) {
   for (const [source, count] of [...counts.entries()].sort()) {
     const chip = document.createElement('span');
     chip.className = 'chip';
-    chip.textContent = `${source} · ${count}`;
+    chip.textContent = `${term('event_source', source)} · ${count}`;
     box.appendChild(chip);
   }
 }
 
-function renderInvariants(hits) {
+function renderInvariants(details, hits) {
   const box = $('#invariantList');
   box.replaceChildren();
-  if (!hits.length) {
+  const titles = new Map((details || []).map((item) => [item.id, item.title_ru]));
+  const ids = (details || []).length ? details.map((item) => item.id) : hits;
+  if (!ids.length) {
     box.innerHTML = '<span class="muted small">срабатываний нет</span>';
     return;
   }
-  for (const hit of hits) {
+  for (const id of ids) {
     const chip = document.createElement('span');
     chip.className = 'chip warn';
-    chip.textContent = hit;
+    // Идентификатор правила остаётся в подсказке: аналитику он нужен, чтобы найти правило в
+    // config/invariants, но читать он должен название.
+    chip.textContent = titles.get(id) || invariantTitle(id);
+    chip.title = id;
     box.appendChild(chip);
   }
 }
@@ -453,7 +625,7 @@ function renderChain(events) {
     const row = document.createElement('tr');
     row.innerHTML = `
       <td class="mono">${escapeHtml(utc(event.observed_at))}</td>
-      <td><span class="chip sm">${escapeHtml(event.source)}</span></td>
+      <td><span class="chip sm" title="${escapeHtml(event.source)}">${escapeHtml(term('event_source', event.source))}</span></td>
       <td class="mono">${escapeHtml(event.operation)}</td>
       <td>${entityButton('host', entities.host_id)}</td>
       <td>${entityButton('user', entities.user_id)}</td>
@@ -545,7 +717,7 @@ async function openEntity(type, id) {
   selectedEntity = { type, id };
   $('#entityEmpty').hidden = true;
   $('#entityBody').hidden = false;
-  $('#entityType').textContent = type;
+  $('#entityType').textContent = term('entity_type', type);
   $('#entityId').textContent = id;
   const facts = $('#entityFacts');
   facts.replaceChildren();
@@ -558,7 +730,7 @@ async function openEntity(type, id) {
       ['Историчность', known[typicality.status] || typicality.status || '—'],
       ['Первое появление', card.first_seen ? utc(card.first_seen) : '—'],
       ['Последнее появление', card.last_seen ? utc(card.last_seen) : '—'],
-      ['Источники', (card.sources || []).join(', ') || '—'],
+      ['Источники', (card.sources || []).map((source) => term('event_source', source)).join(', ') || '—'],
       ['Связанные кейсы', (card.related_cases || []).join(', ') || '—'],
     ];
     for (const [label, value] of rows) {
@@ -598,7 +770,7 @@ async function addFinding() {
   try {
     await api(`/cases/${encodeURIComponent(selectedCaseId)}/findings`, {
       method: 'POST',
-      body: JSON.stringify({ text: `${selectedEntity.type}: ${selectedEntity.id}` }),
+      body: JSON.stringify({ text: `${term('entity_type', selectedEntity.type)}: ${selectedEntity.id}` }),
     });
     toast('Находка записана в журнал кейса');
     await openCase(selectedCaseId);
@@ -682,6 +854,7 @@ document.addEventListener('keydown', (event) => {
 
 $('#modalClose').addEventListener('click', closeHelp);
 $('#addFinding').addEventListener('click', addFinding);
+$('#briefButton').addEventListener('click', openDecisionBrief);
 
 // ---------------------------------------------------------------------------
 // Вкладка «Симуляция»: хронология цепочки, счётчики трудоёмкости, граф атаки
@@ -780,7 +953,7 @@ function renderSteps() {
         <span class="step-time mono">${escapeHtml(utc(step.observed_at))}</span>
         <span class="step-phase" style="color:${phaseColor(step.attack_phase)}">${escapeHtml(step.attack_phase_title_ru)}</span>
         <span class="step-op mono">${escapeHtml(step.operation)}</span>
-        <span class="chip sm">${escapeHtml(step.source)}</span>
+        <span class="chip sm" title="${escapeHtml(step.source)}">${escapeHtml(term('event_source', step.source))}</span>
         <span class="muted small">${escapeHtml(step.mitre_technique || '')}</span>
       </button>`;
     row.querySelector('.step-open').addEventListener('click', () => openStep(step.order));
@@ -925,11 +1098,11 @@ function renderSummary() {
   const facts = $('#simSummary');
   facts.replaceChildren();
   const rows = [
-    ['Класс риска', `${simulation.risk_class} · ${Number(simulation.risk_score).toFixed(3)}`],
-    ['Статус', simulation.status],
+    ['Класс риска', `${term('risk_class', simulation.risk_class)} · ${Number(simulation.risk_score).toFixed(3)}`],
+    ['Статус', term('case_status', simulation.status)],
     ['Событий в кейсе', `${simulation.events_total}, из них шагов цепочки ${simulation.chain_length}`],
     ['Без разметки фазы', String(simulation.events_without_phase)],
-    ['Сработавшие инварианты', (simulation.invariants || []).join(', ') || 'нет'],
+    ['Сработавшие инварианты', (simulation.invariants || []).map(invariantTitle).join(', ') || 'нет'],
   ];
   for (const option of simulation.response_options || []) {
     rows.push([option.title, option.objects || '—']);
@@ -951,19 +1124,19 @@ function openStep(order) {
   const detection = step.detection_explanation || {};
   const entities = Object.entries(step.entities || {})
     .filter(([, value]) => value)
-    .map(([name, value]) => `${name}: ${value}`);
-  const artifacts = (step.artifacts || []).map((item) => `${item.type}: ${item.value}`);
+    .map(([name, value]) => `${entityFieldTitle(name)}: ${value}`);
+  const artifacts = (step.artifacts || []).map((item) => `${term('artifact_type', item.type)}: ${item.value}`);
 
   lastFocused = document.activeElement;
   $('#modalTitle').textContent = `Шаг ${step.order}. ${step.attack_phase_title_ru}`;
   const body = $('#modalBody');
   body.replaceChildren();
   const paragraphs = [
-    `Что произошло: источник ${step.source} зафиксировал ${step.operation} в ${utc(step.observed_at)} UTC.`,
+    `Что произошло: источник «${term('event_source', step.source)}» зафиксировал ${step.operation} в ${utc(step.observed_at)} UTC.`,
     `Фаза цепочки: ${step.attack_phase_title_ru}. Техника ATT&CK: ${step.mitre_technique || 'не сопоставлена'}. Разметка приходит от источника, ТАКТ её не вычисляет.`,
     `Чем выделено: ${detection.selected_by_title_ru || 'не зафиксировано'}. ${detection.reason || ''}`,
     detection.invariants && detection.invariants.length
-      ? `Сработавшие инварианты на этом событии: ${detection.invariants.join(', ')}.`
+      ? `Сработавшие инварианты на этом событии: ${detection.invariants.map(invariantTitle).join(', ')}.`
       : 'Инварианты на этом событии не срабатывали: оно попало в кейс по связи сущностей, а не по признаку правила.',
     entities.length ? `Сущности: ${entities.join(', ')}.` : 'Сущности не заполнены.',
     artifacts.length ? `Артефакты: ${artifacts.join(', ')}.` : 'Артефактов нет.',
@@ -1038,5 +1211,9 @@ $('#resetPlayer').addEventListener('click', () => {
   setCursor(0);
 });
 
-refresh();
-pollTimer = setInterval(refresh, POLL_MS);
+// Словарь грузится до первой отрисовки: иначе очередь успела бы показать коды, а затем
+// перерисоваться словами — мигание на пустом месте.
+loadVocabulary().then(() => {
+  refresh();
+  pollTimer = setInterval(refresh, POLL_MS);
+});

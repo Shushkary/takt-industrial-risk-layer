@@ -295,6 +295,97 @@ body {
   border-color: var(--warn);
 }
 
+/* Обоснованность вывода и маршрут добора контекста.
+   Вердикт и оценка стоят рядом намеренно: «нелегитимное» с низкой обоснованностью и
+   «нелегитимное» с высокой — разные основания для решения, и различать их надо без
+   прокрутки к составляющим. */
+.verdict-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.verdict {
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.verdict.leg {
+  color: var(--low);
+  border-color: var(--low);
+}
+.verdict.illeg {
+  color: var(--crit);
+  border-color: var(--crit);
+}
+.verdict.undet {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.grade {
+  font-family: var(--mono);
+  font-size: 15px;
+}
+
+.grade.high {
+  color: var(--low);
+}
+.grade.medium {
+  color: var(--med);
+}
+.grade.low {
+  color: var(--warn);
+}
+
+.components {
+  display: grid;
+  gap: 6px;
+}
+
+.component {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(80px, 2fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.component-reasons {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+}
+
+.component-name {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.component-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.component-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.missing-block {
+  border-left: 2px solid var(--warn);
+}
+
+.missing-block li {
+  margin-bottom: 4px;
+}
+
 .risk.critical {
   color: var(--crit);
 }
