@@ -15,7 +15,6 @@ from fastapi import FastAPI, HTTPException, Request
 from starlette.middleware.gzip import GZipMiddleware
 
 from takt.application.system_defaults import default_clock, default_id_provider
-from takt.application.use_cases.assess_risk import AssessRiskUseCase
 from takt.application.use_cases.audit_engagement import ManageAuditEngagementUseCase
 from takt.application.use_cases.audit_ledger_facade import AuditLedgerFacade
 from takt.application.use_cases.backtest import RunBacktestUseCase
@@ -37,7 +36,6 @@ from takt.application.use_cases.formal_verdict_confirmation import ConfirmFormal
 from takt.application.use_cases.ingest_facade import IngestAssessmentFacade
 from takt.application.use_cases.manual_permit import AttachManualPermitUseCase
 from takt.application.use_cases.manual_correlation import ManualCorrelationUseCase
-from takt.application.use_cases.process_event import ProcessEventUseCase
 from takt.application.use_cases.remediation import (
     ListRemediationAttemptsUseCase,
     RecordRemediationAttemptUseCase,
@@ -45,26 +43,15 @@ from takt.application.use_cases.remediation import (
 from takt.application.use_cases.verify_forensic_bundle import VerifyForensicBundleUseCase
 from takt.domain.entities.case import Case
 from takt.domain.entities.event import EventSource, NormalizedEvent
-from takt.domain.invariants.evaluator import invariant_context_from_config
-from takt.infrastructure.config.invariant_catalog_yaml import (
-    catalog_experimental_invariant_ids,
-    catalog_rule_overrides,
-    catalog_rule_specs,
-    load_invariant_catalog_from_dir,
-)
 from takt.infrastructure.config.settings_helpers import (
     apply_storage_env_overrides,
     case_repository_from_weights,
-    enrichment_from_weights,
     expected_behavior_from_weights,
-    graph_edges_from_weights,
     siem_webhook_retries,
-    topology_from_weights,
-    trust_by_source_from_weights,
 )
 from takt.infrastructure.config.weights_loader import load_risk_weights
 from takt.infrastructure.export.forensic_bundle import ZipForensicBundleBuilder, ZipForensicBundleVerifier
-from takt.infrastructure.export.case_pdf import render_case_pdf
+from takt.infrastructure.export.case_pdf import render_case_pdf, render_decision_brief_pdf
 from takt.infrastructure.export.gossopka import (
     case_to_gossopka_card,
     case_to_gossopka_official_card,
@@ -115,11 +102,13 @@ from takt.interface_adapters.api.config_paths import (
     invariant_catalog_dir_for_config,
     resolve_config_path,
 )
+from takt.infrastructure.config.pipeline import build_assessment_pipeline
 from takt.interface_adapters.api.dependencies import ApiContext
 from takt.interface_adapters.api.event_sources import coerce_event_source
 from takt.interface_adapters.api.lifecycle import build_app_lifespan
 from takt.interface_adapters.api.mappers.cases import (
     case_to_detail,
+    decision_brief_to_detail,
     domain_case_from_detail,
     formal_verdict_record_to_detail,
     invariant_details_for_hits,
@@ -374,24 +363,16 @@ def create_app() -> FastAPI:
     app.state.expected_behavior_backend = app.state.case_storage_backend
     repo = case_repository_from_weights(weights, project_root=_ROOT)
     baseline = expected_behavior_from_weights(weights, project_root=_ROOT)
-    jump_host, plc_hosts = topology_from_weights(weights)
-    inv_catalog = load_invariant_catalog_from_dir(_invariant_catalog_dir_for_config(cfg_path))
-    app.state.invariant_catalog = inv_catalog
-    inv_rule_overrides = catalog_rule_overrides(inv_catalog)
-    inv_profile = invariant_context_from_config(weights)
-    assess = AssessRiskUseCase(
+    pipeline = build_assessment_pipeline(
         weights,
-        jump_host=jump_host,
-        plc_hosts=plc_hosts,
+        repo=repo,
+        invariant_catalog_dir=_invariant_catalog_dir_for_config(cfg_path),
         expected_behavior=baseline,
-        invariant_profile=inv_profile,
-        rule_overrides=inv_rule_overrides,
-        experimental_invariant_ids=catalog_experimental_invariant_ids(inv_catalog),
-        rule_specs=catalog_rule_specs(inv_catalog),
     )
-    enr = enrichment_from_weights(weights)
-    process = ProcessEventUseCase(assess, repo, enrichment=enr)
-    demo_edges = graph_edges_from_weights(weights, plc_hosts=plc_hosts)
+    inv_catalog = pipeline.invariant_catalog
+    app.state.invariant_catalog = inv_catalog
+    process = pipeline.process
+    demo_edges = pipeline.graph_edges
     app.state.event_window = []
     recent_event_store = SqliteRecentEventStore(repo.database_path) if isinstance(repo, SqliteCaseStore) else None
     ingest_facade = IngestAssessmentFacade(
@@ -400,7 +381,7 @@ def create_app() -> FastAPI:
         event_window=app.state.event_window,
         event_window_max=_EVENT_WINDOW_MAX,
         graph_edges=demo_edges,
-        polling_intervals_us=[1000.0, 1000.0, 4670.0, 21_800.0],
+        polling_intervals_us=list(pipeline.polling_intervals_us),
         raw_row_to_normalized=raw_row_to_normalized,
         recent_event_store=recent_event_store,
     )
@@ -455,7 +436,8 @@ def create_app() -> FastAPI:
     raw_font = exp.get("pdf_unicode_font")
     app.state.pdf_unicode_font = str(raw_font).strip() if raw_font else None
     app.state.risk_weights = weights
-    app.state.trust_by_source = trust_by_source_from_weights(weights)
+    app.state.trust_by_source = pipeline.trust_by_source
+    app.state.risk_weights_version = str(weights.get("version") or "")
 
     sqlite_security_path: Path | None = None
     if isinstance(repo, SqliteCaseStore):
@@ -593,6 +575,7 @@ def create_app() -> FastAPI:
         repo=repo,
         clock=default_clock,
         render_case_pdf=_main_module_callable("render_case_pdf"),
+        render_decision_brief_pdf=_main_module_callable("render_decision_brief_pdf"),
         post_case_to_webhook_sync=_main_module_callable("post_case_to_webhook_sync"),
         post_case_to_webhook=_main_module_callable("post_case_to_webhook"),
         case_to_siem_payload=case_to_siem_payload,
@@ -663,8 +646,8 @@ def create_app() -> FastAPI:
         forensic_crypto_mode=_forensic_crypto_mode,
         forensic_strict_missing=_forensic_strict_missing,
         demo_edges=list(demo_edges),
-        jump_host=jump_host,
-        plc_hosts=set(plc_hosts),
+        jump_host=pipeline.jump_host,
+        plc_hosts=set(pipeline.plc_hosts),
         backtest_uc=backtest_uc,
         audit_ledger_facade=audit_ledger_facade,
         forensic_uc=forensic_uc,
@@ -687,6 +670,7 @@ def create_app() -> FastAPI:
         cases_import_body_model=CasesImportBody,
         cases_import_response_model=CasesImportResponse,
         case_to_detail=case_to_detail,
+        decision_brief_to_detail=decision_brief_to_detail,
         domain_case_from_detail=domain_case_from_detail,
         coerce_event_source=_coerce_event_source,
         manual_permit_uc=manual_permit_uc,
