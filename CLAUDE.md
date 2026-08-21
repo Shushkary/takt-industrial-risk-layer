@@ -14,6 +14,8 @@
 | Тема | Источник правды |
 |---|---|
 | Границы продукта, детерминизм вердикта, что нельзя обещать | [`docs/product_boundary.md`](docs/product_boundary.md) |
+| Путь клиента, боли, критерии успеха, бэклог продуктовых разрывов | [`docs/customer_value_map.md`](docs/customer_value_map.md) |
+| Русские названия обозначений для интерфейсов (класс риска, статус, источник, вердикт) | [`src/takt/domain/vocabulary.py`](src/takt/domain/vocabulary.py), наружу — `GET /catalog/vocabulary` |
 | Числа: версия, Python, инварианты, схема БД, объём прогона | [`docs/current_operational_reference.md`](docs/current_operational_reference.md), раздел «Числа-факты» |
 | Актуальные API-блоки, режимы подписи, release-gates | [`docs/current_operational_reference.md`](docs/current_operational_reference.md) |
 | Контракты слоёв (`import-linter`), lint, mypy | `pyproject.toml` |
@@ -98,7 +100,7 @@ uvicorn takt.interface_adapters.api.main:app --reload --port 8090
 
 Фронтенд (вспомогательный React-АРМ): `cd frontend/takt-arm && npm ci && npm run test:frontend`.
 
-Полезные скрипты: `eval_detection.py`, `eval_correlation.py`, `verify_audit_ledger.py`,
+Полезные скрипты: `export_case_scenario.py`, `eval_detection.py`, `eval_correlation.py`, `verify_audit_ledger.py`,
 `verify_operation_ledger.py`, `generate_sbom.py`, `release_finalize.py`, `build_release_package.py`,
 `close_operational_tails.py`.
 

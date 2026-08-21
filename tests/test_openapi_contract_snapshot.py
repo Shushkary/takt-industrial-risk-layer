@@ -9,6 +9,7 @@ from takt.interface_adapters.api.main import create_app
 
 
 EXPECTED_ROUTE_CONTRACTS = [
+    ("GET", "/analytics/invariant-feedback", ("Analytics",), None),
     ("POST", "/assess", ("Ingest",), "AssessResponse"),
     ("POST", "/assess/demo", ("Ingest",), "AssessResponse"),
     ("GET", "/audit-engagements", ("Analytics",), "AuditEngagementOut"),
@@ -22,6 +23,7 @@ EXPECTED_ROUTE_CONTRACTS = [
     ("POST", "/backtest/fixture", ("Analytics",), "BacktestFixtureResponse"),
     ("GET", "/cases", ("Cases",), "CaseSummary"),
     ("POST", "/cases/assemble/pivot", ("Cases",), "AssembleIncidentResponse"),
+    ("GET", "/cases/{case_id}/scenario.json", ("Export",), None),
     ("GET", "/cases/{case_id}/simulation", ("Cases",), None),
     ("GET", "/cases/export/full.json", ("Export",), "CasesFullExportResponse"),
     ("POST", "/cases/import/full.json", ("Export",), "CasesImportResponse"),
@@ -35,6 +37,8 @@ EXPECTED_ROUTE_CONTRACTS = [
     ("POST", "/cases/{case_id}/compliance/remediations/recheck-readiness", ("Analytics",), None),
     ("GET", "/cases/{case_id}/compliance/remediations/recheck-readiness/history", ("Analytics",), None),
     ("POST", "/cases/{case_id}/decision", ("Cases",), "CaseDecisionResponse"),
+    ("GET", "/cases/{case_id}/decision-brief", ("Cases",), "DecisionBriefDetail"),
+    ("GET", "/cases/{case_id}/decision-brief.pdf", ("Export",), None),
     ("POST", "/cases/{case_id}/events/attach", ("Cases",), None),
     ("POST", "/cases/{case_id}/events/{event_id}/detach", ("Cases",), None),
     ("GET", "/cases/{case_id}/findings", ("Cases",), None),
@@ -58,6 +62,7 @@ EXPECTED_ROUTE_CONTRACTS = [
     ("POST", "/cases/{case_id}/operator-actions/viewed", ("Cases",), None),
     ("POST", "/cases/{case_id}/split", ("Cases",), None),
     ("GET", "/catalog/event-sources", ("Catalog",), "EventSourceCatalogItem"),
+    ("GET", "/catalog/vocabulary", ("Catalog",), None),
     ("GET", "/compliance/data-quality-report", ("Analytics",), None),
     ("GET", "/compliance/forensic-readiness", ("Analytics",), None),
     ("GET", "/compliance/mode", ("Analytics",), None),
