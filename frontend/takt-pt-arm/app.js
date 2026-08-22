@@ -86,8 +86,9 @@ const HELP = {
   player: {
     title: 'Плеер цепочки',
     body: [
-      'Пошаговое или автоматическое проигрывание событий в порядке времени. Цвет шага — фаза цепочки атаки.',
-      'При проигрывании подсвечивается путь на графе и растут счётчики трудоёмкости.',
+      'Пошаговое или автоматическое проигрывание событий в порядке времени. Цвет шага — фаза цепочки атаки. Пройденные шаги отмечаются рамкой цвета фазы, текущий — подсветкой строки; список сам прокручивается к нему.',
+      'С клавиатуры: пробел — воспроизведение и пауза, стрелки влево и вправо — шаг назад и вперёд, Home — в начало. С конца цепочки воспроизведение начинается сначала.',
+      'Клик по узлу графа подсвечивает все шаги этой сущности, не сдвигая позицию плеера. Повторный клик снимает выделение, «Сброс» — тоже.',
       'Что делать: остановиться на шаге и открыть его — в окне шага видно, что произошло и почему ТАКТ это выделил.',
     ],
   },
@@ -867,7 +868,7 @@ $('#briefButton').addEventListener('click', openDecisionBrief);
 // Цвета фаз. Порядок соответствует доменному перечню KillChainPhase — по нему строится
 // легенда и раскраска графа.
 const PHASE_COLORS = {
-  recon: '#64748b',
+  recon: '#8593ab',
   initial_access: '#38bdf8',
   execution: '#22d3ee',
   c2: '#a78bfa',
@@ -883,6 +884,10 @@ const PLAY_INTERVAL_MS = 1200;
 let simulation = null;
 let simCursor = 0;
 let simTimer = null;
+// Сущность, выделенная кликом по графу. Раньше клик по узлу отматывал плеер к шагу первого
+// появления: на двадцатом шаге разбор внезапно прыгал в начало. Теперь он подсвечивает все
+// шаги этой сущности, не трогая позицию, — так же ведёт себя граф инцидента у Defender.
+let graphFocus = null;
 
 // Счётчики трудоёмкости позицией плеера не двигаются — намеренно.
 //
@@ -910,7 +915,7 @@ function formatDuration(seconds) {
 }
 
 function phaseColor(phase) {
-  return PHASE_COLORS[phase] || '#64748b';
+  return PHASE_COLORS[phase] || '#8593ab';
 }
 
 // Русское название фазы приходит вместе с цепочкой: свой словарь фаз в АРМ разошёлся бы
@@ -948,6 +953,7 @@ async function openSimulation() {
     return;
   }
   simCursor = 0;
+  graphFocus = null;
   renderSimCase();
   renderLegend();
   renderSteps();
@@ -1008,7 +1014,7 @@ function renderSteps() {
     const row = document.createElement('li');
     row.className = 'step';
     row.dataset.order = String(step.order);
-    row.style.borderLeftColor = phaseColor(step.attack_phase);
+    row.style.setProperty('--phase', phaseColor(step.attack_phase));
     row.innerHTML = `
       <button type="button" class="step-open">
         <span class="step-time mono">${escapeHtml(utc(step.observed_at))}</span>
@@ -1225,6 +1231,7 @@ function renderAttackGraph() {
     if (!point) continue;
     const group = svgNode('g', { class: 'graph-node' });
     group.dataset.order = String(node.order);
+    group.dataset.entity = node.id;
     // Точка входа — узел и учётная запись первого шага цепочки. Это разметка источника, а не
     // вывод продукта: первый по времени размеченный шаг и есть начало атаки. Адрес и процесс
     // того же шага точкой входа не помечаются — входят не через них.
@@ -1246,7 +1253,7 @@ function renderAttackGraph() {
     const hint = svgNode('title', {});
     hint.textContent = `${NODE_TYPE_RU[node.type] || node.type}: ${node.id}`;
     group.appendChild(hint);
-    group.addEventListener('click', () => openStep(node.order));
+    group.addEventListener('click', () => focusEntity(node.id));
     svg.appendChild(group);
   }
   paintProgress();
@@ -1272,14 +1279,48 @@ function renderGraphLegend() {
   box.appendChild(note);
 }
 
+// Шаги выделенной сущности: по ним видно, где она участвовала в цепочке.
+function stepsOfFocus() {
+  if (!graphFocus) return new Set();
+  const orders = new Set();
+  for (const step of simulation.steps || []) {
+    if (Object.values(step.entities || {}).includes(graphFocus)) orders.add(step.order);
+  }
+  return orders;
+}
+
+function focusEntity(id) {
+  graphFocus = graphFocus === id ? null : id;
+  paintProgress();
+  if (graphFocus) reveal('#stepList .step.focused');
+}
+
+// Прокрутка внутри списка шагов, без прыжка страницы. Список ограничен по высоте, и при
+// проигрывании текущий шаг уезжал за его границу: зритель смотрел на неподвижный список,
+// где что-то подсвечено «где-то ниже».
+function reveal(selector) {
+  const list = $('#stepList');
+  const target = list.querySelector(selector.replace('#stepList ', ''));
+  if (!target) return;
+  const listBox = list.getBoundingClientRect();
+  const box = target.getBoundingClientRect();
+  if (box.top < listBox.top) list.scrollTop -= listBox.top - box.top;
+  else if (box.bottom > listBox.bottom) list.scrollTop += box.bottom - listBox.bottom;
+}
+
 function paintProgress() {
+  const focused = stepsOfFocus();
   for (const row of document.querySelectorAll('#stepList .step')) {
     const order = Number(row.dataset.order);
     row.classList.toggle('played', order <= simCursor);
     row.classList.toggle('current', order === simCursor);
+    row.classList.toggle('focused', focused.has(order));
   }
   for (const element of document.querySelectorAll('#attackGraph .edge-line, #attackGraph .graph-node')) {
     element.classList.toggle('played', Number(element.dataset.order) <= simCursor);
+  }
+  for (const element of document.querySelectorAll('#attackGraph .graph-node')) {
+    element.classList.toggle('focused', element.dataset.entity === graphFocus);
   }
   // Пройденные фазы — то, что действительно меняется по мере проигрывания, в отличие от
   // счётчиков трудоёмкости.
@@ -1291,6 +1332,9 @@ function paintProgress() {
   for (const item of document.querySelectorAll('#phaseLegend .legend-item')) {
     item.classList.toggle('reached', reached.has(item.dataset.phase));
   }
+  const note = $('#focusNote');
+  note.textContent = graphFocus ? `выделено на графе: ${graphFocus} · шагов ${focused.size}` : '';
+  reveal('#stepList .step.current');
 }
 
 function updateCounters() {
@@ -1407,6 +1451,12 @@ function togglePlayback() {
     stopPlayback();
     return;
   }
+  const steps = (simulation.steps || []).length;
+  if (!steps) return;
+  // С конца цепочки «Воспроизвести» начинает сначала. Раньше кнопка на 1.2 секунды
+  // превращалась в «Пауза» и возвращалась обратно, не сделав ничего: таймер просыпался,
+  // видел, что цепочка кончилась, и останавливался.
+  if (simCursor >= steps) setCursor(0);
   $('#playPause').textContent = 'Пауза';
   simTimer = setInterval(() => {
     if (simCursor >= simulation.steps.length) {
@@ -1456,7 +1506,30 @@ $('#showProcesses').addEventListener('change', () => {
 });
 $('#resetPlayer').addEventListener('click', () => {
   stopPlayback();
+  graphFocus = null;
   setCursor(0);
+});
+
+// Управление плеером с клавиатуры: на демонстрации мышь занята указкой.
+document.addEventListener('keydown', (event) => {
+  if ($('#simulationView').hidden || !simulation || !$('#modal').hidden) return;
+  const tag = (event.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+  const step = (shift) => {
+    stopPlayback();
+    setCursor(simCursor + shift);
+  };
+  if (event.key === ' ') {
+    event.preventDefault();
+    togglePlayback();
+  } else if (event.key === 'ArrowRight') {
+    step(1);
+  } else if (event.key === 'ArrowLeft') {
+    step(-1);
+  } else if (event.key === 'Home') {
+    stopPlayback();
+    setCursor(0);
+  }
 });
 
 // Словарь грузится до первой отрисовки: иначе очередь успела бы показать коды, а затем

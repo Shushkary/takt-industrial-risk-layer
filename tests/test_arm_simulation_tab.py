@@ -99,6 +99,7 @@ def test_method_modal_states_what_is_measured_and_what_is_modelled() -> None:
         "toInvestigation",
         "showProcesses",
         "graphLegend",
+        "focusNote",
         "manualActions",
         "taktActions",
         "reductionValue",
@@ -132,7 +133,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260822-04"}, versions
+    assert versions >= {"20260822-05"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -263,6 +264,106 @@ def test_tab_switch_hides_the_other_view() -> None:
     block = app[start : app.index("\n}", start)]
     assert ".layout" in block and "hidden = isSimulation" in block
     assert "$('#simulationView').hidden = !isSimulation" in block
+
+
+def test_player_keeps_the_current_step_in_view() -> None:
+    """Список ограничен по высоте, шагов больше, чем помещается.
+
+    Прецедент: `setCursor()` красил текущую строку и не прокручивал к ней. Через шесть-семь
+    шагов автопроигрывания зритель смотрел на неподвижный список, где что-то подсвечено
+    «где-то ниже».
+    """
+    app = _app()
+    assert "function reveal(" in app
+    paint = app[app.index("function paintProgress()") : app.index("\n}", app.index("function paintProgress()"))]
+    assert "reveal('#stepList .step.current')" in paint
+    # Прокручивается список, а не страница: иначе вкладка прыгала бы на каждом шаге.
+    reveal = app[app.index("function reveal(") : app.index("\n}", app.index("function reveal("))]
+    assert "list.scrollTop" in reveal and "scrollIntoView" not in reveal
+
+
+def test_play_from_the_end_starts_over() -> None:
+    """С конца цепочки «Воспроизвести» обязано начать сначала.
+
+    Прецедент: кнопка на 1.2 секунды превращалась в «Пауза» и возвращалась обратно — таймер
+    просыпался, видел, что цепочка кончилась, и останавливался. Ничего не происходило.
+    """
+    app = _app()
+    block = app[app.index("function togglePlayback()") : app.index("\n}", app.index("function togglePlayback()"))]
+    assert "if (simCursor >= steps) setCursor(0);" in block
+
+
+def test_graph_click_highlights_the_entity_instead_of_rewinding() -> None:
+    """Клик по узлу графа не должен отматывать разбор в начало.
+
+    Прецедент: узел нёс шаг своего первого появления, и клик по нему на двадцатом шаге
+    возвращал плеер к первому. Теперь клик подсвечивает все шаги этой сущности, не трогая
+    позицию, — так же ведёт себя граф инцидента у Defender.
+    """
+    app = _app()
+    render = app[
+        app.index("function renderAttackGraph()") : app.index("\n}", app.index("function renderAttackGraph()"))
+    ]
+    assert "focusEntity(node.id)" in render
+    assert "openStep(node.order)" not in render, "клик по узлу снова двигает плеер"
+
+    focus = app[app.index("function focusEntity(") : app.index("\n}", app.index("function focusEntity("))]
+    assert "setCursor" not in focus, "выделение сущности сдвигает позицию"
+    assert "graphFocus === id ? null : id" in focus, "повторный клик не снимает выделение"
+
+
+def test_keyboard_drives_the_player() -> None:
+    """На демонстрации мышь занята указкой."""
+    app = _app()
+    start = app.index("document.addEventListener('keydown', (event) => {\n  if ($('#simulationView').hidden")
+    block = app[start : app.index("\n});", start)]
+    for key in ("' '", "ArrowRight", "ArrowLeft", "Home"):
+        assert key in block, key
+    # В поле «секунд на действие» пробел и стрелки принадлежат полю, а не плееру.
+    assert "'input'" in block and "'select'" in block
+
+
+def test_unplayed_steps_and_labels_stay_readable() -> None:
+    """Непройденное приглушается цветом, а не прозрачностью.
+
+    Прозрачность 0.45 делала весь список нечитаемым до первого шага, а вкладку — похожей на
+    заблокированную. В графе те же 0.4 применялись ко всей группе вместе с подписью узла.
+    """
+    styles = _STYLES.read_text(encoding="utf-8")
+    step_rule = re.search(r"^\.step \{([^}]*)\}", styles, re.MULTILINE)
+    assert step_rule is not None
+    assert "opacity" not in step_rule.group(1), "непройденный шаг снова прозрачный"
+    assert "color: var(--muted)" in step_rule.group(1)
+
+    node_rule = re.search(r"^#attackGraph \.graph-node \{([^}]*)\}", styles, re.MULTILINE)
+    assert node_rule is not None
+    assert "opacity" not in node_rule.group(1), "прозрачность снова гасит подпись узла"
+
+
+def test_phase_colours_meet_contrast_on_the_panel() -> None:
+    """Название фазы — текст 12-го кегля, и он обязан читаться.
+
+    Прецедент: `recon` был `#64748b` — 3.74 к фону панели при норме AA 4.5, а вместе с
+    прозрачностью непройденного шага около 1.5.
+    """
+    styles = _STYLES.read_text(encoding="utf-8")
+    panel = re.search(r"--panel:\s*(#[0-9a-fA-F]{6})", styles)
+    assert panel is not None
+    app = _app()
+    block = app[app.index("const PHASE_COLORS = {") : app.index("};", app.index("const PHASE_COLORS = {"))]
+
+    def luminance(value: str) -> float:
+        channels = [int(value[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+        linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    background = luminance(panel.group(1))
+    weak = []
+    for phase, colour in re.findall(r"(\w+): '(#[0-9a-fA-F]{6})'", block):
+        high, low = sorted((luminance(colour), background), reverse=True)
+        if (high + 0.05) / (low + 0.05) < 4.5:
+            weak.append((phase, colour, round((high + 0.05) / (low + 0.05), 2)))
+    assert not weak, f"цвета фаз ниже порога AA: {weak}"
 
 
 def test_attack_graph_draws_the_process_chain() -> None:
