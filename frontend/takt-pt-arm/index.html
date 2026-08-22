@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260822-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260822-02" />
   </head>
   <body>
     <header class="top">
@@ -216,24 +216,24 @@
           <p class="muted small">Счётчики описывают кейс целиком: от позиции плеера они не зависят.</p>
           <div class="counters">
             <div class="counter">
-              <span class="counter-label">Аналитик вручную (модель) <button class="help sm" type="button" data-help="counter_manual" aria-label="Пояснение: счётчик ручного процесса">?</button></span>
+              <span class="counter-label">Аналитик вручную, действий <button class="help sm" type="button" data-help="counter_manual" aria-label="Пояснение: счётчик ручного процесса">?</button></span>
               <span id="manualActions" class="counter-value">0</span>
               <span id="manualSeconds" class="counter-sub muted small">—</span>
             </div>
             <div class="counter">
-              <span class="counter-label">Аналитик в ТАКТ <button class="help sm" type="button" data-help="counter_takt" aria-label="Пояснение: счётчик действий в ТАКТ">?</button></span>
+              <span class="counter-label">Аналитик в ТАКТ, действий <button class="help sm" type="button" data-help="counter_takt" aria-label="Пояснение: счётчик действий в ТАКТ">?</button></span>
               <span id="taktActions" class="counter-value">0</span>
               <span id="taktSeconds" class="counter-sub muted small">—</span>
             </div>
             <div class="counter">
-              <span class="counter-label">Время разбора <button class="help sm" type="button" data-help="counter_time" aria-label="Пояснение: счётчики времени">?</button></span>
+              <span class="counter-label">Разница во времени <button class="help sm" type="button" data-help="counter_time" aria-label="Пояснение: разница во времени">?</button></span>
               <span id="timeValue" class="counter-value">—</span>
               <span id="timeDelta" class="counter-sub muted small">модельная оценка</span>
             </div>
             <div class="counter">
               <span class="counter-label">Сокращение действий <button class="help sm" type="button" data-help="reduction" aria-label="Пояснение: сокращение">?</button></span>
               <span id="reductionValue" class="counter-value">—</span>
-              <span class="counter-sub muted small">по всему кейсу</span>
+              <span class="counter-sub muted small">по всему кейсу · расчёт</span>
             </div>
           </div>
         </div>
@@ -287,6 +287,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260822-01"></script>
+    <script src="./app.min.js?v=20260822-02"></script>
   </body>
 </html>

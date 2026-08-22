@@ -130,7 +130,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260822-01"}, versions
+    assert versions >= {"20260822-02"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -261,6 +261,39 @@ def test_tab_switch_hides_the_other_view() -> None:
     block = app[start : app.index("\n}", start)]
     assert ".layout" in block and "hidden = isSimulation" in block
     assert "$('#simulationView').hidden = !isSimulation" in block
+
+
+def test_time_difference_between_manual_and_takt_is_shown() -> None:
+    """Заказчик обязан видеть разницу, а не вычитать её в уме.
+
+    Раньше плитка показывала «3 мин 20 с / 29 мин 20 с» — две величины через косую черту,
+    порядок которых читался только из подписи, — и те же два значения дублировались под
+    счётчиками действий. Теперь плитка показывает саму разницу, а слагаемые стоят под ней.
+    """
+    app = _app()
+    start = app.index("function updateCounters()")
+    block = app[start : app.index("\n}", start)]
+    assert "formatDuration(manualTime - taktTime)" in block, "разница не вычисляется"
+    # Слагаемые остаются на виду: иначе разницу нельзя перепроверить.
+    assert "${formatDuration(manualTime)} − ${formatDuration(taktTime)}" in block
+
+    index = _index()
+    assert "Разница во времени" in index
+
+
+def test_time_reduction_is_never_shown_as_a_second_percentage() -> None:
+    """Процент в интерфейсе один — по действиям.
+
+    Модельное время пропорционально действиям, поэтому процент сокращения времени совпал бы
+    с процентом сокращения действий и выглядел бы вторым независимым доказательством,
+    которым не является. Разница во времени показывается в минутах.
+    """
+    app = _app()
+    start = app.index("function updateCounters()")
+    block = app[start : app.index("\n}", start)]
+    percent_lines = [line for line in block.splitlines() if "%" in line and "//" not in line]
+    assert len(percent_lines) == 1, percent_lines
+    assert "reduction" in percent_lines[0]
 
 
 def test_time_is_labelled_as_model_everywhere() -> None:
