@@ -94,9 +94,11 @@ const HELP = {
   attack_graph: {
     title: 'Граф атаки',
     body: [
-      'Сущности цепочки и переходы между ними: учётная запись, узел, адрес, объект конвейера. Цвет узла — фаза, в которой он впервые появился.',
+      'Сущности цепочки и переходы между ними, слева направо по фазам атаки. Форма узла — тип сущности: круг — учётная запись, прямоугольник — узел, ромб — адрес, шестиугольник — процесс. Цвет — фаза, в которой сущность появилась впервые; в остальных фазах она остаётся в этом же цвете. Пунктирным кольцом отмечены сущности первого шага — точка входа.',
+      'Переключатель «цепочка процессов» добавляет слой запусков: кто кого породил. По умолчанию он выключен, иначе процессы забивают собой остальное.',
+      'Адрес источника отдельным узлом не показан намеренно: у всех четырёх классов источников это собственный адрес наблюдающего узла, а не второй участник обмена. Он подписан под самим узлом.',
       'Граф строится только по событиям цепочки этого кейса, связи вне кейса в нём не видны.',
-      'Что делать: смотреть на переходы между узлами и смену учётной записи — по ним читается перемещение внутри сети.',
+      'Что делать: смотреть на переходы между узлами, смену учётной записи и цепочку запусков — по ним читается перемещение внутри сети.',
     ],
   },
   sim_summary: {
@@ -911,6 +913,13 @@ function phaseColor(phase) {
   return PHASE_COLORS[phase] || '#64748b';
 }
 
+// Русское название фазы приходит вместе с цепочкой: свой словарь фаз в АРМ разошёлся бы
+// с доменным перечнем при первом же добавлении.
+function phaseTitle(phase) {
+  const found = (simulation.phases || []).find((item) => item.phase === phase);
+  return found ? found.title_ru : phase;
+}
+
 // Тот же текст стоит в разметке как начальное состояние: пустой абзац до загрузки
 // скрипта мигал бы. Здесь он нужен, чтобы вернуть подсказку после сообщения об ошибке.
 const SIM_EMPTY_HINT = 'Инцидент не выбран: очередь пуста или кейс ещё не открыт на вкладке «Расследование».';
@@ -1014,24 +1023,157 @@ function renderSteps() {
   paintProgress();
 }
 
-// Узлы и переходы цепочки: сущности в порядке первого появления.
-function chainGraph() {
+// Типы сущностей графа. Форма кодирует тип: цвет уже занят фазой, и различать учётную
+// запись, узел, адрес и процесс по одному тексту подписи нельзя.
+const NODE_TYPE_RU = {
+  user: 'учётная запись',
+  host: 'узел',
+  address: 'адрес',
+  process: 'процесс',
+};
+
+// Узлы и переходы цепочки.
+//
+// `src_address` отдельным узлом не показывается намеренно: у всех четырёх классов источников
+// это собственный адрес наблюдающего узла (`src_ip` той же машины, что и `host_id`), а не
+// второй участник обмена. Отдельным кружком он задваивал бы узел и рисовал бы связь, которой
+// в данных нет. Показывается подписью на самом узле.
+function chainGraph(withProcesses) {
   const nodes = new Map();
   const edges = [];
+  const processHost = new Map();
+  const hasParent = new Set();
   const add = (id, type, phase, order) => {
     if (!id) return null;
-    if (!nodes.has(id)) nodes.set(id, { id, type, phase, order });
+    if (!nodes.has(id)) nodes.set(id, { id, type, phase, order, addresses: new Set() });
     return id;
   };
+  const link = (from, to, label, order) => {
+    if (from && to && from !== to) edges.push({ from, to, label, order });
+  };
+
   for (const step of simulation.steps || []) {
     const parts = step.entities || {};
     const user = add(parts.user_id, 'user', step.attack_phase, step.order);
     const host = add(parts.host_id, 'host', step.attack_phase, step.order);
     const dst = add(parts.dst_address, 'address', step.attack_phase, step.order);
-    if (user && host) edges.push({ from: user, to: host, label: 'действует на', order: step.order });
-    if (host && dst) edges.push({ from: host, to: dst, label: 'обращается к', order: step.order });
+    if (host && parts.src_address) nodes.get(host).addresses.add(parts.src_address);
+    link(user, host, 'действует на', step.order);
+    link(host, dst, 'обращается к', step.order);
+    if (!withProcesses) continue;
+    // Цепочка процессов — то, ради чего граф вообще смотрят после фишинга: родитель породил
+    // потомка. Слой включается отдельно, иначе процессы забивают собой всё остальное.
+    const parent = add(parts.parent_process_id, 'process', step.attack_phase, step.order);
+    const process = add(parts.process_id, 'process', step.attack_phase, step.order);
+    for (const item of [parent, process]) {
+      if (item && host && !processHost.has(item)) processHost.set(item, host);
+    }
+    if (parent && process) {
+      link(parent, process, 'породил', step.order);
+      hasParent.add(process);
+    }
+  }
+
+  // Процесс без родителя в цепочке привязывается к своему узлу — иначе он висел бы в воздухе.
+  for (const node of nodes.values()) {
+    if (node.type === 'process' && !hasParent.has(node.id)) {
+      link(processHost.get(node.id), node.id, 'выполняет', node.order);
+    }
   }
   return { nodes: [...nodes.values()], edges };
+}
+
+// Раскладка по фазам слева направо. Сетка «пять в ряд» смысла не несла: соседство на экране
+// не означало связи, а с шестнадцатой сущности узлы уходили за пределы viewBox и пропадали
+// молча. Колонка — фаза, в которой сущность появилась впервые; высота считается по рядам.
+function graphLayout(nodes) {
+  const order = (simulation.phases || []).map((item) => item.phase);
+  const columns = new Map(order.map((phase) => [phase, []]));
+  for (const node of nodes) {
+    const key = columns.has(node.phase) ? node.phase : order[0];
+    if (!columns.has(key)) columns.set(key, []);
+    columns.get(key).push(node);
+  }
+  const filled = [...columns.entries()].filter(([, items]) => items.length);
+  const position = new Map();
+  const columnWidth = 210;
+  const rowHeight = 96;
+  filled.forEach(([, items], column) => {
+    items.forEach((node, row) => {
+      position.set(node.id, { x: 110 + column * columnWidth, y: 96 + row * rowHeight });
+    });
+  });
+  const rows = Math.max(1, ...filled.map(([, items]) => items.length));
+  return {
+    position,
+    columns: filled.map(([phase], index) => ({ phase, x: 110 + index * columnWidth })),
+    width: Math.max(720, 110 + filled.length * columnWidth),
+    height: 96 + rows * rowHeight,
+  };
+}
+
+const NS = 'http://www.w3.org/2000/svg';
+
+function svgNode(name, attributes) {
+  const element = document.createElementNS(NS, name);
+  for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value));
+  return element;
+}
+
+// Форма по типу сущности.
+function nodeShape(node, point) {
+  const fill = phaseColor(node.phase);
+  if (node.type === 'host') {
+    return svgNode('rect', { x: point.x - 24, y: point.y - 15, width: 48, height: 30, rx: 6, fill });
+  }
+  if (node.type === 'address') {
+    const r = 19;
+    const points = `${point.x},${point.y - r} ${point.x + r},${point.y} ${point.x},${point.y + r} ${point.x - r},${point.y}`;
+    return svgNode('polygon', { points, fill });
+  }
+  if (node.type === 'process') {
+    const r = 17;
+    const points = [0, 60, 120, 180, 240, 300]
+      .map((angle) => {
+        const rad = (Math.PI / 180) * angle;
+        return `${(point.x + r * Math.cos(rad)).toFixed(1)},${(point.y + r * Math.sin(rad)).toFixed(1)}`;
+      })
+      .join(' ');
+    return svgNode('polygon', { points, fill });
+  }
+  return svgNode('circle', { cx: point.x, cy: point.y, r: 15, fill });
+}
+
+// Стрелка на ребре: «действует на» и «обращается к» направлены, и без наконечника
+// направление на экране прочитать нельзя.
+function arrowMarker() {
+  const marker = svgNode('marker', {
+    id: 'edgeArrow',
+    viewBox: '0 0 8 8',
+    refX: 7,
+    refY: 4,
+    markerWidth: 6,
+    markerHeight: 6,
+    orient: 'auto-start-reverse',
+  });
+  marker.appendChild(svgNode('path', { d: 'M0,0 L8,4 L0,8 z', class: 'edge-arrow' }));
+  const defs = svgNode('defs', {});
+  defs.appendChild(marker);
+  return defs;
+}
+
+// Ребро укорачивается на радиус узла, иначе наконечник прячется под фигурой.
+function edgeEnds(from, to) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const gap = 26;
+  return {
+    x1: from.x + (dx / length) * gap,
+    y1: from.y + (dy / length) * gap,
+    x2: to.x - (dx / length) * gap,
+    y2: to.y - (dy / length) * gap,
+  };
 }
 
 // Имя намеренно отличается от `renderGraph` панели «Связи сущностей». Обе функции лежат в
@@ -1041,18 +1183,26 @@ function chainGraph() {
 function renderAttackGraph() {
   const svg = $('#attackGraph');
   svg.replaceChildren();
-  const { nodes, edges } = chainGraph();
+  renderGraphLegend();
+  const { nodes, edges } = chainGraph($('#showProcesses').checked);
   if (!nodes.length) return;
 
-  const perRow = 5;
-  const position = new Map();
-  nodes.forEach((node, index) => {
-    const row = Math.floor(index / perRow);
-    const col = index % perRow;
-    position.set(node.id, { x: 110 + col * 185, y: 60 + row * 90 });
-  });
+  const { position, columns, width, height } = graphLayout(nodes);
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.style.minWidth = `${width}px`;
+  svg.style.height = `${height}px`;
+  svg.appendChild(arrowMarker());
 
-  const ns = 'http://www.w3.org/2000/svg';
+  for (const column of columns) {
+    const title = svgNode('text', { x: column.x, y: 34, class: 'column-label', fill: phaseColor(column.phase) });
+    title.textContent = phaseTitle(column.phase);
+    svg.appendChild(title);
+  }
+
+  // Подписи на рёбрах не рисуются: они ложились ровно на подписи узлов, а в слое процессов
+  // «породил» повторялось десятки раз. Направление читается по стрелке, тип сущности — по
+  // форме, глагол связи — в подсказке при наведении и одной строкой в легенде. Так же
+  // устроены графы инцидента у зрелых продуктов: подпись у каждого ребра там не рисуют.
   const seen = new Set();
   for (const edge of edges) {
     const key = `${edge.from}|${edge.to}`;
@@ -1061,43 +1211,65 @@ function renderAttackGraph() {
     const from = position.get(edge.from);
     const to = position.get(edge.to);
     if (!from || !to) continue;
-    const line = document.createElementNS(ns, 'line');
-    line.setAttribute('x1', from.x);
-    line.setAttribute('y1', from.y);
-    line.setAttribute('x2', to.x);
-    line.setAttribute('y2', to.y);
-    line.setAttribute('class', 'edge-line');
+    const ends = edgeEnds(from, to);
+    const line = svgNode('line', { ...ends, class: 'edge-line', 'marker-end': 'url(#edgeArrow)' });
     line.dataset.order = String(edge.order);
+    const hint = svgNode('title', {});
+    hint.textContent = edge.label;
+    line.appendChild(hint);
     svg.appendChild(line);
-    const label = document.createElementNS(ns, 'text');
-    label.setAttribute('x', (from.x + to.x) / 2);
-    label.setAttribute('y', (from.y + to.y) / 2 - 6);
-    label.setAttribute('class', 'edge-label');
-    label.textContent = edge.label;
-    svg.appendChild(label);
   }
 
   for (const node of nodes) {
     const point = position.get(node.id);
-    const group = document.createElementNS(ns, 'g');
-    group.setAttribute('class', 'graph-node');
+    if (!point) continue;
+    const group = svgNode('g', { class: 'graph-node' });
     group.dataset.order = String(node.order);
-    const circle = document.createElementNS(ns, 'circle');
-    circle.setAttribute('cx', point.x);
-    circle.setAttribute('cy', point.y);
-    circle.setAttribute('r', 14);
-    circle.setAttribute('fill', phaseColor(node.phase));
-    group.appendChild(circle);
-    const text = document.createElementNS(ns, 'text');
-    text.setAttribute('x', point.x);
-    text.setAttribute('y', point.y + 30);
-    text.setAttribute('class', 'node-label');
+    // Точка входа — узел и учётная запись первого шага цепочки. Это разметка источника, а не
+    // вывод продукта: первый по времени размеченный шаг и есть начало атаки. Адрес и процесс
+    // того же шага точкой входа не помечаются — входят не через них.
+    if (node.order === 1 && (node.type === 'host' || node.type === 'user')) {
+      group.appendChild(svgNode('circle', { cx: point.x, cy: point.y, r: 27, class: 'entry-ring' }));
+      const mark = svgNode('text', { x: point.x, y: point.y - 33, class: 'entry-label' });
+      mark.textContent = 'точка входа';
+      group.appendChild(mark);
+    }
+    group.appendChild(nodeShape(node, point));
+    const text = svgNode('text', { x: point.x, y: point.y + 32, class: 'node-label' });
     text.textContent = node.id.length > 22 ? `${node.id.slice(0, 21)}…` : node.id;
     group.appendChild(text);
+    if (node.addresses.size) {
+      const sub = svgNode('text', { x: point.x, y: point.y + 45, class: 'node-sub' });
+      sub.textContent = [...node.addresses].join(', ');
+      group.appendChild(sub);
+    }
+    const hint = svgNode('title', {});
+    hint.textContent = `${NODE_TYPE_RU[node.type] || node.type}: ${node.id}`;
+    group.appendChild(hint);
     group.addEventListener('click', () => openStep(node.order));
     svg.appendChild(group);
   }
   paintProgress();
+}
+
+// Легенда форм: без неё тип сущности читается только из подписи.
+function renderGraphLegend() {
+  const box = $('#graphLegend');
+  const withProcesses = $('#showProcesses').checked;
+  box.replaceChildren();
+  for (const [type, title] of Object.entries(NODE_TYPE_RU)) {
+    if (type === 'process' && !withProcesses) continue;
+    const item = document.createElement('span');
+    item.className = `legend-item shape ${type}`;
+    item.innerHTML = `<i></i>${escapeHtml(title)}`;
+    box.appendChild(item);
+  }
+  const note = document.createElement('span');
+  note.className = 'legend-note';
+  note.textContent = withProcesses
+    ? 'стрелка ведёт от действующей сущности к затронутой: учётная запись → узел, узел → адрес, родительский процесс → порождённый'
+    : 'стрелка ведёт от действующей сущности к затронутой: учётная запись → узел, узел → адрес';
+  box.appendChild(note);
 }
 
 function paintProgress() {
@@ -1277,6 +1449,11 @@ $('#simCaseSelect').addEventListener('change', async (event) => {
   openSimulation();
 });
 $('#toInvestigation').addEventListener('click', () => showTab('investigation'));
+// Слой процессов перерисовывает только граф: цепочка и счётчики от него не зависят,
+// перезапрашивать разбор незачем.
+$('#showProcesses').addEventListener('change', () => {
+  if (simulation) renderAttackGraph();
+});
 $('#resetPlayer').addEventListener('click', () => {
   stopPlayback();
   setCursor(0);

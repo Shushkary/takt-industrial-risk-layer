@@ -790,8 +790,73 @@ ol.steps {
 
 #attackGraph {
   width: 100%;
+  /* Ширина и высота задаются отрисовкой по числу колонок-фаз и рядов: при фиксированных
+     320 px узлы с шестнадцатого уходили за пределы viewBox и пропадали молча. */
   min-width: 720px;
   height: 320px;
+}
+
+#attackGraph .edge-arrow {
+  fill: var(--line);
+}
+
+#attackGraph .column-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+#attackGraph .node-sub {
+  fill: var(--muted);
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+#attackGraph .entry-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+
+#attackGraph .entry-label {
+  fill: var(--accent);
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+/* Легенда форм: тип сущности кодируется формой, цвет занят фазой. */
+.legend-item.shape i {
+  background: var(--muted);
+}
+
+.legend-item.shape.host i {
+  width: 16px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.legend-item.shape.user i {
+  border-radius: 50%;
+}
+
+.legend-item.shape.address i {
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
+
+.legend-item.shape.process i {
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  border-radius: 0;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
 }
 
 #attackGraph .edge-line {
@@ -805,10 +870,8 @@ ol.steps {
   opacity: 1;
 }
 
-#attackGraph .edge-label {
-  fill: var(--muted);
-  font-size: 10px;
-  text-anchor: middle;
+.legend-note {
+  color: var(--muted);
 }
 
 #attackGraph .graph-node {
@@ -824,6 +887,15 @@ ol.steps {
   fill: var(--text);
   font-size: 11px;
   text-anchor: middle;
+}
+
+/* Обводка цветом панели под текстом: рёбра проходят через подписи узлов, и без неё имя
+   сущности перечёркнуто линией. paint-order рисует обводку до заливки, то есть под буквами. */
+#attackGraph text {
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 .assumption {

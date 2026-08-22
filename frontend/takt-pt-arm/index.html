@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260822-03" />
+    <link rel="stylesheet" href="./styles.css?v=20260822-04" />
   </head>
   <body>
     <header class="top">
@@ -218,11 +218,15 @@
         <div class="block">
           <div class="block-head">
             <h4>Граф атаки</h4>
-            <button class="help" type="button" data-help="attack_graph" aria-label="Пояснение: граф атаки">?</button>
+            <div class="head-actions">
+              <label class="toggle" for="showProcesses"><input id="showProcesses" type="checkbox" /> цепочка процессов</label>
+              <button class="help" type="button" data-help="attack_graph" aria-label="Пояснение: граф атаки">?</button>
+            </div>
           </div>
           <div class="graph-wrap">
             <svg id="attackGraph" viewBox="0 0 960 320" role="img" aria-label="Граф сущностей цепочки атаки"></svg>
           </div>
+          <div id="graphLegend" class="legend"></div>
         </div>
 
         <div class="block">
@@ -287,6 +291,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260822-03"></script>
+    <script src="./app.min.js?v=20260822-04"></script>
   </body>
 </html>

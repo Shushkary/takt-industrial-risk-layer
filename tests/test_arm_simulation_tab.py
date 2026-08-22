@@ -97,6 +97,8 @@ def test_method_modal_states_what_is_measured_and_what_is_modelled() -> None:
         "simCaseTitle",
         "simCaseSelect",
         "toInvestigation",
+        "showProcesses",
+        "graphLegend",
         "manualActions",
         "taktActions",
         "reductionValue",
@@ -130,7 +132,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260822-03"}, versions
+    assert versions >= {"20260822-04"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -261,6 +263,77 @@ def test_tab_switch_hides_the_other_view() -> None:
     block = app[start : app.index("\n}", start)]
     assert ".layout" in block and "hidden = isSimulation" in block
     assert "$('#simulationView').hidden = !isSimulation" in block
+
+
+def test_attack_graph_draws_the_process_chain() -> None:
+    """Цепочка процессов — дословное требование целевой задачи ТЗ № 6.
+
+    `process_id` и `parent_process_id` есть в модели события и приходят в `steps[].entities`,
+    а граф читал только учётную запись, узел и адрес. Слой включается отдельно: процессы
+    многочисленны и без переключателя забивают собой остальное.
+    """
+    app = _app()
+    start = app.index("function chainGraph(")
+    block = app[start : app.index("\n}", start)]
+    assert "parent_process_id" in block and "process_id" in block
+    assert "'породил'" in block, "нет связи родитель — потомок"
+    assert "withProcesses" in block, "слой процессов не переключается"
+    assert "$('#showProcesses')" in app
+
+
+def test_source_address_is_a_label_on_the_host_not_a_node() -> None:
+    """У всех четырёх классов источников `src_address` — собственный адрес наблюдающего узла.
+
+    Отдельным узлом он задваивал бы узел и рисовал связь, которой в данных нет: `src_ip` и
+    `host_id` в маппинге EDR, SIEM, NDR и OT описывают одну и ту же машину. Показывается
+    подписью на узле.
+    """
+    app = _app()
+    start = app.index("function chainGraph(")
+    block = app[start : app.index("\n}", start)]
+    # Узел заводится вызовом add(<значение>, <тип>, ...) — именно его здесь быть не должно.
+    assert "add(parts.src_address," not in block, "адрес источника стал отдельным узлом"
+    assert "addresses.add(parts.src_address)" in block
+
+
+def test_attack_graph_shows_direction_type_and_entry_point() -> None:
+    """Граф атаки без направления, типа и точки входа не читается.
+
+    Рёбра «действует на» и «обращается к» направлены; тип сущности кодируется формой, потому
+    что цвет уже занят фазой; точка входа — узел и учётная запись первого шага цепочки.
+    """
+    app = _app()
+    assert "marker-end" in app and "orient" in app, "нет стрелок на рёбрах"
+
+    shapes = app[app.index("function nodeShape(") : app.index("\n}", app.index("function nodeShape("))]
+    for kind in ("host", "address", "process"):
+        assert f"'{kind}'" in shapes, kind
+    assert "polygon" in shapes and "rect" in shapes and "circle" in shapes
+
+    render = app[
+        app.index("function renderAttackGraph()") : app.index("\n}", app.index("function renderAttackGraph()"))
+    ]
+    assert "entry-ring" in render and "точка входа" in render
+    # Точка входа — не адрес и не процесс того же шага.
+    assert "node.type === 'host' || node.type === 'user'" in render
+
+
+def test_attack_graph_lays_out_by_phase_and_sizes_itself() -> None:
+    """Раскладка по фазам слева направо, высота — по числу рядов.
+
+    Сетка «пять в ряд» смысла не несла: соседство на экране не означало связи. Хуже того, при
+    фиксированном viewBox 320 px узлы с шестнадцатого уходили за границу и пропадали молча.
+    """
+    app = _app()
+    assert "const perRow" not in app, "вернулась сетка фиксированной ширины"
+    layout = app[app.index("function graphLayout(") : app.index("\n}", app.index("function graphLayout("))]
+    assert "simulation.phases" in layout, "колонки не привязаны к фазам"
+    assert "height" in layout and "rows" in layout
+
+    render = app[
+        app.index("function renderAttackGraph()") : app.index("\n}", app.index("function renderAttackGraph()"))
+    ]
+    assert "svg.style.height" in render and "setAttribute('viewBox'" in render
 
 
 def test_effort_block_comes_after_the_chain() -> None:
