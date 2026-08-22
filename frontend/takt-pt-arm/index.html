@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260822-05" />
+    <link rel="stylesheet" href="./styles.css?v=20260822-06" />
   </head>
   <body>
     <header class="top">
@@ -213,6 +213,19 @@
             <span id="focusNote" class="muted small"></span>
           </div>
           <div id="phaseLegend" class="legend"></div>
+          <div class="step-filter">
+            <span class="muted small">Чем выделено:</span>
+            <div id="stepFilter" class="filter-chips"></div>
+            <span id="stepFilterNote" class="muted small"></span>
+          </div>
+          <div class="step-head">
+            <span>Время, UTC <button class="help sm" type="button" data-help="time_utc" aria-label="Пояснение: время события">?</button></span>
+            <span>Фаза</span>
+            <span>Операция</span>
+            <span>Источник</span>
+            <span>Чем выделено <button class="help sm" type="button" data-help="step" aria-label="Пояснение: шаг цепочки">?</button></span>
+            <span>Техника <button class="help sm" type="button" data-help="mitre" aria-label="Пояснение: техника ATT&amp;CK">?</button></span>
+          </div>
           <ol id="stepList" class="steps"></ol>
         </div>
 
@@ -292,6 +305,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260822-05"></script>
+    <script src="./app.min.js?v=20260822-06"></script>
   </body>
 </html>

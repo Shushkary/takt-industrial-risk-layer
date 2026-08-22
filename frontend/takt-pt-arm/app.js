@@ -888,6 +888,8 @@ let simTimer = null;
 // появления: на двадцатом шаге разбор внезапно прыгал в начало. Теперь он подсвечивает все
 // шаги этой сущности, не трогая позицию, — так же ведёт себя граф инцидента у Defender.
 let graphFocus = null;
+// Пустая строка — показаны все шаги; иначе значение `selected_by`, по которому фильтруем.
+let stepFilter = '';
 
 // Счётчики трудоёмкости позицией плеера не двигаются — намеренно.
 //
@@ -954,6 +956,7 @@ async function openSimulation() {
   }
   simCursor = 0;
   graphFocus = null;
+  stepFilter = '';
   renderSimCase();
   renderLegend();
   renderSteps();
@@ -1007,26 +1010,109 @@ function renderLegend() {
   }
 }
 
+// Короткая метка механизма отбора для строки списка. Полное название остаётся в подсказке
+// и в карточке шага: «пивот по отличительной сущности» в колонку не помещается.
+const SELECTOR_SHORT = {
+  pivot: 'пивот',
+  'host-expansion': 'расширение',
+  manual_attach: 'вручную',
+  manual_detach: 'вручную',
+  manual_merge: 'вручную',
+  manual_split: 'вручную',
+};
+
+// Ядро надёжно, добранное расширением требует отсева — это и есть главное различие, ради
+// которого метка вынесена в строку.
+const SELECTOR_TONE = {
+  pivot: 'core',
+  'host-expansion': 'expansion',
+};
+
+function selectorKey(step) {
+  return (step.detection_explanation || {}).selected_by || '';
+}
+
+function selectorShort(step) {
+  const key = selectorKey(step);
+  if (!key) return 'не записано';
+  return SELECTOR_SHORT[key] || 'правило';
+}
+
 function renderSteps() {
   const list = $('#stepList');
   list.replaceChildren();
   for (const step of simulation.steps || []) {
+    const detection = step.detection_explanation || {};
+    const invariants = detection.invariants || [];
     const row = document.createElement('li');
     row.className = 'step';
     row.dataset.order = String(step.order);
+    row.dataset.selector = selectorKey(step);
     row.style.setProperty('--phase', phaseColor(step.attack_phase));
+    const mark = invariants.length
+      ? `<span class="chip sm warn" title="${escapeHtml(invariants.map(invariantTitle).join(', '))}">инвариант</span>`
+      : '';
     row.innerHTML = `
       <button type="button" class="step-open">
         <span class="step-time mono">${escapeHtml(utc(step.observed_at))}</span>
         <span class="step-phase" style="color:${phaseColor(step.attack_phase)}">${escapeHtml(step.attack_phase_title_ru)}</span>
         <span class="step-op mono">${escapeHtml(step.operation)}</span>
         <span class="chip sm" title="${escapeHtml(step.source)}">${escapeHtml(term('event_source', step.source))}</span>
+        <span class="step-why">
+          <span class="badge ${SELECTOR_TONE[selectorKey(step)] || ''}" title="${escapeHtml(detection.selected_by_title_ru || '')}">${escapeHtml(selectorShort(step))}</span>${mark}
+        </span>
         <span class="muted small">${escapeHtml(step.mitre_technique || '')}</span>
       </button>`;
     row.querySelector('.step-open').addEventListener('click', () => openStep(step.order));
     list.appendChild(row);
   }
+  renderStepFilter();
+  applyStepFilter();
   paintProgress();
+}
+
+// Набор фильтров строится по тому, что реально встретилось в цепочке: у кейса конвейера это
+// имена правил корреляции, у собранного пивотом — ядро и расширение. Фиксированный список
+// кнопок не покрыл бы ни того, ни другого.
+function renderStepFilter() {
+  const box = $('#stepFilter');
+  box.replaceChildren();
+  const counts = new Map();
+  for (const step of simulation.steps || []) {
+    const key = selectorKey(step);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const chips = [['', 'все', (simulation.steps || []).length]];
+  for (const [key, count] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
+    chips.push([key || 'none', selectorShort({ detection_explanation: { selected_by: key } }), count]);
+  }
+  for (const [value, title, count] of chips) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = `chip filter${value === stepFilter ? ' active' : ''}`;
+    chip.dataset.filter = value;
+    chip.textContent = `${title} · ${count}`;
+    chip.addEventListener('click', () => {
+      stepFilter = stepFilter === value ? '' : value;
+      renderStepFilter();
+      applyStepFilter();
+    });
+    box.appendChild(chip);
+  }
+}
+
+// Фильтр прячет строки, но не трогает плеер: цепочка остаётся целой, меняется только то, что
+// показано. Иначе номера шагов разошлись бы с составом кейса.
+function applyStepFilter() {
+  let shown = 0;
+  const total = (simulation.steps || []).length;
+  for (const row of document.querySelectorAll('#stepList .step')) {
+    const key = row.dataset.selector || 'none';
+    const visible = !stepFilter || key === stepFilter || (stepFilter === 'none' && !row.dataset.selector);
+    row.hidden = !visible;
+    if (visible) shown += 1;
+  }
+  $('#stepFilterNote').textContent = stepFilter ? `показано ${shown} из ${total}` : '';
 }
 
 // Типы сущностей графа. Форма кодирует тип: цвет уже занят фазой, и различать учётную
@@ -1301,7 +1387,9 @@ function focusEntity(id) {
 function reveal(selector) {
   const list = $('#stepList');
   const target = list.querySelector(selector.replace('#stepList ', ''));
-  if (!target) return;
+  // Отфильтрованная строка скрыта: её прямоугольник нулевой, и прокрутка по нему увела бы
+  // список в произвольное место.
+  if (!target || target.hidden) return;
   const listBox = list.getBoundingClientRect();
   const box = target.getBoundingClientRect();
   if (box.top < listBox.top) list.scrollTop -= listBox.top - box.top;
@@ -1406,16 +1494,24 @@ function openStep(order) {
     .map(([name, value]) => `${entityFieldTitle(name)}: ${value}`);
   const artifacts = (step.artifacts || []).map((item) => `${term('artifact_type', item.type)}: ${item.value}`);
 
+  const matched = detection.matched_entities || [];
+
   lastFocused = document.activeElement;
   $('#modalTitle').textContent = `Шаг ${step.order}. ${step.attack_phase_title_ru}`;
   const body = $('#modalBody');
   body.replaceChildren();
+  body.appendChild(stepNavigation(step.order));
   const paragraphs = [
     `Что произошло: источник «${term('event_source', step.source)}» зафиксировал ${step.operation} в ${utc(step.observed_at)} UTC.`,
     `Фаза цепочки: ${step.attack_phase_title_ru}. Техника ATT&CK: ${step.mitre_technique || 'не сопоставлена'}. Разметка приходит от источника, ТАКТ её не вычисляет.`,
     // Механизм и основание соединяются тире, а не точкой: основание записано со строчной
     // буквы, и после точки читалось бы как оборванная фраза. Пустая часть просто исчезает.
     `Чем выделено: ${[detection.selected_by_title_ru || 'основание не записано', detection.reason].filter(Boolean).join(' — ')}.`,
+    // Совпавшие признаки — доказательство корреляции: по ним видно, что именно связало
+    // событие с инцидентом. Бэкенд их считает, а показаны они не были нигде.
+    matched.length
+      ? `Совпавшие признаки: ${matched.join(', ')}.`
+      : 'Совпавших признаков не записано: событие связано не по совпадению отличительной сущности.',
     detection.invariants && detection.invariants.length
       ? `Сработавшие инварианты на этом событии: ${detection.invariants.map(invariantTitle).join(', ')}.`
       : 'Инварианты на этом событии не срабатывали: оно попало в кейс по связи сущностей, а не по признаку правила.',
@@ -1427,8 +1523,43 @@ function openStep(order) {
     item.textContent = text;
     body.appendChild(item);
   }
+  // Идентификатор события — то, чем аналитик сверяется с консолью источника. Без него
+  // карточку шага нельзя перепроверить в EDR или SIEM, то есть нельзя использовать как
+  // доказательство. Стоит последним и выделяется мышью целиком.
+  const reference = document.createElement('p');
+  reference.className = 'muted small';
+  reference.textContent = 'Идентификатор события у источника: ';
+  const code = document.createElement('code');
+  code.className = 'mono';
+  code.textContent = step.event_id || '—';
+  reference.appendChild(code);
+  body.appendChild(reference);
   $('#modal').hidden = false;
   $('#modalClose').focus();
+}
+
+// Переходы между шагами прямо в карточке: раньше 27 шагов приходилось открывать и закрывать
+// по одному, возвращаясь к списку за каждым следующим.
+function stepNavigation(order) {
+  const steps = simulation.steps || [];
+  const box = document.createElement('div');
+  box.className = 'step-nav';
+  const jump = (label, target, disabled) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'action inline';
+    button.textContent = label;
+    button.disabled = disabled;
+    button.addEventListener('click', () => openStep(target));
+    box.appendChild(button);
+  };
+  jump('← предыдущий', order - 1, order <= 1);
+  jump('следующий →', order + 1, order >= steps.length);
+  const position = document.createElement('span');
+  position.className = 'muted small';
+  position.textContent = `шаг ${order} из ${steps.length}`;
+  box.appendChild(position);
+  return box;
 }
 
 function setCursor(next) {

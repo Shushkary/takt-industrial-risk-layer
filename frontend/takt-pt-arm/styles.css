@@ -778,9 +778,11 @@ ol.steps {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+/* Общая сетка колонок для заголовка и строк: заголовок обязан стоять ровно над данными. */
+.step-head,
 .step-open {
   display: grid;
-  grid-template-columns: 160px 190px minmax(120px, 1fr) 110px 90px;
+  grid-template-columns: 160px 150px minmax(120px, 1fr) 168px 150px 80px;
   gap: 10px;
   width: 100%;
   padding: 6px 10px;
@@ -793,6 +795,79 @@ ol.steps {
 
 .step-open:hover {
   background: #161e2b;
+}
+
+.step-head {
+  padding: 4px 10px 4px 13px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--line);
+}
+
+.step-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip.filter {
+  background: transparent;
+  cursor: pointer;
+}
+
+.chip.filter.active {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.step-why {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Метка механизма отбора. Ядро надёжно, добранное расширением требует отсева — различие
+   вынесено в цвет, чтобы читаться без чтения. */
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.badge.core {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.badge.expansion {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.step-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.step-nav button[disabled] {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .graph-wrap {

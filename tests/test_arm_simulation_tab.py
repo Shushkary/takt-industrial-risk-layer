@@ -43,11 +43,16 @@ def test_every_help_button_has_a_registry_entry() -> None:
 
 
 def test_registry_has_no_unused_entries() -> None:
-    """Запись без кнопки — мёртвый текст, который никто не увидит."""
+    """Запись без кнопки — мёртвый текст, который никто не увидит.
+
+    Исключений больше нет. `step` и `mitre` числились в них по комментарию «открывается из
+    кода при клике по шагу цепочки», который не соответствовал коду: клик по шагу открывал
+    карточку события, а не пояснение, и оба текста не видел никто. Теперь у них есть кнопки в
+    заголовке колонок списка шагов.
+    """
     used = set(_HELP_ATTR.findall(_index()))
     declared = set(_HELP_KEY.findall(_app()))
-    # `step` открывается из кода при клике по шагу цепочки, а не кнопкой в разметке.
-    orphans = sorted(declared - used - {"step", "mitre"})
+    orphans = sorted(declared - used)
     assert not orphans, f"пояснения без кнопки: {orphans}"
 
 
@@ -100,6 +105,8 @@ def test_method_modal_states_what_is_measured_and_what_is_modelled() -> None:
         "showProcesses",
         "graphLegend",
         "focusNote",
+        "stepFilter",
+        "stepFilterNote",
         "manualActions",
         "taktActions",
         "reductionValue",
@@ -133,7 +140,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260822-05"}, versions
+    assert versions >= {"20260822-06"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -264,6 +271,59 @@ def test_tab_switch_hides_the_other_view() -> None:
     block = app[start : app.index("\n}", start)]
     assert ".layout" in block and "hidden = isSimulation" in block
     assert "$('#simulationView').hidden = !isSimulation" in block
+
+
+def test_selection_mechanism_is_visible_in_the_step_row() -> None:
+    """Назначение вкладки — ответить, чем выделен шаг. Ответ должен быть виден в строке.
+
+    Прецедент: механизм лежал только внутри карточки события, и чтобы увидеть его для всех
+    27 шагов, карточку надо было открыть и закрыть 27 раз.
+    """
+    app = _app()
+    render = app[app.index("function renderSteps()") : app.index("\n}", app.index("function renderSteps()"))]
+    assert "selectorShort(step)" in render, "метки механизма нет в строке"
+    assert "SELECTOR_TONE" in render, "ядро и добранное расширением не различаются"
+    assert "invariantTitle" in render, "срабатывание инварианта не отмечено в строке"
+
+    index = _index()
+    view = index[index.index('id="simulationView"') : index.index('id="modal"')]
+    assert "<span>Чем выделено" in view, "нет заголовка колонки"
+
+
+def test_step_filter_is_built_from_what_the_chain_contains() -> None:
+    """Фильтр по механизму: подсказка `step` велит отсеивать добранное расширением.
+
+    Набор кнопок строится по фактическим значениям в цепочке, а не по фиксированному списку:
+    у кейса конвейера это имена правил корреляции, у собранного пивотом — ядро и расширение.
+    """
+    app = _app()
+    build = app[app.index("function renderStepFilter()") : app.index("\n}", app.index("function renderStepFilter()"))]
+    assert "simulation.steps" in build and "counts" in build
+
+    apply_filter = app[
+        app.index("function applyStepFilter()") : app.index("\n}", app.index("function applyStepFilter()"))
+    ]
+    assert "row.hidden" in apply_filter
+    # Фильтр меняет показанное, но не саму цепочку: иначе номера шагов разошлись бы с кейсом.
+    assert "setCursor" not in apply_filter and "simCursor" not in apply_filter
+
+
+def test_step_card_can_be_verified_against_the_source() -> None:
+    """Карточка шага без идентификатора события не является доказательством.
+
+    По `event_id` аналитик сверяется с консолью источника; `matched_entities` — записанное
+    доказательство корреляции, то есть по каким признакам событие связано с инцидентом.
+    Оба поля бэкенд считал, а показаны они не были нигде.
+    """
+    app = _app()
+    block = app[app.index("function openStep(") : app.index("\nfunction stepNavigation(")]
+    assert "detection.matched_entities" in block
+    assert "step.event_id" in block
+    assert "Совпавшие признаки" in block
+
+    nav = app[app.index("function stepNavigation(") : app.index("\n}", app.index("function stepNavigation("))]
+    assert "openStep(target)" in nav
+    assert "order <= 1" in nav and "order >= steps.length" in nav, "переходы не выключаются на краях"
 
 
 def test_player_keeps_the_current_step_in_view() -> None:
