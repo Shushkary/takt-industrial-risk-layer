@@ -46,6 +46,35 @@ class ManualCorrelationUseCase:
         return bool(rid) and any(item.manual and item.request_id == rid for item in case.correlation_evidence)
 
     @staticmethod
+    def _carried_evidence(
+        source: Case, *, keep: set[str], covered: set[str], action: str
+    ) -> list[CorrelationEvidence]:
+        """Записи об отборе, переносимые вместе с событиями в другой кейс.
+
+        Без переноса кейс после объединения или разделения не мог ответить, чем было отобрано
+        событие: механизм оставался записанным в исходном кейсе, а на вкладке цепочки все
+        перенесённые события выглядели как «основание не записано».
+
+        Переносятся только записи о событиях, которые действительно оказались в кейсе-приёмнике
+        и ещё не имеют там собственной записи. Записи уровня кейса (объединение, разделение)
+        описывают операции над исходным кейсом и не переносятся.
+
+        Идентификатор запроса при переносе снимается: это ключ идемпотентности команды к
+        конкретному кейсу, и в чужом кейсе он заставил бы `_already_applied` считать
+        применённой команду, которой там не было.
+        """
+        carried: list[CorrelationEvidence] = []
+        for item in source.correlation_evidence:
+            if not item.event_id or item.event_id not in keep or item.event_id in covered:
+                continue
+            origin = f"перенесено при {action} из кейса {source.case_id}"
+            moved = deepcopy(item)
+            moved.reason = f"{origin}: {item.reason}" if item.reason else origin
+            moved.request_id = ""
+            carried.append(moved)
+        return carried
+
+    @staticmethod
     def _recalculate(case: Case) -> None:
         remaining = set(case.normalized_event_ids)
         case.invariant_hit_records = [item for item in case.invariant_hit_records if item.event_ref in remaining]
@@ -109,6 +138,14 @@ class ManualCorrelationUseCase:
         target.invariant_hit_records.extend(deepcopy(source.invariant_hit_records))
         target.correlation_fingerprints = list(dict.fromkeys([*target.correlation_fingerprints, *source.correlation_fingerprints]))
         target.related_cases = list(dict.fromkeys([*target.related_cases, source.case_id]))
+        target.correlation_evidence.extend(
+            self._carried_evidence(
+                source,
+                keep=set(target.normalized_event_ids),
+                covered={item.event_id for item in target.correlation_evidence if item.event_id},
+                action="объединении",
+            )
+        )
         target.correlation_evidence.append(CorrelationEvidence(
             event_id="", fingerprint="", rule="manual_merge", manual=True,
             reason=reason, request_id=cmd.request_id.strip(),
@@ -135,10 +172,13 @@ class ManualCorrelationUseCase:
         for observation in new_case.observations:
             observation.event_ids = [event_id for event_id in observation.event_ids if event_id in selected]
         new_case.observations = [item for item in new_case.observations if item.event_ids]
-        new_case.correlation_evidence = [CorrelationEvidence(
-            event_id="", fingerprint="", rule="manual_split", manual=True,
-            reason=reason, request_id=cmd.request_id.strip(),
-        )]
+        new_case.correlation_evidence = [
+            *self._carried_evidence(source, keep=set(selected), covered=set(), action="разделении"),
+            CorrelationEvidence(
+                event_id="", fingerprint="", rule="manual_split", manual=True,
+                reason=reason, request_id=cmd.request_id.strip(),
+            ),
+        ]
         source.normalized_event_ids = [event_id for event_id in source.normalized_event_ids if event_id not in selected]
         source.related_cases = list(dict.fromkeys([*source.related_cases, new_case.case_id]))
         self._recalculate(source)
