@@ -103,7 +103,7 @@ python -m takt.tools.load_dataset --source ot   --path tests/fixtures/pt_techlab
 Регрессия: [`tests/test_pt_techlab_inc_002.py`](../../tests/test_pt_techlab_inc_002.py).
 
 События цепочки размечены фазами kill chain и техниками MITRE ATT&CK. Хронология с
-объяснением того, чем ТАКТ выделил каждый шаг, — вкладка «Симуляция»
+объяснением того, чем ТАКТ выделил каждый шаг, — вкладка «Цепочка атаки»
 ([simulation.md](simulation.md)). Внешняя цепочка из корпуса AIT-ADS —
 [`tests/fixtures/pt_techlab/ext_001/`](../../tests/fixtures/pt_techlab/ext_001/).
 

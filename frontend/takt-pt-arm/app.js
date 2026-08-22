@@ -15,11 +15,11 @@ const POLL_MS = 15000;
 // Пояснения к блокам и значениям. Ключ совпадает с data-help в разметке.
 // Каждая запись отвечает на три вопроса: что это, откуда берётся, что с этим делать.
 const HELP = {
-  // --- Вкладка «Симуляция» ---------------------------------------------
+  // --- Вкладка «Цепочка атаки» -----------------------------------------
   simulation: {
-    title: 'Вкладка «Симуляция»',
+    title: 'Реконструкция цепочки атаки',
     body: [
-      'Хронология цепочки атаки по этому кейсу: шаги в порядке времени, фаза каждого шага и то, каким механизмом ТАКТ его выделил.',
+      'Восстановление хода атаки по событиям, которые уже приняты в этот кейс: шаги в порядке времени, фаза каждого шага и то, каким механизмом ТАКТ его выделил. Это разбор произошедшего, а не эмуляция атаки и не синтетический прогон — ни одно событие здесь не придумано продуктом.',
       'В хронологию попадают только события с разметкой фазы. Разметка приходит от источника или от датасета, ТАКТ её не вычисляет: события без фазы остаются в кейсе, но шагом цепочки не считаются, и их число показано отдельно.',
       'Что делать: пройти цепочку по шагам и проверить, каждый ли шаг объясняется тем основанием, которое назвал продукт.',
     ],
@@ -35,7 +35,7 @@ const HELP = {
   counter_time: {
     title: 'Счётчики времени',
     body: [
-      'Слева время разбора в ТАКТ, справа — расчётное время ручного разбора. Обе величины модельные: число действий умножено на коэффициент.',
+      'Плитка «Время разбора» показывает две величины через косую черту в том же порядке, что и подпись под ней: сначала ТАКТ, затем ручной разбор. Обе модельные — число действий умножено на коэффициент.',
       'Отдельного сокращения времени здесь нет намеренно. Модельное время пропорционально действиям, поэтому его сокращение совпало бы с сокращением действий и выглядело бы вторым независимым доказательством, которым не является.',
       'Что делать: сравнивать порядок величин. Настоящее время разбора даёт только парный прогон с наблюдателем — docs/pt_techlab/baseline_methodology.md.',
     ],
@@ -43,8 +43,8 @@ const HELP = {
   counters: {
     title: 'Трудоёмкость разбора',
     body: [
-      'Два счётчика: сколько действий потребовал бы ручной разбор того же инцидента и сколько их записано в ТАКТ.',
-      'Числа растут по мере проигрывания, итог совпадает с ответом /simulation.',
+      'Четыре плитки: расчётное число действий при ручном разборе, замеренное число действий в ТАКТ, модельное время по обеим сторонам и сокращение действий.',
+      'Все четыре относятся к кейсу целиком и от позиции плеера не зависят: ручная оценка считается по составу кейса, замер в ТАКТ — по журналу действий, и ни то ни другое не накапливается по шагам цепочки.',
       'Что делать: смотреть на разницу как на порядок величины, а не как на точный замер — откуда берётся каждое число, показывает «Методика расчёта».',
     ],
   },
@@ -67,7 +67,7 @@ const HELP = {
   reduction: {
     title: 'Сокращение действий',
     body: [
-      'Разница между расчётом ручного процесса и замером в ТАКТ, в процентах от ручного.',
+      'Разница между расчётом ручного процесса и замером в ТАКТ, в процентах от ручного. Значение относится к кейсу целиком и по мере проигрывания не меняется.',
       'Целевой ориентир ТЗ — не менее 30%.',
       'Что делать: подтверждать парным прогоном с наблюдателем; до него это оценка.',
     ],
@@ -826,6 +826,7 @@ async function refresh() {
     const data = await api('/cases');
     cases = Array.isArray(data) ? data : data.items || [];
     renderQueue();
+    if (!$('#simulationView').hidden && simulation) renderCaseSelect();
     setConnection('ok');
     $('#lastSync').textContent = `обновлено ${utc(new Date().toISOString())} UTC`;
     if (!selectedCaseId && cases.length) {
@@ -857,7 +858,7 @@ $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
 
 // ---------------------------------------------------------------------------
-// Вкладка «Симуляция»: хронология цепочки, счётчики трудоёмкости, граф атаки
+// Вкладка «Цепочка атаки»: реконструкция хода атаки, счётчики трудоёмкости, граф
 // ---------------------------------------------------------------------------
 
 // Цвета фаз. Порядок соответствует доменному перечню KillChainPhase — по нему строится
@@ -880,13 +881,16 @@ let simulation = null;
 let simCursor = 0;
 let simTimer = null;
 
-// Значение счётчика на шаге: ровное распределение с остатком на последнем шаге.
-// Так итог после проигрывания совпадает с числом из /simulation, а не «примерно».
-function cumulative(total, steps, index) {
-  if (steps <= 0) return 0;
-  if (index >= steps) return total;
-  return Math.round((total * index) / steps);
-}
+// Счётчики трудоёмкости позицией плеера не двигаются — намеренно.
+//
+// Раньше итоговые значения раскладывались по шагам пропорционально позиции, и на нулевой
+// позиции экран показывал «0 действий вручную, 0 в ТАКТ» рядом с «сокращение 88.6%», а на
+// первом шаге — «3 против 0», то есть стопроцентное сокращение. Ни одно из промежуточных
+// чисел ничего не измеряло: ручная оценка считается по составу кейса, замер в ТАКТ — по
+// журналу действий, и ни то ни другое не накапливается по шагам размеченной цепочки.
+//
+// Плеер двигает то, что действительно меняется по шагам: позицию, подсветку графа, состав
+// пройденных фаз. Трудоёмкость относится к кейсу целиком и показывается сразу.
 
 // Коэффициент модельной оценки времени. Задаётся оператором: измеренного значения нет,
 // поэтому значение по умолчанию — объявленное допущение, а не величина из методики.
@@ -906,10 +910,23 @@ function phaseColor(phase) {
   return PHASE_COLORS[phase] || '#64748b';
 }
 
+// Тот же текст стоит в разметке как начальное состояние: пустой абзац до загрузки
+// скрипта мигал бы. Здесь он нужен, чтобы вернуть подсказку после сообщения об ошибке.
+const SIM_EMPTY_HINT = 'Инцидент не выбран: очередь пуста или кейс ещё не открыт на вкладке «Расследование».';
+
 async function openSimulation() {
-  if (!selectedCaseId) return;
+  if (!selectedCaseId) {
+    $('#simCase').hidden = true;
+    $('#simBody').hidden = true;
+    $('#simEmpty').hidden = false;
+    $('#simEmpty').textContent = SIM_EMPTY_HINT;
+    return;
+  }
   $('#simEmpty').hidden = true;
   $('#simBody').hidden = false;
+  // Шапка рисуется до запроса: если цепочка не построится, на экране всё равно должно быть
+  // видно, по какому инциденту это сказано, а список инцидентов — остаться доступным.
+  renderSimCase();
   try {
     const perAction = secondsPerAction();
     const query = perAction ? `?seconds_per_action=${perAction}` : '';
@@ -917,10 +934,11 @@ async function openSimulation() {
   } catch (error) {
     $('#simBody').hidden = true;
     $('#simEmpty').hidden = false;
-    $('#simEmpty').textContent = `Симуляция недоступна: ${error.message}`;
+    $('#simEmpty').textContent = `Цепочка не построена: ${error.message}`;
     return;
   }
   simCursor = 0;
+  renderSimCase();
   renderLegend();
   renderSteps();
   renderAttackGraph();
@@ -929,12 +947,45 @@ async function openSimulation() {
   updatePosition();
 }
 
+// Шапка вкладки: без неё на экране не было ни одного признака, какой инцидент разбирается,
+// а очередь на время разбора цепочки скрыта. Скриншот такой вкладки не привязан ни к чему.
+function renderSimCase() {
+  // Пока цепочка не пришла — сведения из очереди: шапка обязана быть верной и в состоянии
+  // ошибки, иначе на экране остаётся сообщение без указания, к какому инциденту оно относится.
+  const queued = cases.find((item) => item.case_id === selectedCaseId) || {};
+  const item = simulation && simulation.case_id === selectedCaseId ? simulation : queued;
+  $('#simCase').hidden = false;
+  $('#simCaseId').textContent = item.case_id || selectedCaseId || '—';
+  $('#simCaseStatus').textContent = term('case_status', item.status);
+  $('#simCaseRisk').textContent = `${term('risk_class', item.risk_class)} · ${score(item.risk_score)}`;
+  $('#simCaseRisk').className = `chip risk ${String(item.risk_class || '').toLowerCase()}`;
+  $('#simCaseTitle').textContent = item.title || '—';
+  renderCaseSelect();
+}
+
+// Переключение инцидента без ухода на вкладку «Расследование»: порядок тот же, что в очереди.
+function renderCaseSelect() {
+  const select = $('#simCaseSelect');
+  select.replaceChildren();
+  const ordered = [...cases].sort(
+    (a, b) => Number(b.risk_score) - Number(a.risk_score) || Number(b.event_count || 0) - Number(a.event_count || 0)
+  );
+  for (const item of ordered) {
+    const option = document.createElement('option');
+    option.value = item.case_id;
+    option.textContent = `${item.case_id} · ${term('risk_class', item.risk_class)} · ${item.title || '—'}`;
+    option.selected = item.case_id === selectedCaseId;
+    select.appendChild(option);
+  }
+}
+
 function renderLegend() {
   const box = $('#phaseLegend');
   box.replaceChildren();
   for (const phase of simulation.phases || []) {
     const item = document.createElement('span');
     item.className = 'legend-item';
+    item.dataset.phase = phase.phase;
     item.innerHTML = `<i style="background:${phaseColor(phase.phase)}"></i>${escapeHtml(phase.title_ru)} · ${phase.events}`;
     box.appendChild(item);
   }
@@ -984,7 +1035,7 @@ function chainGraph() {
 
 // Имя намеренно отличается от `renderGraph` панели «Связи сущностей». Обе функции лежат в
 // одной области видимости, и объявление ниже перекрывало объявление выше: открытие кейса
-// вызывало отрисовку графа атаки, читало `simulation.steps` у ещё не загруженной симуляции и
+// вызывало отрисовку графа атаки, читало `simulation.steps` у ещё не загруженного разбора и
 // падало — вкладка «Расследование» не открывалась вообще.
 function renderAttackGraph() {
   const svg = $('#attackGraph');
@@ -1057,13 +1108,22 @@ function paintProgress() {
   for (const element of document.querySelectorAll('#attackGraph .edge-line, #attackGraph .graph-node')) {
     element.classList.toggle('played', Number(element.dataset.order) <= simCursor);
   }
+  // Пройденные фазы — то, что действительно меняется по мере проигрывания, в отличие от
+  // счётчиков трудоёмкости.
+  const reached = new Set(
+    (simulation && simulation.steps ? simulation.steps : [])
+      .filter((step) => step.order <= simCursor)
+      .map((step) => step.attack_phase)
+  );
+  for (const item of document.querySelectorAll('#phaseLegend .legend-item')) {
+    item.classList.toggle('reached', reached.has(item.dataset.phase));
+  }
 }
 
 function updateCounters() {
   const effort = simulation.effort || {};
-  const steps = (simulation.steps || []).length;
-  const manual = cumulative(effort.current_actions || 0, steps, simCursor);
-  const takt = cumulative(effort.takt_actions || 0, steps, simCursor);
+  const manual = effort.current_actions || 0;
+  const takt = effort.takt_actions || 0;
   $('#manualActions').textContent = String(manual);
   $('#taktActions').textContent = String(takt);
   const reduction = effort.reduction_actions_percent;
@@ -1091,7 +1151,7 @@ function updateCounters() {
 
 function updatePosition() {
   const steps = (simulation && simulation.steps ? simulation.steps : []).length;
-  $('#playerPosition').textContent = `${simCursor} / ${steps}`;
+  $('#playerPosition').textContent = `шаг ${simCursor} из ${steps}`;
 }
 
 function renderSummary() {
@@ -1154,8 +1214,8 @@ function setCursor(next) {
   const steps = (simulation && simulation.steps ? simulation.steps : []).length;
   simCursor = Math.max(0, Math.min(steps, next));
   paintProgress();
-  updateCounters();
   updatePosition();
+  // Счётчики трудоёмкости здесь не пересчитываются: они относятся к кейсу целиком.
 }
 
 function stopPlayback() {
@@ -1206,6 +1266,12 @@ $('#stepBack').addEventListener('click', () => {
 $('#secondsPerAction').addEventListener('change', () => {
   if (!$('#simulationView').hidden) openSimulation();
 });
+$('#simCaseSelect').addEventListener('change', async (event) => {
+  stopPlayback();
+  await openCase(event.target.value);
+  openSimulation();
+});
+$('#toInvestigation').addEventListener('click', () => showTab('investigation'));
 $('#resetPlayer').addEventListener('click', () => {
   stopPlayback();
   setCursor(0);

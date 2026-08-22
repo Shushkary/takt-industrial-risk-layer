@@ -20,7 +20,7 @@
 
 /* Атрибут hidden обязан скрывать элемент даже там, где авторское правило задаёт display.
    Браузерное `[hidden] { display: none }` слабее правила по классу: без !important
-   `.layout { display: grid }` перебивал его, и вкладки «Расследование» и «Симуляция»
+   `.layout { display: grid }` перебивал его, и вкладки «Расследование» и «Цепочка атаки»
    показывались одновременно. */
 [hidden] {
   display: none !important;
@@ -624,9 +624,52 @@ ul.plain li {
   background: #172033;
 }
 
-/* Симуляция */
+/* Реконструкция цепочки атаки */
 .simulation {
   margin: 12px;
+}
+
+/* Шапка вкладки: какой инцидент разбирается и переход к нему в расследовании. */
+.sim-case {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.sim-case-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sim-case-head .case-title {
+  margin: 0;
+  font-size: 14px;
+}
+
+.sim-case-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sim-case-nav select {
+  max-width: 320px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
 }
 
 .head-actions {
@@ -684,6 +727,14 @@ ul.plain li {
   margin-bottom: 10px;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* Пройденные фазы — то, что двигает плеер, в отличие от счётчиков трудоёмкости.
+   Отмечается достигнутое, а не гасится недостигнутое: приглушённый текст 12 кегля не
+   проходит по контрасту, а вкладка до первого шага выглядела бы выключенной. */
+.legend-item.reached {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .legend-item i {

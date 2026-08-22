@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260821-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260822-01" />
   </head>
   <body>
     <header class="top">
@@ -15,7 +15,7 @@
       </div>
       <nav class="tabs" aria-label="Режим работы">
         <button id="tabInvestigation" class="tab active" type="button" aria-pressed="true">Расследование</button>
-        <button id="tabSimulation" class="tab" type="button" aria-pressed="false">Симуляция</button>
+        <button id="tabSimulation" class="tab" type="button" aria-pressed="false">Цепочка атаки</button>
       </nav>
       <div class="top-state">
         <span id="connection" class="conn">подключение</span>
@@ -178,11 +178,25 @@
 
     <section id="simulationView" class="panel simulation" hidden aria-labelledby="simTitle">
       <div class="panel-head">
-        <h2 id="simTitle">Симуляция цепочки атаки</h2>
-        <button class="help" type="button" data-help="simulation" aria-label="Пояснение: вкладка симуляции">?</button>
+        <h2 id="simTitle">Реконструкция цепочки атаки</h2>
+        <button class="help" type="button" data-help="simulation" aria-label="Пояснение: реконструкция цепочки атаки">?</button>
       </div>
 
-      <p id="simEmpty" class="muted pad">Выберите кейс в очереди на вкладке «Расследование».</p>
+      <div id="simCase" class="sim-case" hidden>
+        <div class="sim-case-head">
+          <span id="simCaseId" class="case-id mono">—</span>
+          <span id="simCaseStatus" class="chip">—</span>
+          <span id="simCaseRisk" class="chip">—</span>
+          <h3 id="simCaseTitle" class="case-title">—</h3>
+        </div>
+        <div class="sim-case-nav">
+          <label for="simCaseSelect" class="muted small">Инцидент</label>
+          <select id="simCaseSelect"></select>
+          <button id="toInvestigation" class="link" type="button">Открыть в расследовании</button>
+        </div>
+      </div>
+
+      <p id="simEmpty" class="muted pad">Инцидент не выбран: очередь пуста или кейс ещё не открыт на вкладке «Расследование».</p>
 
       <div id="simBody" hidden>
         <div class="block">
@@ -199,6 +213,7 @@
             <span class="muted small">допущение для оценки времени, не замер</span>
             <button class="help sm" type="button" data-help="seconds_per_action" aria-label="Пояснение: коэффициент времени">?</button>
           </div>
+          <p class="muted small">Счётчики описывают кейс целиком: от позиции плеера они не зависят.</p>
           <div class="counters">
             <div class="counter">
               <span class="counter-label">Аналитик вручную (модель) <button class="help sm" type="button" data-help="counter_manual" aria-label="Пояснение: счётчик ручного процесса">?</button></span>
@@ -218,7 +233,7 @@
             <div class="counter">
               <span class="counter-label">Сокращение действий <button class="help sm" type="button" data-help="reduction" aria-label="Пояснение: сокращение">?</button></span>
               <span id="reductionValue" class="counter-value">—</span>
-              <span class="counter-sub muted small">итог совпадает с /simulation</span>
+              <span class="counter-sub muted small">по всему кейсу</span>
             </div>
           </div>
         </div>
@@ -272,6 +287,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260821-02"></script>
+    <script src="./app.min.js?v=20260822-01"></script>
   </body>
 </html>

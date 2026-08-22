@@ -1,4 +1,4 @@
-"""Вкладка «Симуляция» в АРМ: связность разметки, реестра пояснений и сборки.
+"""Вкладка «Цепочка атаки» в АРМ: связность разметки, реестра пояснений и сборки.
 
 АРМ намеренно живёт без сборщика SPA и без package.json, поэтому здесь проверяется то, что
 проверяемо статически и что ломается чаще всего: кнопка пояснения без записи в реестре,
@@ -90,6 +90,13 @@ def test_method_modal_states_what_is_measured_and_what_is_modelled() -> None:
         "tabInvestigation",
         "simulationView",
         "simBody",
+        "simCase",
+        "simCaseId",
+        "simCaseStatus",
+        "simCaseRisk",
+        "simCaseTitle",
+        "simCaseSelect",
+        "toInvestigation",
         "manualActions",
         "taktActions",
         "reductionValue",
@@ -123,7 +130,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260821-02"}, versions
+    assert versions >= {"20260822-01"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -144,16 +151,76 @@ def test_phase_colors_cover_the_domain_phases() -> None:
         assert f"{phase.value}:" in block, phase.value
 
 
-def test_counters_reach_the_reported_totals() -> None:
-    """Прирост счётчика распределён так, что итог совпадает с ответом API.
+def test_counters_do_not_depend_on_the_player_position() -> None:
+    """Счётчики трудоёмкости показывают значения кейса целиком, без интерполяции по шагам.
 
-    Ровное распределение с округлением может не сойтись на последнем шаге, поэтому в коде
-    предусмотрен явный возврат полного значения при достижении конца.
+    Прецедент: итоговые числа раскладывались по шагам пропорционально позиции плеера. На
+    нулевой позиции экран показывал «0 действий вручную, 0 в ТАКТ» рядом с «сокращение
+    88.6%», а на первом шаге — «3 против 0», то есть стопроцентное сокращение. Ни одно из
+    промежуточных чисел ничего не измеряло: ручная оценка считается по составу кейса, замер
+    в ТАКТ — по журналу действий, и ни то ни другое не накапливается по шагам цепочки.
     """
     app = _app()
-    start = app.index("function cumulative(")
-    block = app[start : app.index("}\n", app.index("return Math.round", start))]
-    assert "if (index >= steps) return total;" in block
+    assert "function cumulative(" not in app, "интерполяция счётчиков вернулась"
+
+    start = app.index("function updateCounters()")
+    block = app[start : app.index("\n}", start)]
+    assert "effort.current_actions" in block and "effort.takt_actions" in block
+    assert "simCursor" not in block, "счётчик снова зависит от позиции плеера"
+
+    # Плеер двигает состав пройденного, а не оценку трудоёмкости.
+    cursor = app[app.index("function setCursor(") : app.index("\n}", app.index("function setCursor("))]
+    assert "updateCounters()" not in cursor
+
+
+def test_the_case_under_analysis_is_named_in_the_view() -> None:
+    """Прецедент: вкладка не показывала, какой инцидент разбирается.
+
+    Идентификатор и заголовок приходили в ответе API и выбрасывались, а очередь на время
+    разбора скрыта — на экране не оставалось ни одного признака кейса, и скриншот вкладки
+    нельзя было приложить к отчёту.
+    """
+    app = _app()
+    start = app.index("function renderSimCase()")
+    block = app[start : app.index("\n}", start)]
+    for element, value in (
+        ("#simCaseId", "case_id"),
+        ("#simCaseStatus", "status"),
+        ("#simCaseRisk", "risk_class"),
+        ("#simCaseTitle", "title"),
+    ):
+        assert element in block and value in block, element
+    # Источник сведений — ответ по цепочке, а пока его нет — запись очереди.
+    assert "simulation.case_id === selectedCaseId" in block
+    assert "cases.find(" in block
+    # Инцидент переключается, не покидая вкладку.
+    assert "$('#simCaseSelect').addEventListener('change'" in app
+
+    # Шапка рисуется до запроса и переживает ошибку: иначе сообщение «Цепочка не построена»
+    # висит без указания инцидента, а список инцидентов исчезает вместе со скрытой шапкой —
+    # из состояния ошибки становится нечем выбрать другой кейс.
+    opener = app[
+        app.index("async function openSimulation()") : app.index("\n}", app.index("async function openSimulation()"))
+    ]
+    assert opener.index("renderSimCase()") < opener.index("await api("), "шапка рисуется после запроса"
+    catch = opener[opener.index("} catch (error) {") :]
+    assert "$('#simCase').hidden = true" not in catch, "шапка прячется вместе с выбором инцидента"
+
+
+def test_view_is_not_called_a_simulation() -> None:
+    """«Симуляция» на рынке — эмуляция атаки (BAS), а вкладка разбирает принятые события.
+
+    Название обещало бы синтетику ровно там, где продукт доказывает подлинность данных.
+    Путь эндпоинта `/cases/{id}/simulation` — часть контракта и не переименовывается;
+    проверяется то, что читает человек.
+    """
+    index = _index()
+    start = index.index('id="tabSimulation"')
+    assert "Цепочка атаки" in index[start : index.index("</button>", start)]
+
+    view = index[index.index('id="simulationView"') : index.index('id="modal"')]
+    assert "Реконструкция цепочки атаки" in view
+    assert "имуляц" not in view
 
 
 def test_simulation_view_declares_no_active_control() -> None:
@@ -177,7 +244,7 @@ def test_hidden_attribute_is_enforced_over_author_display() -> None:
     """Атрибут hidden обязан скрывать элемент, даже если класс задаёт display.
 
     Прецедент: `.layout { display: grid }` перебивал браузерное `[hidden] { display: none }`,
-    и обе вкладки — «Расследование» и «Симуляция» — показывались одновременно. Разницы между
+    и обе вкладки — «Расследование» и «Цепочка атаки» — показывались одновременно. Разницы между
     вкладками не было видно вообще.
     """
     styles = _STYLES.read_text(encoding="utf-8")
