@@ -39,10 +39,27 @@ from takt.domain.entities.kill_chain import (
 )
 
 # Как называется механизм отбора в объяснении для аналитика.
+#
+# Значения приходят из трёх мест: сборка инцидента пивотом (`pivot`, `host-expansion`),
+# ручная корректировка связей аналитиком (`manual_*`) и конвейер приёма, который кладёт в
+# `rule` имя сработавшего правила корреляции из отпечатка `corr:<правило>:<хэш>`.
 _SELECTOR_TITLES = {
     "pivot": "пивот по отличительной сущности",
     "host-expansion": "расширение разбора до уровня узла",
+    "manual_attach": "ручная привязка аналитиком",
+    "manual_detach": "ручная отвязка аналитиком",
+    "manual_merge": "объединение кейсов аналитиком",
+    "manual_split": "разделение кейса аналитиком",
 }
+
+# Записи о связывании нет вообще. Это не то же самое, что незнакомый механизм: механизм может
+# быть записан и просто не иметь названия в словаре выше.
+_NO_EVIDENCE_TITLE = "основание не записано"
+
+_NO_EVIDENCE_REASON = (
+    "записи о связывании нет: так бывает у события, которым кейс был создан конвейером"
+    " приёма, и у событий, перенесённых в кейс при объединении"
+)
 
 
 class EventByIdsPort(Protocol):
@@ -111,6 +128,30 @@ class SimulateIncidentUseCase:
         }
 
 
+def _selector_title(selector: str) -> str:
+    """Как назвать механизм отбора аналитику.
+
+    Незнакомое непустое значение — это имя правила корреляции конвейера приёма. Назвать его
+    правилом честнее, чем объявить основание незаписанным: запись есть, и раньше кейс,
+    собранный конвейером, а не пивотом, показывал необъяснённым каждый свой шаг.
+    """
+    if not selector:
+        return _NO_EVIDENCE_TITLE
+    return _SELECTOR_TITLES.get(selector) or f"правило корреляции «{selector}»"
+
+
+def _selector_reason(selector: str, recorded: str) -> str:
+    """Основание отбора словами. Записанное не переписывается, пустое — объясняется."""
+    if recorded:
+        return recorded
+    if not selector:
+        return _NO_EVIDENCE_REASON
+    if selector in _SELECTOR_TITLES:
+        return ""
+    # Имя правила уже названо в заголовке — здесь важно, откуда взялась связь.
+    return "отнесено конвейером приёма по совпадению признаков"
+
+
 def _step(
     *,
     order: int,
@@ -137,9 +178,11 @@ def _step(
         "artifacts": [{"type": item.type.value, "value": item.value} for item in event.artifacts],
         "detection_explanation": {
             "selected_by": selector,
-            "selected_by_title_ru": _SELECTOR_TITLES.get(selector, "не зафиксировано"),
+            "selected_by_title_ru": _selector_title(selector),
             "matched_entities": list(getattr(evidence, "fields", []) or []),
-            "reason": getattr(evidence, "reason", "") if evidence is not None else "",
+            "reason": _selector_reason(
+                selector, getattr(evidence, "reason", "") if evidence is not None else ""
+            ),
             "invariants": list(invariants),
         },
     }

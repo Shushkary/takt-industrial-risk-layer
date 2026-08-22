@@ -191,6 +191,71 @@ def test_expansion_is_distinguishable_from_pivot() -> None:
     assert "расширением до уровня узла" in detection["reason"]
 
 
+def test_pipeline_correlation_rule_is_named_not_hidden() -> None:
+    """Кейс, собранный конвейером, не должен объявлять необъяснённым каждый свой шаг.
+
+    Прецедент: словарь механизмов знал только `pivot` и `host-expansion`, а конвейер приёма
+    кладёт в `rule` имя сработавшего правила корреляции из отпечатка `corr:<правило>:<хэш>`.
+    Механизм был записан, а вкладка показывала «не зафиксировано» — на любом кейсе, который
+    собрал конвейер, а не аналитик пивотом.
+    """
+    events = [_event("e-1", minutes=0, phase="c2")]
+    evidence = [
+        CorrelationEvidence(
+            event_id="e-1",
+            fingerprint="corr:host_user_5m:9f2c1ab4",
+            rule="host_user_5m",
+        )
+    ]
+    detection = SimulateIncidentUseCase(events=_Store(events)).execute(
+        _case(["e-1"], evidence=evidence)
+    )["steps"][0]["detection_explanation"]
+    assert detection["selected_by"] == "host_user_5m"
+    assert detection["selected_by_title_ru"] == "правило корреляции «host_user_5m»"
+    # Имя правила названо один раз — в заголовке; причина говорит, откуда взялась связь.
+    assert detection["reason"] == "отнесено конвейером приёма по совпадению признаков"
+
+
+@pytest.mark.parametrize(
+    ("rule", "expected"),
+    [
+        ("manual_attach", "ручная привязка аналитиком"),
+        ("manual_detach", "ручная отвязка аналитиком"),
+        ("manual_merge", "объединение кейсов аналитиком"),
+        ("manual_split", "разделение кейса аналитиком"),
+    ],
+)
+def test_manual_correlation_is_named_by_what_the_analyst_did(rule, expected) -> None:
+    """Ручная корректировка связей — тоже механизм отбора, и он записан."""
+    events = [_event("e-1", minutes=0, phase="execution")]
+    evidence = [
+        CorrelationEvidence(
+            event_id="e-1", fingerprint="", rule=rule, manual=True, reason="решение аналитика"
+        )
+    ]
+    detection = SimulateIncidentUseCase(events=_Store(events)).execute(
+        _case(["e-1"], evidence=evidence)
+    )["steps"][0]["detection_explanation"]
+    assert detection["selected_by_title_ru"] == expected
+    # Слова аналитика не переписываются.
+    assert detection["reason"] == "решение аналитика"
+
+
+def test_missing_evidence_says_so_and_explains_when_that_happens() -> None:
+    """Отсутствие записи отличается от незнакомого механизма и объясняется, а не выдумывается.
+
+    Записи нет у события, которым кейс был создан конвейером, и у событий, перенесённых при
+    объединении кейсов. Приписать им механизм означало бы выдать предположение за факт.
+    """
+    events = [_event("e-1", minutes=0, phase="impact")]
+    detection = SimulateIncidentUseCase(events=_Store(events)).execute(_case(["e-1"]))["steps"][0][
+        "detection_explanation"
+    ]
+    assert detection["selected_by"] == ""
+    assert detection["selected_by_title_ru"] == "основание не записано"
+    assert "объединении" in detection["reason"]
+
+
 def test_phase_summary_follows_attack_order() -> None:
     events = [
         _event("e-1", minutes=3, phase="impact"),

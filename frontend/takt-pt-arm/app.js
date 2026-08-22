@@ -1197,7 +1197,9 @@ function openStep(order) {
   const paragraphs = [
     `Что произошло: источник «${term('event_source', step.source)}» зафиксировал ${step.operation} в ${utc(step.observed_at)} UTC.`,
     `Фаза цепочки: ${step.attack_phase_title_ru}. Техника ATT&CK: ${step.mitre_technique || 'не сопоставлена'}. Разметка приходит от источника, ТАКТ её не вычисляет.`,
-    `Чем выделено: ${detection.selected_by_title_ru || 'не зафиксировано'}. ${detection.reason || ''}`,
+    // Механизм и основание соединяются тире, а не точкой: основание записано со строчной
+    // буквы, и после точки читалось бы как оборванная фраза. Пустая часть просто исчезает.
+    `Чем выделено: ${[detection.selected_by_title_ru || 'основание не записано', detection.reason].filter(Boolean).join(' — ')}.`,
     detection.invariants && detection.invariants.length
       ? `Сработавшие инварианты на этом событии: ${detection.invariants.map(invariantTitle).join(', ')}.`
       : 'Инварианты на этом событии не срабатывали: оно попало в кейс по связи сущностей, а не по признаку правила.',
