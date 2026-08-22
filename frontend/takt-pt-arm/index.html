@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260822-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260822-03" />
   </head>
   <body>
     <header class="top">
@@ -201,6 +201,40 @@
       <div id="simBody" hidden>
         <div class="block">
           <div class="block-head">
+            <h4>Плеер цепочки</h4>
+            <button class="help" type="button" data-help="player" aria-label="Пояснение: плеер цепочки">?</button>
+          </div>
+          <div class="player">
+            <button id="playPause" class="action inline" type="button">Воспроизвести</button>
+            <button id="stepBack" class="action inline" type="button">← Шаг</button>
+            <button id="stepForward" class="action inline" type="button">Шаг →</button>
+            <button id="resetPlayer" class="action inline" type="button">Сброс</button>
+            <span id="playerPosition" class="muted small">0 / 0</span>
+          </div>
+          <div id="phaseLegend" class="legend"></div>
+          <ol id="stepList" class="steps"></ol>
+        </div>
+
+        <div class="block">
+          <div class="block-head">
+            <h4>Граф атаки</h4>
+            <button class="help" type="button" data-help="attack_graph" aria-label="Пояснение: граф атаки">?</button>
+          </div>
+          <div class="graph-wrap">
+            <svg id="attackGraph" viewBox="0 0 960 320" role="img" aria-label="Граф сущностей цепочки атаки"></svg>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="block-head">
+            <h4>Итог разбора</h4>
+            <button class="help" type="button" data-help="sim_summary" aria-label="Пояснение: итог разбора">?</button>
+          </div>
+          <dl id="simSummary" class="facts"></dl>
+          <p class="muted small">ТАКТ не выполняет действия реагирования и не отправляет команды.</p>
+        </div>
+        <div class="block">
+          <div class="block-head">
             <h4>Трудоёмкость разбора</h4>
             <div class="head-actions">
               <button id="methodButton" class="link" type="button" data-help="effort_method">Методика расчёта</button>
@@ -238,40 +272,6 @@
           </div>
         </div>
 
-        <div class="block">
-          <div class="block-head">
-            <h4>Плеер цепочки</h4>
-            <button class="help" type="button" data-help="player" aria-label="Пояснение: плеер цепочки">?</button>
-          </div>
-          <div class="player">
-            <button id="playPause" class="action inline" type="button">Воспроизвести</button>
-            <button id="stepBack" class="action inline" type="button">← Шаг</button>
-            <button id="stepForward" class="action inline" type="button">Шаг →</button>
-            <button id="resetPlayer" class="action inline" type="button">Сброс</button>
-            <span id="playerPosition" class="muted small">0 / 0</span>
-          </div>
-          <div id="phaseLegend" class="legend"></div>
-          <ol id="stepList" class="steps"></ol>
-        </div>
-
-        <div class="block">
-          <div class="block-head">
-            <h4>Граф атаки</h4>
-            <button class="help" type="button" data-help="attack_graph" aria-label="Пояснение: граф атаки">?</button>
-          </div>
-          <div class="graph-wrap">
-            <svg id="attackGraph" viewBox="0 0 960 320" role="img" aria-label="Граф сущностей цепочки атаки"></svg>
-          </div>
-        </div>
-
-        <div class="block">
-          <div class="block-head">
-            <h4>Итог разбора</h4>
-            <button class="help" type="button" data-help="sim_summary" aria-label="Пояснение: итог разбора">?</button>
-          </div>
-          <dl id="simSummary" class="facts"></dl>
-          <p class="muted small">ТАКТ не выполняет действия реагирования и не отправляет команды.</p>
-        </div>
       </div>
     </section>
 
@@ -287,6 +287,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260822-02"></script>
+    <script src="./app.min.js?v=20260822-03"></script>
   </body>
 </html>

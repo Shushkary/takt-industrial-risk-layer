@@ -130,7 +130,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260822-02"}, versions
+    assert versions >= {"20260822-03"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -261,6 +261,25 @@ def test_tab_switch_hides_the_other_view() -> None:
     block = app[start : app.index("\n}", start)]
     assert ".layout" in block and "hidden = isSimulation" in block
     assert "$('#simulationView').hidden = !isSimulation" in block
+
+
+def test_effort_block_comes_after_the_chain() -> None:
+    """Вкладка открывается разбором, а не показателем эффективности.
+
+    Блок «Трудоёмкость разбора» стоял первым — метрика для покупателя перед тем, ради чего
+    аналитик открыл вкладку. У сравнимых продуктов страница инцидента открывается разбором
+    (Defender — attack story, Cortex — causality view), а показатели эффективности SOC живут
+    в отдельном разделе отчётов. Порядок: цепочка, граф, итог, и только потом цена разбора.
+    """
+    index = _index()
+    view = index[index.index('id="simulationView"') : index.index('id="modal"')]
+    order = [
+        view.index("<h4>Плеер цепочки</h4>"),
+        view.index("<h4>Граф атаки</h4>"),
+        view.index("<h4>Итог разбора</h4>"),
+        view.index("<h4>Трудоёмкость разбора</h4>"),
+    ]
+    assert order == sorted(order), "порядок блоков вкладки изменился"
 
 
 def test_time_difference_between_manual_and_takt_is_shown() -> None:
