@@ -426,6 +426,9 @@ def _row_to_case(row: sqlite3.Row) -> Case:
         dq_score=float(row["dq_score"]),
         dq_partial=bool(row["dq_partial"]),
         dq_reasons=list(json.loads(row["dq_reasons"] or "[]")),
+        # Колонка появилась позже: у дел, записанных до неё, векторов нет — это не ошибка,
+        # сборка в таком случае работает как раньше.
+        risk_vectors=dict(json.loads(row["risk_vectors"] or "{}")) if "risk_vectors" in row.keys() else {},
         last_event_source=str(row["last_event_source"] or ""),
         pdf_last_sha256=str(row["pdf_last_sha256"] if "pdf_last_sha256" in row.keys() else ""),
         pdf_last_generated_at=str(row["pdf_last_generated_at"] if "pdf_last_generated_at" in row.keys() else ""),

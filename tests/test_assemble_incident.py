@@ -361,3 +361,48 @@ def test_incident_risk_without_weights_falls_back_to_worst_case() -> None:
         seeds=[IncidentSeed.parse("user:smirnov")],
     )
     assert result.case.risk_score == pytest.approx(0.33)
+
+
+def test_incident_inherits_measured_vectors_of_its_parts() -> None:
+    """Сборка не теряет измеренную основу вошедших дел.
+
+    Ритм и организационный контекст меряются по событиям, а не выводятся из срабатываний:
+    в наборе маркеров ритма и контекста нет ни одного SOC-инварианта. Пока сборка считала
+    объединение с нулевого ритма и контекста, инцидент выходил слабее собственных частей и
+    держался только страховкой «не ниже худшего вошедшего дела» — то есть сборка не
+    добавляла к оценке ничего, хотя её смысл ровно обратный.
+    """
+    measured = {"rhythm": 0.75, "graph": 0.9, "context": 0.45, "user": 0.1, "data_quality": 0.0}
+    weak = _pipeline_case("pipeline-1", ["c2_external_dns"], 0.05, "LOW")
+    weak.risk_vectors = dict(measured)
+    shift = _pipeline_case("pipeline-2", ["out_of_shift_access"], 0.04, "LOW")
+
+    repo = InMemoryCaseStore()
+    repo.save(weak)
+    repo.save(shift)
+    use_case = AssembleIncidentUseCase(
+        events=_FakeEventStore(_chain_and_background()),
+        repo=repo,
+        weights=_WEIGHTS,
+    )
+    result = use_case.execute(case_id="INC-VECTORS", seeds=[IncidentSeed.parse("user:smirnov")])
+
+    vectors = result.case.risk_vectors
+    assert vectors["rhythm"] == pytest.approx(0.75), "измеренный ритм вошедшего дела потерян"
+    assert vectors["context"] == pytest.approx(0.45), "измеренный контекст вошедшего дела потерян"
+    # Пользовательский вектор поднят объединением: 0.1 у части, 0.7 по out_of_shift_access.
+    assert vectors["user"] == pytest.approx(0.7)
+
+
+def test_assembled_case_stores_its_own_vectors() -> None:
+    """Иначе повторная сборка поверх собранного дела снова считала бы с нуля."""
+    repo = InMemoryCaseStore()
+    repo.save(_pipeline_case("pipeline-1", ["c2_external_dns"], 0.05, "LOW"))
+    use_case = AssembleIncidentUseCase(
+        events=_FakeEventStore(_chain_and_background()),
+        repo=repo,
+        weights=_WEIGHTS,
+    )
+    result = use_case.execute(case_id="INC-STORED", seeds=[IncidentSeed.parse("user:smirnov")])
+
+    assert set(result.case.risk_vectors) == {"rhythm", "graph", "context", "user", "data_quality"}

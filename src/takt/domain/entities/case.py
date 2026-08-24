@@ -270,6 +270,11 @@ class Case:
     dq_score: float = 1.0
     dq_partial: bool = False
     dq_reasons: list[str] = field(default_factory=list)
+    # Векторы модели риска, измеренные при оценке (ритм, граф, контекст, пользователь,
+    # качество данных). Раньше они существовали только внутри расчёта и попадали в текст
+    # объяснения; сборке инцидента они нужны как измеренная основа, иначе объединение
+    # срабатываний считается с нулевого ритма и контекста и выходит слабее своих частей.
+    risk_vectors: dict[str, float] = field(default_factory=dict)
     last_event_source: str = ""
     manual_permits: list[ManualPermit] = field(default_factory=list)
     formal_verdict_records: list[FormalVerdictRecord] = field(default_factory=list)

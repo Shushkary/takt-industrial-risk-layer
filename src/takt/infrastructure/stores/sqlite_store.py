@@ -136,8 +136,8 @@ class SqliteCaseStore(CaseRepositoryPort):
                   correlation_fingerprints, correlation_evidence, related_cases, artifacts, findings,
                   primary_asset_id, trigger_operation, operator_id, invariant_hits,
                   observations, invariant_hit_records, manual_permits, formal_verdict_records, decision_records, remediation_attempts,
-                  dq_score, dq_partial, dq_reasons, last_event_source, raw_evidence_refs, pdf_last_sha256, pdf_last_generated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                  dq_score, dq_partial, dq_reasons, risk_vectors, last_event_source, raw_evidence_refs, pdf_last_sha256, pdf_last_generated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(case_id) DO UPDATE SET
                   status = excluded.status,
                   title = excluded.title,
@@ -166,6 +166,7 @@ class SqliteCaseStore(CaseRepositoryPort):
                   dq_score = excluded.dq_score,
                   dq_partial = excluded.dq_partial,
                   dq_reasons = excluded.dq_reasons,
+                  risk_vectors = excluded.risk_vectors,
                   last_event_source = excluded.last_event_source,
                   raw_evidence_refs = excluded.raw_evidence_refs,
                   pdf_last_sha256 = excluded.pdf_last_sha256,
@@ -200,6 +201,7 @@ class SqliteCaseStore(CaseRepositoryPort):
                     case.dq_score,
                     1 if case.dq_partial else 0,
                     json.dumps(case.dq_reasons, ensure_ascii=False),
+                    json.dumps(case.risk_vectors, ensure_ascii=False),
                     case.last_event_source,
                     _serialize_raw_evidence_refs(case.raw_evidence_refs),
                     case.pdf_last_sha256,

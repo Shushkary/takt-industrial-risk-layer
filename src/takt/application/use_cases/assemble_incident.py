@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 
+from takt.application.use_cases.risk_vectors import measured_base, vectors_to_dict
 from takt.domain.engines.incident_pivot import (
     PivotKey,
     assemble_by_pivot,
@@ -254,7 +255,9 @@ class AssembleIncidentUseCase:
         event_ids = [event.event_id for event in assembled]
         contributing = self._contributing_cases(set(event_ids), exclude_case_id=case_id)
         invariant_hits = sorted({hit for case in contributing for hit in case.invariant_hits})
-        risk_score, risk_class = _incident_risk(invariant_hits, contributing, assembled, self.weights)
+        risk_score, risk_class, risk_vectors = _incident_risk(
+            invariant_hits, contributing, assembled, self.weights
+        )
 
         case = Case(
             case_id=case_id,
@@ -265,6 +268,7 @@ class AssembleIncidentUseCase:
             created_at=now,
             normalized_event_ids=event_ids,
             xai_summary=_summary(seeds, core_ids, expanded_ids, expand_hosts, assembled),
+            risk_vectors=risk_vectors,
             primary_asset_id=_primary_asset(assembled),
             trigger_operation=assembled[0].operation if assembled else "",
             operator_id=actor,
@@ -433,7 +437,7 @@ def _incident_risk(
     contributing: Sequence[Case],
     assembled: Sequence[NormalizedEvent],
     weights: Mapping[str, float],
-) -> tuple[float, str]:
+) -> tuple[float, str, dict[str, float]]:
     """Риск собранного инцидента — по той же модели F(R, G, C, U, DQ), что и у события.
 
     Смысл сборки в том, что набор срабатываний инцидента больше любого отдельного из них:
@@ -447,16 +451,25 @@ def _incident_risk(
     опасного из вошедших кейсов — инцидент не бывает безопаснее своей худшей части.
     """
     if not contributing and not invariant_hits:
-        return 0.0, "UNKNOWN"
+        return 0.0, "UNKNOWN", {}
     if not _RISK_VECTOR_WEIGHTS <= set(weights):
         # Без весов из `config/risk_weights.yaml` модель F(R, G, C, U, DQ) неприменима.
         # Выдумывать веса нельзя, поэтому берётся худший из вошедших кейсов —
         # оценка заведомо не завышена.
-        return _worst_of(contributing)
+        worst_score, worst_class = _worst_of(contributing)
+        return worst_score, worst_class, {}
 
     dq_score = min((case.dq_score for case in contributing), default=1.0)
     assessment = combine_risk(
-        risk_vectors_from_invariants(invariant_hits, data_quality=1.0 - dq_score),
+        # Измеренная основа переносится из вошедших дел: ритм и организационный контекст
+        # меряются по событиям, срабатывания их только поднимают. Без этого объединение
+        # считалось с нуля и выходило слабее своих частей — сборка не добавляла ничего.
+        risk_vectors_from_invariants(
+            invariant_hits,
+            base_rhythm=measured_base(contributing, "rhythm"),
+            base_context=measured_base(contributing, "context"),
+            data_quality=1.0 - dq_score,
+        ),
         weights,
         dq_score=dq_score,
         eps_estimate=_events_per_second(assembled),
@@ -464,12 +477,14 @@ def _incident_risk(
         eps_soft_cap=float(weights.get("eps_soft_cap", 100_000)),
         risk_class_thresholds=weights.get("risk_class_thresholds"),
     )
+    vectors = vectors_to_dict(assessment.breakdown)
     if not contributing:
-        return assessment.score, assessment.risk_class
+        return assessment.score, assessment.risk_class, vectors
     top_score, top_class = _worst_of(contributing)
     return (
         max(assessment.score, top_score),
         worst_risk_class(assessment.risk_class, top_class),
+        vectors,
     )
 
 

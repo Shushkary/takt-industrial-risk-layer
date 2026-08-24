@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from takt.application.system_defaults import default_clock, default_hasher, default_id_provider
+from takt.application.use_cases.risk_vectors import vectors_to_dict
 from takt.domain.engines.alert_fatigue import (
     compute_burst_fingerprint,
     correlation_fingerprints,
@@ -30,9 +31,9 @@ from takt.domain.invariants.evaluator import (
 )
 from takt.domain.invariants.rule_spec import InvariantRuleSpec, default_extended_rule_specs, max_rule_context_window
 from takt.domain.ports.baseline import ExpectedBehaviorPort
-from takt.domain.vocabulary import WORK_PHASE_RU, risk_class_ru
 from takt.domain.ports.hasher import HasherPort
 from takt.domain.ports.system_ports import IdProviderPort, SystemClockPort
+from takt.domain.vocabulary import WORK_PHASE_RU, risk_class_ru
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +257,9 @@ class AssessRiskUseCase:
             dq_score=dq.dq_score,
             dq_partial=dq.partial_observability,
             dq_reasons=list(dq.reasons),
+            # Измеренные векторы сохраняются вместе с делом: сборке инцидента нужна
+            # измеренная основа, а не только итоговый балл.
+            risk_vectors=vectors_to_dict(assessment.breakdown),
             last_event_source=event.source.value,
         )
         case.append_audit("case created by AssessRiskUseCase", ts)

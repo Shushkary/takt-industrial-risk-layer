@@ -244,6 +244,7 @@ def _add_missing_case_columns(conn: sqlite3.Connection, cols: set[str]) -> None:
         "related_cases": "ALTER TABLE cases ADD COLUMN related_cases TEXT NOT NULL DEFAULT '[]'",
         "artifacts": "ALTER TABLE cases ADD COLUMN artifacts TEXT NOT NULL DEFAULT '[]'",
         "findings": "ALTER TABLE cases ADD COLUMN findings TEXT NOT NULL DEFAULT '[]'",
+        "risk_vectors": "ALTER TABLE cases ADD COLUMN risk_vectors TEXT NOT NULL DEFAULT '{}'",
     }
     for column, sql in migrations.items():
         if column not in cols:
