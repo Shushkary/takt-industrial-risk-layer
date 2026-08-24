@@ -356,6 +356,8 @@ let selectedEntity = null;
 let pollTimer = null;
 let lastFocused = null;
 let currentCaseStatus = '';
+let lastWorkspaceEvents = [];
+let lastCaseFindings = [];
 
 // --- Работа с API ----------------------------------------------------------
 
@@ -574,6 +576,7 @@ async function openCase(caseId) {
 function renderCase(workspace) {
   const item = workspace.case || {};
   currentCaseStatus = item.status || '';
+  lastWorkspaceEvents = workspace.events || [];
   closeStatusForm();
   $('#caseId').textContent = item.case_id || '—';
   $('#caseStatus').textContent = term('case_status', item.status);
@@ -1173,6 +1176,7 @@ function resetEntityPanel() {
   $('#entityType').textContent = '—';
   $('#entityFacts').replaceChildren();
   $('#entityEnvironment').replaceChildren();
+  $('#findingComment').value = '';
 }
 
 async function openEntity(type, id) {
@@ -1181,6 +1185,7 @@ async function openEntity(type, id) {
   $('#entityBody').hidden = false;
   $('#entityType').textContent = term('entity_type', type);
   $('#entityId').textContent = id;
+  $('#findingComment').value = '';
   const facts = $('#entityFacts');
   facts.replaceChildren();
   // На одноколоночной раскладке карточка уезжает вниз страницы: без этого клик
@@ -1244,6 +1249,7 @@ async function openEntity(type, id) {
 }
 
 function renderFindings(findings) {
+  lastCaseFindings = findings;
   const list = $('#findingList');
   list.replaceChildren();
   if (!findings.length) {
@@ -1251,22 +1257,48 @@ function renderFindings(findings) {
     return;
   }
   for (const finding of findings) {
+    const text = finding.text || `${finding.entity_type || ''}: ${finding.entity_id || ''}`;
+    const meta = [];
+    if (finding.author) meta.push(finding.author);
+    if (finding.created_at) meta.push(utc(finding.created_at));
+    if ((finding.event_ids || []).length) meta.push(`событий: ${finding.event_ids.length}`);
     const row = document.createElement('li');
-    row.textContent = finding.text || `${finding.entity_type || ''}: ${finding.entity_id || ''}`;
+    row.innerHTML = `<div>${escapeHtml(text)}</div>${meta.length ? `<div class="muted small">${escapeHtml(meta.join(' · '))}</div>` : ''}`;
     list.appendChild(row);
   }
 }
 
+// Идентификаторы событий кейса, где встречается сущность: находка привязывается к
+// доказательству (ТЗ §5.5), а не остаётся текстовой пометкой без ссылки на события.
+function eventIdsForEntity(entity) {
+  const fieldByType = { host: 'host_id', user: 'user_id', process: 'process_id' };
+  const field = fieldByType[entity.type];
+  if (!field) return [];
+  return lastWorkspaceEvents.filter((event) => event.entities && event.entities[field] === entity.id).map((event) => event.event_id);
+}
+
 async function addFinding() {
   if (!selectedEntity || !selectedCaseId) return;
+  const comment = $('#findingComment').value.trim();
+  const baseText = `${term('entity_type', selectedEntity.type)}: ${selectedEntity.id}`;
+  const text = comment ? `${baseText} — ${comment}` : baseText;
+  if (lastCaseFindings.some((item) => item.text === text)) {
+    toast('Эта сущность уже в находках');
+    return;
+  }
   const button = $('#addFinding');
   button.disabled = true;
   try {
     await api(`/cases/${encodeURIComponent(selectedCaseId)}/findings`, {
       method: 'POST',
-      body: JSON.stringify({ text: `${term('entity_type', selectedEntity.type)}: ${selectedEntity.id}` }),
+      body: JSON.stringify({
+        text,
+        event_ids: eventIdsForEntity(selectedEntity),
+        artifacts: [{ type: selectedEntity.type, value: selectedEntity.id }],
+      }),
     });
     toast('Находка записана в журнал кейса');
+    $('#findingComment').value = '';
     await openCase(selectedCaseId);
   } catch (error) {
     toast(`Находка не сохранена: ${error.message}`);

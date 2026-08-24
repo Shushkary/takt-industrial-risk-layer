@@ -706,6 +706,20 @@ tr.row-expanded {
   cursor: default;
 }
 
+#findingComment {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+  background: var(--bg);
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
 ul.plain {
   margin: 0;
   padding-left: 18px;
