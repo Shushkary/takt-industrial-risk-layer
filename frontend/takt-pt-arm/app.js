@@ -782,6 +782,14 @@ async function openEntity(type, id) {
   $('#entityId').textContent = id;
   const facts = $('#entityFacts');
   facts.replaceChildren();
+  // На одноколоночной раскладке карточка уезжает вниз страницы: без этого клик
+  // выглядит как «ничего не произошло».
+  if (window.matchMedia('(max-width: 1200px)').matches) {
+    $('#entityBody').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  for (const button of document.querySelectorAll('.entity-link')) {
+    button.classList.toggle('active', button.dataset.entityType === type && button.dataset.entityId === id);
+  }
   try {
     const card = await api(`/entities/${encodeURIComponent(type)}/${encodeURIComponent(id)}/card`);
     const typicality = card.typicality || {};

@@ -91,6 +91,20 @@ body {
   }
 }
 
+.panel.side {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+}
+
+@media (max-width: 1200px) {
+  .panel.side {
+    position: static;
+    max-height: none;
+  }
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -465,6 +479,12 @@ tr.row-expanded {
   font-family: var(--mono);
   cursor: pointer;
   text-decoration: underline dotted;
+}
+
+.entity-link.active {
+  background: rgba(56, 189, 248, 0.18);
+  border-radius: 3px;
+  padding: 1px 3px;
 }
 
 /* Связи */
