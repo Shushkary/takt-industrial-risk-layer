@@ -167,6 +167,24 @@
 
           <div class="block">
             <div class="block-head">
+              <h4>Реконструкция цепочки</h4>
+              <button class="help" type="button" data-help="reconstruction" aria-label="Пояснение: реконструкция цепочки">?</button>
+            </div>
+            <p id="reconstructionEntry" class="muted small pad">—</p>
+            <ol id="reconstructionSteps" class="plain"></ol>
+            <p class="muted small">Реконструкция строится по событиям кейса и требует проверки аналитиком: связь по времени и узлу не означает причинности.</p>
+          </div>
+
+          <div class="block">
+            <div class="block-head">
+              <h4>Связанные кейсы</h4>
+              <button class="help" type="button" data-help="related_cases" aria-label="Пояснение: связанные кейсы">?</button>
+            </div>
+            <div id="relatedCasesList" class="chips"></div>
+          </div>
+
+          <div class="block">
+            <div class="block-head">
               <h4>Варианты реагирования</h4>
               <button class="help" type="button" data-help="response" aria-label="Пояснение: варианты реагирования">?</button>
             </div>

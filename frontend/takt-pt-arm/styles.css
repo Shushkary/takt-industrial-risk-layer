@@ -367,6 +367,18 @@ body {
   border-color: var(--warn);
 }
 
+.chip-button {
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chip-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* Обоснованность вывода и маршрут добора контекста.
    Вердикт и оценка стоят рядом намеренно: «нелегитимное» с низкой обоснованностью и
    «нелегитимное» с высокой — разные основания для решения, и различать их надо без

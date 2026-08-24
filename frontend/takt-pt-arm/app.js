@@ -183,6 +183,22 @@ const HELP = {
       'Что делать: искать переходы между узлами и смену учётной записи — по ним видно перемещение внутри сети.',
     ],
   },
+  reconstruction: {
+    title: 'Реконструкция цепочки',
+    body: [
+      'Точка входа и шаги «назад во времени»: запуск процесса (от кого запущен, что запущено) и сетевое перемещение (откуда обратился, куда). Строится по событиям кейса в порядке времени.',
+      'Кто именно вызвал шаг, приходит из данных источника; ТАКТ не решает, является ли переход атакой. Событие вида «антивирус завершил проверку» тоже попадёт сюда как сетевое перемещение, если у него заполнены оба адреса.',
+      'Что делать: проверять каждый шаг по операции события, а не доверять одной подписи «сетевое перемещение» или «запуск процесса».',
+    ],
+  },
+  related_cases: {
+    title: 'Связанные кейсы',
+    body: [
+      'Кейсы, влитые в этот при сборке пивотом или ручной корректировкой связей.',
+      'Клик открывает связанный кейс в этом же окне.',
+      'Что делать: смотреть на число связанных кейсов как на масштаб распространения — сколько отдельных срабатываний объединены в один разбор.',
+    ],
+  },
   entity: {
     title: 'Карточка сущности',
     body: [
@@ -575,9 +591,59 @@ function renderCase(workspace) {
   renderInvariants(item.invariant_details || [], item.invariant_hits || []);
   renderChain(workspace.events || [], item.correlation_evidence || []);
   renderGraph(workspace.graph || { nodes: [], edges: [] });
+  renderReconstruction(workspace.attack_chain || {});
+  renderRelatedCases(item.related_cases || []);
   renderResponse(workspace.events || [], workspace.artifacts || [], item.correlation_evidence || []);
   renderFindings(item.findings || []);
   renderJournal(item.audit_log || []);
+}
+
+// --- Реконструкция цепочки и связанные кейсы --------------------------------
+//
+// Оба блока приходят в том же ответе workspace/case, что уже был запрошен: attack_chain
+// (точка входа + шаги) и related_cases (кейсы, влитые в этот при сборке пивотом или ручной
+// корректировкой). Раньше это не показывалось на вкладке расследования вовсе — реконструкция
+// была только в «Симуляции», а связанные кейсы виднелись лишь строкой хэшей в карточке сущности.
+
+const CHAIN_STEP_KIND_RU = {
+  process_spawn: 'запуск процесса',
+  network_move: 'сетевое перемещение',
+};
+
+function renderReconstruction(attackChain) {
+  const steps = attackChain.steps || [];
+  $('#reconstructionEntry').textContent = attackChain.entry_point
+    ? `Точка входа: ${attackChain.entry_point}`
+    : 'Точка входа не определена';
+  const list = $('#reconstructionSteps');
+  list.replaceChildren();
+  if (!steps.length) {
+    list.innerHTML = '<li class="muted small">шагов нет</li>';
+    return;
+  }
+  for (const step of steps) {
+    const item = document.createElement('li');
+    const kind = CHAIN_STEP_KIND_RU[step.kind] || step.kind;
+    item.innerHTML = `<span class="mono small muted">${escapeHtml(utc(step.observed_at))}</span> ${escapeHtml(kind)}: <span class="mono">${escapeHtml(step.from_entity)}</span> → <span class="mono">${escapeHtml(step.to_entity)}</span> <span class="muted small">(${escapeHtml(step.operation)})</span>`;
+    list.appendChild(item);
+  }
+}
+
+function renderRelatedCases(relatedCases) {
+  const box = $('#relatedCasesList');
+  box.replaceChildren();
+  if (!relatedCases.length) {
+    box.innerHTML = '<span class="muted small">связанных кейсов нет</span>';
+    return;
+  }
+  for (const caseId of relatedCases) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip sm chip-button';
+    chip.textContent = caseId;
+    chip.addEventListener('click', () => openCase(caseId));
+    box.appendChild(chip);
+  }
 }
 
 // --- Журнал действий --------------------------------------------------------
