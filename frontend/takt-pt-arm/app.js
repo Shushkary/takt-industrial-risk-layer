@@ -156,7 +156,15 @@ const HELP = {
     title: 'Цепочка событий',
     body: [
       'Все события кейса по времени, от раннего к позднему, время в UTC. Основной рабочий список: по нему восстанавливается ход инцидента.',
-      'Что делать: идти сверху вниз и на каждом шаге отвечать, чем событие вызвано. Клик по узлу, учётной записи или адресу открывает карточку сущности.',
+      'Что делать: идти сверху вниз и на каждом шаге отвечать, чем событие вызвано. Клик по узлу или учётной записи открывает карточку сущности. Для адресов карточки нет: история хранится по узлам, учётным записям и процессам.',
+    ],
+  },
+  evidence: {
+    title: 'Основание попадания события в кейс',
+    body: [
+      '«Ядро» — событие совпало с отличительной сущностью инцидента: учётной записью, адресом или артефактом, по которым кейс собирался. «Расширение» — событие добрано по узлу за окно инцидента и собственного признака атаки не имеет.',
+      'Значение приходит из ответа продукта (correlation_evidence), интерфейс его не вычисляет. Полная причина — в подсказке при наведении.',
+      'Что делать: разбирать сверху вниз ядро, а расширение отсеивать. Вместе с расширением в кейс попадает штатная активность тех же узлов — это цена полноты, а не ошибка сборки.',
     ],
   },
   graph: {
@@ -443,6 +451,9 @@ function renderQueue() {
 
 async function openCase(caseId) {
   selectedCaseId = caseId;
+  // Сущность принадлежит кейсу, из которого её открыли: при смене кейса панель очищается,
+  // иначе «Добавить в находки» запишет в новый кейс сущность из прежнего.
+  resetEntityPanel();
   renderQueue();
   $('#workEmpty').hidden = true;
   $('#workBody').hidden = false;
@@ -473,7 +484,7 @@ function renderCase(workspace) {
   // Названия инвариантов приходят из каталога продукта (`invariant_details`), а не собираются
   // здесь: каталог правил — источник правды и для API, и для АРМ.
   renderInvariants(item.invariant_details || [], item.invariant_hits || []);
-  renderChain(workspace.events || []);
+  renderChain(workspace.events || [], item.correlation_evidence || []);
   renderGraph(workspace.graph || { nodes: [], edges: [] });
   renderResponse(workspace.events || [], workspace.artifacts || []);
   renderFindings(item.findings || []);
@@ -616,15 +627,55 @@ function entityButton(type, value) {
   return `<button type="button" class="entity-link" data-entity-type="${escapeHtml(type)}" data-entity-id="${escapeHtml(value)}">${escapeHtml(value)}</button>`;
 }
 
-function renderChain(events) {
+// Основание попадания события в кейс. Значение приходит из `correlation_evidence` ответа API:
+// свой вывод здесь разошёлся бы с тем, что уходит в доказательный пакет.
+const EVIDENCE_RULE_RU = {
+  pivot: 'ядро',
+  'host-expansion': 'расширение',
+  manual: 'добавлено аналитиком',
+};
+
+function evidenceCell(item) {
+  if (!item) return '<span class="muted small">—</span>';
+  const label = EVIDENCE_RULE_RU[item.rule] || item.rule;
+  const kind = item.rule === 'pivot' ? 'core' : 'expanded';
+  return `<span class="evidence ${kind}" title="${escapeHtml(item.reason || '')}">${escapeHtml(label)}</span>`;
+}
+
+let lastChainEvents = [];
+let lastChainEvidence = new Map();
+
+function renderChain(events, correlationEvidence) {
+  lastChainEvents = events;
+  lastChainEvidence = new Map((correlationEvidence || []).map((item) => [item.event_id, item]));
+  paintChain();
+}
+
+function paintChain() {
   const body = $('#chainBody');
   body.replaceChildren();
-  const ordered = [...events].sort((a, b) => String(a.observed_at).localeCompare(String(b.observed_at)));
+  const coreOnly = $('#coreOnly').checked;
+  const ordered = [...lastChainEvents].sort((a, b) => String(a.observed_at).localeCompare(String(b.observed_at)));
+  let coreCount = 0;
+  let expandedCount = 0;
   for (const event of ordered) {
+    const evidence = lastChainEvidence.get(event.event_id);
+    const isCore = evidence ? evidence.rule === 'pivot' : true;
+    if (isCore) coreCount += 1;
+    else expandedCount += 1;
+  }
+  let shown = 0;
+  for (const event of ordered) {
+    const evidence = lastChainEvidence.get(event.event_id);
+    const isCore = evidence ? evidence.rule === 'pivot' : true;
+    if (coreOnly && !isCore) continue;
+    shown += 1;
     const entities = event.entities || {};
     const row = document.createElement('tr');
+    if (!isCore) row.className = 'row-expanded';
     row.innerHTML = `
       <td class="mono">${escapeHtml(utc(event.observed_at))}</td>
+      <td>${evidenceCell(evidence)}</td>
       <td><span class="chip sm" title="${escapeHtml(event.source)}">${escapeHtml(term('event_source', event.source))}</span></td>
       <td class="mono">${escapeHtml(event.operation)}</td>
       <td>${entityButton('host', entities.host_id)}</td>
@@ -633,6 +684,7 @@ function renderChain(events) {
       <td class="small">${escapeHtml(firstArtifact(event))}</td>`;
     body.appendChild(row);
   }
+  $('#chainCount').textContent = `Показано ${shown} из ${ordered.length} · ядро ${coreCount} · расширение ${expandedCount}`;
   body.querySelectorAll('.entity-link').forEach((button) => {
     button.addEventListener('click', () => openEntity(button.dataset.entityType, button.dataset.entityId));
   });
@@ -712,6 +764,15 @@ function renderResponse(events, artifacts) {
 }
 
 // --- Сущность и находки ----------------------------------------------------
+
+function resetEntityPanel() {
+  selectedEntity = null;
+  $('#entityBody').hidden = true;
+  $('#entityEmpty').hidden = false;
+  $('#entityId').textContent = '';
+  $('#entityType').textContent = '—';
+  $('#entityFacts').replaceChildren();
+}
 
 async function openEntity(type, id) {
   selectedEntity = { type, id };
@@ -855,6 +916,7 @@ document.addEventListener('keydown', (event) => {
 $('#modalClose').addEventListener('click', closeHelp);
 $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
+$('#coreOnly').addEventListener('change', paintChain);
 
 // ---------------------------------------------------------------------------
 // Вкладка «Симуляция»: хронология цепочки, счётчики трудоёмкости, граф атаки

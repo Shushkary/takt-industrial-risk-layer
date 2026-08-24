@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260821-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260824-01" />
   </head>
   <body>
     <header class="top">
@@ -117,13 +117,18 @@
           <div class="block">
             <div class="block-head">
               <h4>Цепочка событий</h4>
-              <button class="help" type="button" data-help="chain" aria-label="Пояснение: цепочка событий">?</button>
+              <div class="head-actions">
+                <label class="core-only-toggle"><input id="coreOnly" type="checkbox" /> только ядро</label>
+                <button class="help" type="button" data-help="chain" aria-label="Пояснение: цепочка событий">?</button>
+              </div>
             </div>
+            <p id="chainCount" class="muted small pad">—</p>
             <div class="table-scroll">
               <table class="chain">
                 <thead>
                   <tr>
                     <th scope="col">Время, UTC <button class="help sm" type="button" data-help="time_utc" aria-label="Пояснение: время события">?</button></th>
+                    <th scope="col">Основание <button class="help sm" type="button" data-help="evidence" aria-label="Пояснение: основание попадания события в кейс">?</button></th>
                     <th scope="col">Источник <button class="help sm" type="button" data-help="source" aria-label="Пояснение: источник события">?</button></th>
                     <th scope="col">Операция <button class="help sm" type="button" data-help="operation" aria-label="Пояснение: операция">?</button></th>
                     <th scope="col">Узел <button class="help sm" type="button" data-help="entity_host" aria-label="Пояснение: узел">?</button></th>
@@ -272,6 +277,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260821-02"></script>
+    <script src="./app.min.js?v=20260824-01"></script>
   </body>
 </html>

@@ -431,6 +431,31 @@ table.chain tr:hover td {
   background: #161e2b;
 }
 
+tr.row-expanded {
+  opacity: 0.75;
+}
+
+.evidence {
+  font-size: 12px;
+}
+
+.evidence.core {
+  color: var(--accent);
+}
+
+.evidence.expanded {
+  color: var(--muted);
+}
+
+.core-only-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
 .entity-link {
   border: 0;
   background: none;
