@@ -123,7 +123,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260824-01"}, versions
+    assert versions >= {"20260824-02"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:

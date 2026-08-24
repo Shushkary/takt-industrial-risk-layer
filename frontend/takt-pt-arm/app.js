@@ -928,25 +928,35 @@ function renderChain(events, correlationEvidence) {
 function paintChain() {
   const body = $('#chainBody');
   body.replaceChildren();
-  const coreOnly = $('#coreOnly').checked;
   const ordered = [...lastChainEvents].sort((a, b) => String(a.observed_at).localeCompare(String(b.observed_at)));
+  // Три состояния, а не два: у кейса, собранного конвейером приёма, `correlation_evidence`
+  // пустой — основания в ответе нет вовсе. Считать такие события ядром нельзя: ячейка
+  // показывает «—», и счётчик обязан говорить то же самое.
   let coreCount = 0;
   let expandedCount = 0;
+  let unknownCount = 0;
   for (const event of ordered) {
     const evidence = lastChainEvidence.get(event.event_id);
-    const isCore = evidence ? evidence.rule === 'pivot' : true;
-    if (isCore) coreCount += 1;
+    if (!evidence) unknownCount += 1;
+    else if (evidence.rule === 'pivot') coreCount += 1;
     else expandedCount += 1;
   }
+  // Отсеивать по основанию нечего, если оснований в кейсе нет ни у одного события.
+  const toggle = $('#coreOnly');
+  const separable = coreCount + expandedCount > 0;
+  toggle.disabled = !separable;
+  if (!separable) toggle.checked = false;
+  const coreOnly = toggle.checked;
+
   let shown = 0;
   for (const event of ordered) {
     const evidence = lastChainEvidence.get(event.event_id);
-    const isCore = evidence ? evidence.rule === 'pivot' : true;
+    const isCore = Boolean(evidence) && evidence.rule === 'pivot';
     if (coreOnly && !isCore) continue;
     shown += 1;
     const entities = event.entities || {};
     const row = document.createElement('tr');
-    if (!isCore) row.className = 'row-expanded';
+    if (evidence && !isCore) row.className = 'row-expanded';
     row.innerHTML = `
       <td class="mono">${escapeHtml(utc(event.observed_at))}</td>
       <td>${evidenceCell(evidence)}</td>
@@ -958,7 +968,10 @@ function paintChain() {
       <td class="small">${artifactCell(event)}</td>`;
     body.appendChild(row);
   }
-  $('#chainCount').textContent = `Показано ${shown} из ${ordered.length} · ядро ${coreCount} · расширение ${expandedCount}`;
+  const parts = [`Показано ${shown} из ${ordered.length}`];
+  if (coreCount || expandedCount) parts.push(`ядро ${coreCount}`, `расширение ${expandedCount}`);
+  if (unknownCount) parts.push(`без основания ${unknownCount}`);
+  $('#chainCount').textContent = parts.join(' · ');
   body.querySelectorAll('.entity-link').forEach((button) => {
     button.addEventListener('click', () => openEntity(button.dataset.entityType, button.dataset.entityId));
   });
@@ -1146,9 +1159,16 @@ async function confirmResponsePackage() {
   if (!selectedCaseId) return;
   const checked = responseRows.filter((row) => row.checked);
   if (!checked.length) return;
+  const text = responsePackageText();
+  // Та же защита, что у находок по сущностям: журнал append-only, лишнюю запись из него
+  // не убрать, а повторное подтверждение того же состава пакета ничего не добавляет.
+  if (lastCaseFindings.some((item) => item.text === text)) {
+    toast('Этот пакет уже подтверждён и записан в журнал кейса');
+    showResponsePackageModal(text);
+    return;
+  }
   const button = $('#confirmResponseButton');
   button.disabled = true;
-  const text = responsePackageText();
   try {
     await api(`/cases/${encodeURIComponent(selectedCaseId)}/findings`, {
       method: 'POST',
