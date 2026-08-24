@@ -544,6 +544,35 @@ table.chain tr:hover td {
   background: #161e2b;
 }
 
+/* Пакет реагирования */
+table.response-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.response-table th,
+table.response-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+  font-size: 13px;
+}
+
+table.response-table th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+tr.response-expanded td {
+  color: var(--muted);
+}
+
+.response-actions {
+  padding: 8px 0 0;
+}
+
 .copyable {
   border: 0;
   background: none;
@@ -743,6 +772,17 @@ ul.plain li {
 
 .modal-body p:last-child {
   margin-bottom: 0;
+}
+
+.response-package-text {
+  white-space: pre-wrap;
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg);
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  margin: 0 0 10px;
 }
 
 /* Уведомление */

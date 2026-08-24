@@ -201,9 +201,9 @@ const HELP = {
   response: {
     title: 'Варианты реагирования',
     body: [
-      'Действия, применимые к составу этого кейса: изоляция узла, сброс учётной записи, блокировка адреса, заморозка конвейера.',
+      'Действия, применимые к отличительным сущностям кейса: изоляция узла, сброс учётной записи, блокировка адреса, заморозка конвейера. Узлы, добранные расширением, показаны отдельной группой и по умолчанию не отмечены: они попали в кейс по узлу, а не по признаку атаки.',
       'ТАКТ их не выполняет и команд не отправляет. Это перечень для решения аналитика, исполняет его внешняя система после подтверждения.',
-      'Что делать: перечень нельзя отметить или отправить из этого окна — скопируйте его в задачу реагирования вручную.',
+      'Что делать: отметить применимые пункты и подтвердить пакет. Подтверждение записывает состав пакета в журнал кейса и открывает текст для передачи ответственному.',
     ],
   },
   risk_class: {
@@ -567,7 +567,7 @@ function renderCase(workspace) {
   renderInvariants(item.invariant_details || [], item.invariant_hits || []);
   renderChain(workspace.events || [], item.correlation_evidence || []);
   renderGraph(workspace.graph || { nodes: [], edges: [] });
-  renderResponse(workspace.events || [], workspace.artifacts || []);
+  renderResponse(workspace.events || [], workspace.artifacts || [], item.correlation_evidence || []);
   renderFindings(item.findings || []);
 }
 
@@ -851,13 +851,48 @@ function renderGraph(graph) {
 // с источником pivot-seed), а не по всем сущностям событий. События, добранные расширением
 // до уровня узла, содержат и штатную активность: предлагать по ним действия — значит
 // предлагать сброс учётных записей людей, которые в это время просто работали.
-function renderResponse(events, artifacts) {
+// Тип строки таблицы — не обозначение продукта из словаря, а поле сущности (те же коды, что
+// в цепочке событий): host/user/address берут название из entity_type словаря, остальное —
+// локальная подпись, специфичная для пакета реагирования.
+const RESPONSE_TYPE_RU = { artifact: 'объект конвейера', pipeline: 'конвейер' };
+
+function responseTypeLabel(type) {
+  return RESPONSE_TYPE_RU[type] || term('entity_type', type);
+}
+
+// Значение объекта конвейера уже несёт классификатор префиксом (`artifact:app-setup.msi`,
+// `pipeline:release-prod` — см. комментарий у renderResponse). Записывать поле type кода
+// `artifact` поверх такого значения дало бы в журнале «artifact:artifact:app-setup.msi».
+// Ближайшие коды каталога артефактов: `file` — файл конвейера, `repo` — сам конвейер/репозиторий.
+function findingArtifactType(row) {
+  if (row.type !== 'artifact') return row.type;
+  if (row.value.startsWith('pipeline:')) return 'repo';
+  if (row.value.startsWith('artifact:')) return 'file';
+  return row.type;
+}
+
+function responseLineText(row) {
+  if (row.type === 'pipeline') return row.action;
+  const hostPart = row.host ? ` — узел ${row.host}` : '';
+  return `${responseTypeLabel(row.type)} — ${row.value}${hostPart} — ${row.action}`;
+}
+
+let responseRows = [];
+
+// Варианты реагирования строятся по отличительным сущностям инцидента (артефакты кейса
+// с источником pivot-seed) — события, добранные расширением до уровня узла, содержат и
+// штатную активность, предлагать по ним действия значит предлагать сброс учётных записей
+// людей, которые в это время просто работали. Узлы расширения показаны отдельной, не
+// отмеченной по умолчанию группой (F-08): по инциденту «компрометация ws-17» иначе не было
+// видно вообще, что с ws-17 можно что-то сделать.
+function renderResponse(events, artifacts, correlationEvidence) {
+  const evidenceByEvent = new Map((correlationEvidence || []).map((item) => [item.event_id, item]));
   const hosts = new Set();
   const users = new Set();
   const addresses = new Set();
+  const objects = new Set();
   let pipeline = false;
   const seeds = (artifacts || []).filter((item) => item.source === 'pivot-seed');
-  const objects = new Set();
   for (const seed of seeds) {
     // Объекты конвейера приходят в поле узла с префиксом вида `pipeline:` или
     // `artifact:`. Изолировать их нельзя — это не узлы сети.
@@ -868,32 +903,129 @@ function renderResponse(events, artifacts) {
   for (const event of events) {
     if (event.source === 'ot') pipeline = true;
   }
-  if (!seeds.length) {
-    // Кейс собран не пивотом: отличительных сущностей нет, перечислять нечего.
-    const list = $('#responseList');
-    list.replaceChildren();
-    list.innerHTML = '<li class="muted small">кейс собран не пивотом: отличительные сущности не заданы, предлагать действия не по чему</li>';
-    return;
-  }
-  const options = [];
-  if (hosts.size) options.push(`Изоляция узлов: ${[...hosts].join(', ')}`);
-  if (users.size) options.push(`Сброс учётных записей: ${[...users].join(', ')}`);
-  if (addresses.size) options.push(`Блокировка адресов: ${[...addresses].join(', ')}`);
-  if (pipeline || objects.size) {
-    const listed = objects.size ? `: ${[...objects].join(', ')}` : '';
-    options.push(`Заморозка конвейера сборки до проверки объектов${listed}`);
+  const expandedHosts = new Set();
+  for (const event of events) {
+    const evidence = evidenceByEvent.get(event.event_id);
+    const hostId = event.entities && event.entities.host_id;
+    if (evidence && evidence.rule === 'host-expansion' && hostId) expandedHosts.add(hostId);
   }
 
-  const list = $('#responseList');
-  list.replaceChildren();
-  if (!options.length) {
-    list.innerHTML = '<li class="muted small">объектов для действий в кейсе нет</li>';
+  responseRows = [];
+  if (seeds.length) {
+    for (const host of hosts) {
+      responseRows.push({ type: 'host', value: host, host, action: 'Изоляция узла', group: 'core', checked: true });
+    }
+    for (const user of users) {
+      responseRows.push({ type: 'user', value: user, host: '', action: 'Сброс учётной записи', group: 'core', checked: true });
+    }
+    for (const address of addresses) {
+      responseRows.push({ type: 'address', value: address, host: '', action: 'Блокировка адреса', group: 'core', checked: true });
+    }
+    if (objects.size) {
+      for (const object of objects) {
+        responseRows.push({
+          type: 'artifact', value: object, host: '',
+          action: 'Заморозка конвейера сборки до проверки объекта', group: 'core', checked: true,
+        });
+      }
+    } else if (pipeline) {
+      responseRows.push({ type: 'pipeline', value: '—', host: '', action: 'Заморозка конвейера сборки', group: 'core', checked: true });
+    }
+  }
+  for (const host of expandedHosts) {
+    responseRows.push({
+      type: 'host', value: host, host,
+      action: 'Изоляция узла (узел разбора, не отличительная сущность)', group: 'expanded', checked: false,
+    });
+  }
+
+  paintResponse();
+}
+
+function paintResponse() {
+  const wrap = $('#responseTableWrap');
+  const empty = $('#responseEmpty');
+  const body = $('#responseBody');
+  body.replaceChildren();
+  if (!responseRows.length) {
+    wrap.hidden = true;
+    empty.hidden = false;
+    empty.textContent = 'кейс собран не пивотом: отличительные сущности не заданы, предлагать действия не по чему';
+    $('#confirmResponseButton').disabled = true;
     return;
   }
-  for (const option of options) {
-    const row = document.createElement('li');
-    row.textContent = option;
-    list.appendChild(row);
+  empty.hidden = true;
+  wrap.hidden = false;
+  responseRows.forEach((row, index) => {
+    const tr = document.createElement('tr');
+    if (row.group === 'expanded') tr.className = 'response-expanded';
+    tr.innerHTML = `
+      <td><input type="checkbox" data-response-index="${index}" ${row.checked ? 'checked' : ''} /></td>
+      <td>${escapeHtml(responseTypeLabel(row.type))}</td>
+      <td class="mono small">${escapeHtml(row.value)}</td>
+      <td class="mono small">${escapeHtml(row.host)}</td>
+      <td>${escapeHtml(row.action)}</td>`;
+    body.appendChild(tr);
+  });
+  body.querySelectorAll('[data-response-index]').forEach((checkbox) => {
+    checkbox.addEventListener('change', () => {
+      responseRows[Number(checkbox.dataset.responseIndex)].checked = checkbox.checked;
+      updateConfirmResponseState();
+    });
+  });
+  updateConfirmResponseState();
+}
+
+function updateConfirmResponseState() {
+  $('#confirmResponseButton').disabled = !responseRows.some((row) => row.checked);
+}
+
+function responsePackageText() {
+  const lines = responseRows.filter((row) => row.checked).map(responseLineText);
+  return `Пакет реагирования по кейсу ${selectedCaseId}:\n${lines.join('\n')}`;
+}
+
+function showResponsePackageModal(text) {
+  lastFocused = document.activeElement;
+  $('#modalTitle').textContent = 'Пакет реагирования — для передачи';
+  const body = $('#modalBody');
+  body.replaceChildren();
+  const pre = document.createElement('pre');
+  pre.className = 'response-package-text';
+  pre.textContent = text;
+  body.appendChild(pre);
+  const hint = document.createElement('p');
+  hint.className = 'muted small';
+  hint.textContent = 'Текст записан в журнал кейса. Скопируйте его для передачи ответственному.';
+  body.appendChild(hint);
+  $('#modal').hidden = false;
+  $('#modalClose').focus();
+}
+
+async function confirmResponsePackage() {
+  if (!selectedCaseId) return;
+  const checked = responseRows.filter((row) => row.checked);
+  if (!checked.length) return;
+  const button = $('#confirmResponseButton');
+  button.disabled = true;
+  const text = responsePackageText();
+  try {
+    await api(`/cases/${encodeURIComponent(selectedCaseId)}/findings`, {
+      method: 'POST',
+      body: JSON.stringify({
+        text,
+        artifacts: checked
+          .filter((row) => row.type !== 'pipeline')
+          .map((row) => ({ type: findingArtifactType(row), value: row.value, host_id: row.host || '' })),
+      }),
+    });
+    if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+    toast('Пакет реагирования подтверждён и записан в журнал кейса');
+    showResponsePackageModal(text);
+    await openCase(selectedCaseId);
+  } catch (error) {
+    toast(`Пакет не подтверждён: ${error.message}`);
+    button.disabled = false;
   }
 }
 
@@ -1089,6 +1221,7 @@ $('#statusFormReason').addEventListener('input', () => {
   $('#statusFormSubmit').disabled = !$('#statusFormReason').value.trim();
 });
 $('#coreOnly').addEventListener('change', paintChain);
+$('#confirmResponseButton').addEventListener('click', confirmResponsePackage);
 
 let queueSearchTimer = null;
 $('#queueSearch').addEventListener('input', () => {

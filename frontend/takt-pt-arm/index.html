@@ -170,8 +170,25 @@
               <h4>Варианты реагирования</h4>
               <button class="help" type="button" data-help="response" aria-label="Пояснение: варианты реагирования">?</button>
             </div>
-            <ul id="responseList" class="plain"></ul>
-            <p class="muted small">ТАКТ не выполняет эти действия и не отправляет команды.</p>
+            <p id="responseEmpty" class="muted small pad" hidden></p>
+            <div id="responseTableWrap" class="table-scroll" hidden>
+              <table class="response-table">
+                <thead>
+                  <tr>
+                    <th scope="col"></th>
+                    <th scope="col">Тип</th>
+                    <th scope="col">Значение</th>
+                    <th scope="col">Узел</th>
+                    <th scope="col">Рекомендованное действие</th>
+                  </tr>
+                </thead>
+                <tbody id="responseBody"></tbody>
+              </table>
+            </div>
+            <div class="response-actions">
+              <button id="confirmResponseButton" class="action inline" type="button" disabled>Подтвердить пакет реагирования</button>
+            </div>
+            <p class="muted small">ТАКТ не выполняет эти действия и не отправляет команды. Исполняет внешняя система после подтверждения аналитика.</p>
           </div>
         </div>
       </section>
