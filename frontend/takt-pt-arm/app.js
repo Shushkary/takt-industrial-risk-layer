@@ -227,7 +227,7 @@ const HELP = {
     body: [
       '«Новое» — принято конвейером, никто не смотрел. «В разборе» — взято аналитиком. «Подтверждено» — инцидент подтверждён. «Ложное срабатывание» — дефект правила. «Штатное действие» — сработало верно, но действие объяснено штатной работой. «Объединено» — влито в другой кейс.',
       'Разница между «ложным срабатыванием» и «штатным действием» важна: первое правят в правиле, второе — добором организационного контекста. Эта же разметка идёт в отчёт по правилам.',
-      'Статус меняет человек; сборка инцидента ставит «в разборе» и вердикта не выносит. Что делать: не оставлять кейс в разборе после завершения — по статусу видно, что уже закрыто.',
+      'Статус меняется кнопкой «изменить статус» в сводке, с обязательной причиной; сборка инцидента ставит «в разборе» и вердикта не выносит. Что делать: не оставлять кейс в разборе после завершения — по статусу видно, что уже закрыто.',
     ],
   },
   time_utc: {
@@ -330,6 +330,7 @@ let selectedCaseId = null;
 let selectedEntity = null;
 let pollTimer = null;
 let lastFocused = null;
+let currentCaseStatus = '';
 
 // --- Работа с API ----------------------------------------------------------
 
@@ -346,7 +347,9 @@ async function api(path, options) {
     } catch (error) {
       // тело без JSON — оставляем код ответа
     }
-    throw new Error(message);
+    const httpError = new Error(message);
+    httpError.status = response.status;
+    throw httpError;
   }
   return response.status === 204 ? null : response.json();
 }
@@ -545,6 +548,8 @@ async function openCase(caseId) {
 
 function renderCase(workspace) {
   const item = workspace.case || {};
+  currentCaseStatus = item.status || '';
+  closeStatusForm();
   $('#caseId').textContent = item.case_id || '—';
   $('#caseStatus').textContent = term('case_status', item.status);
   $('#caseTitle').textContent = item.title || '—';
@@ -651,6 +656,59 @@ function renderMissing(items) {
       line.appendChild(hint);
     }
     list.appendChild(line);
+  }
+}
+
+// Смена статуса кейса (POST /cases/{id}/decision). Список статусов строится из словаря
+// продукта, а не из литералов кода: свой список статусов разошёлся бы с продуктом при первом
+// же добавлении значения.
+function openStatusForm() {
+  const select = $('#statusFormSelect');
+  select.replaceChildren();
+  for (const [code, title] of Object.entries(vocabulary.case_status || {})) {
+    if (code === currentCaseStatus) continue;
+    const option = document.createElement('option');
+    option.value = code;
+    option.textContent = title;
+    select.appendChild(option);
+  }
+  $('#statusFormReason').value = '';
+  $('#statusFormSubmit').disabled = true;
+  $('#statusFormError').hidden = true;
+  $('#changeStatusButton').hidden = true;
+  $('#statusForm').hidden = false;
+  $('#statusFormReason').focus();
+}
+
+function closeStatusForm() {
+  $('#statusForm').hidden = true;
+  $('#changeStatusButton').hidden = false;
+}
+
+async function submitStatusForm() {
+  if (!selectedCaseId) return;
+  const status = $('#statusFormSelect').value;
+  const reason = $('#statusFormReason').value.trim();
+  if (!status || !reason) return;
+  const button = $('#statusFormSubmit');
+  button.disabled = true;
+  $('#statusFormError').hidden = true;
+  try {
+    await api(`/cases/${encodeURIComponent(selectedCaseId)}/decision`, {
+      method: 'POST',
+      body: JSON.stringify({ status, reason }),
+    });
+    toast(`Статус изменён: ${term('case_status', status)}`);
+    await openCase(selectedCaseId);
+    await refresh();
+  } catch (error) {
+    const message =
+      error.status === 403
+        ? 'Недостаточно прав: смена статуса доступна второй линии'
+        : `Не удалось изменить статус: ${error.message}`;
+    $('#statusFormError').textContent = message;
+    $('#statusFormError').hidden = false;
+    button.disabled = false;
   }
 }
 
@@ -1024,6 +1082,12 @@ document.addEventListener('keydown', (event) => {
 $('#modalClose').addEventListener('click', closeHelp);
 $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
+$('#changeStatusButton').addEventListener('click', openStatusForm);
+$('#statusFormCancel').addEventListener('click', closeStatusForm);
+$('#statusFormSubmit').addEventListener('click', submitStatusForm);
+$('#statusFormReason').addEventListener('input', () => {
+  $('#statusFormSubmit').disabled = !$('#statusFormReason').value.trim();
+});
 $('#coreOnly').addEventListener('change', paintChain);
 
 let queueSearchTimer = null;
