@@ -125,8 +125,16 @@ const HELP = {
     title: 'Очередь инцидентов',
     body: [
       'Кейсы из хранилища ТАКТ, от большего балла риска к меньшему. Кейс — группа событий, отнесённых к одному разбору.',
-      'Часть кейсов создаёт конвейер приёма по совпадению признаков, часть собирает аналитик пивотом по отличительным сущностям.',
+      'Часть кейсов создаёт конвейер приёма по совпадению признаков, часть собирает аналитик пивотом по отличительным сущностям; сборка пивотом выполняется вне этого окна — утилитой assemble_incident.',
       'Что делать: открыть кейс с наибольшим баллом, проверить состав событий и решить, инцидент это или штатная активность.',
+    ],
+  },
+  queue_filters: {
+    title: 'Фильтры очереди',
+    body: [
+      'Отбор выполняет продукт, а не браузер: параметры уходят в запрос списка кейсов, счётчик показывает, сколько кейсов подошло под фильтр из общего числа.',
+      'По умолчанию показываются первые 100 кейсов по убыванию балла риска.',
+      'Что делать: начинать смену с фильтра по классу риска и статусу «новое». Поток однотипных одиночных срабатываний с одинаковым баллом — материал для правки правила, а не для разбора поштучно.',
     ],
   },
   summary: {
@@ -343,6 +351,14 @@ async function api(path, options) {
   return response.status === 204 ? null : response.json();
 }
 
+// Как api(), но возвращает и заголовки ответа — нужны для X-Total-Count при постраничном
+// списке кейсов. Отдельная функция, чтобы не менять поведение существующих вызовов api().
+async function apiWithHeaders(path, options) {
+  const response = await fetch(`${API_BASE}${path}`, { cache: 'no-store', ...options });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return { data: response.status === 204 ? null : await response.json(), headers: response.headers };
+}
+
 // --- Формат ----------------------------------------------------------------
 
 function utc(value) {
@@ -381,6 +397,22 @@ async function loadVocabulary() {
   } catch (error) {
     invariantTitles = new Map();
   }
+  fillFilterOptions();
+}
+
+// Список статусов и классов риска в фильтре очереди строится из словаря продукта, а не из
+// литералов кода: свой список разошёлся бы с продуктом при первом же добавлении значения.
+function fillFilterOptions() {
+  const fill = (select, table) => {
+    for (const [code, title] of Object.entries(vocabulary[table] || {})) {
+      const option = document.createElement('option');
+      option.value = code;
+      option.textContent = title;
+      select.appendChild(option);
+    }
+  };
+  fill($('#queueRisk'), 'risk_class');
+  fill($('#queueStatus'), 'case_status');
 }
 
 function invariantTitle(id) {
@@ -439,18 +471,34 @@ function addressOf(entities) {
 
 // --- Очередь ---------------------------------------------------------------
 
+// Перерисовка неизменившейся очереди раз в 15 с сбрасывала фокус клавиатуры на body:
+// пройти список с клавиатуры было невозможно. Сигнатура не учитывает selectedCaseId —
+// подсветку выбранного кейса переключает updateActiveQueueItem() без перестройки DOM.
+function queueSignature(items) {
+  return items.map((item) => `${item.case_id}:${item.status}:${item.risk_score}:${item.event_count}`).join('|');
+}
+
+let lastQueueSignature = null;
+
 function renderQueue() {
-  const list = $('#queueList');
-  list.replaceChildren();
-  $('#queueEmpty').hidden = cases.length > 0;
-  // При равном балле выше идёт кейс с большим числом событий: собранный инцидент
-  // не должен теряться среди одиночных срабатываний с тем же баллом.
   const ordered = [...cases].sort(
     (a, b) => Number(b.risk_score) - Number(a.risk_score) || Number(b.event_count || 0) - Number(a.event_count || 0)
   );
+  const signature = queueSignature(ordered);
+  if (signature === lastQueueSignature) {
+    updateActiveQueueItem();
+    return;
+  }
+  lastQueueSignature = signature;
+
+  const list = $('#queueList');
+  const focusedCaseId = document.activeElement?.closest?.('.queue-item')?.dataset.caseId;
+  list.replaceChildren();
+  $('#queueEmpty').hidden = cases.length > 0;
   for (const item of ordered) {
     const button = document.createElement('button');
     button.type = 'button';
+    button.dataset.caseId = item.case_id;
     button.className = `queue-item${item.case_id === selectedCaseId ? ' active' : ''}`;
     button.innerHTML = `
       <span class="queue-top">
@@ -462,6 +510,17 @@ function renderQueue() {
     button.addEventListener('click', () => openCase(item.case_id));
     list.appendChild(button);
   }
+  if (focusedCaseId) {
+    list.querySelector(`[data-case-id="${CSS.escape(focusedCaseId)}"]`)?.focus();
+  }
+}
+
+// Подсветка выбранного кейса без перестройки DOM: используется при выборе кейса, чтобы
+// не пересобирать список (и не терять фокус) там, где данные очереди не изменились.
+function updateActiveQueueItem() {
+  for (const button of document.querySelectorAll('#queueList .queue-item')) {
+    button.classList.toggle('active', button.dataset.caseId === selectedCaseId);
+  }
 }
 
 // --- Окно инцидента --------------------------------------------------------
@@ -471,7 +530,7 @@ async function openCase(caseId) {
   // Сущность принадлежит кейсу, из которого её открыли: при смене кейса панель очищается,
   // иначе «Добавить в находки» запишет в новый кейс сущность из прежнего.
   resetEntityPanel();
-  renderQueue();
+  updateActiveQueueItem();
   $('#workEmpty').hidden = true;
   $('#workBody').hidden = false;
   try {
@@ -907,11 +966,27 @@ function setConnection(state, detail = '') {
   box.textContent = state === 'ok' ? 'связь есть' : state === 'off' ? `нет связи${detail ? `: ${detail}` : ''}` : 'подключение';
 }
 
+const QUEUE_PAGE_LIMIT = 100;
+
+function queueQueryString() {
+  const params = new URLSearchParams({ sort: 'risk_score_desc', limit: String(QUEUE_PAGE_LIMIT) });
+  const risk = $('#queueRisk').value;
+  const status = $('#queueStatus').value;
+  const search = $('#queueSearch').value.trim();
+  if (risk) params.set('risk_classes', risk);
+  if (status) params.set('status', status);
+  if (search) params.set('title_contains', search);
+  return params.toString();
+}
+
 async function refresh() {
   try {
-    const data = await api('/cases');
+    const { data, headers } = await apiWithHeaders(`/cases?${queueQueryString()}`);
     cases = Array.isArray(data) ? data : data.items || [];
     renderQueue();
+    const total = headers.get('X-Total-Count');
+    $('#queueCount').textContent =
+      total !== null ? `Показано ${cases.length} из ${total}` : `Показано ${cases.length}`;
     setConnection('ok');
     $('#lastSync').textContent = `обновлено ${utc(new Date().toISOString())} UTC`;
     if (!selectedCaseId && cases.length) {
@@ -950,6 +1025,14 @@ $('#modalClose').addEventListener('click', closeHelp);
 $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
 $('#coreOnly').addEventListener('change', paintChain);
+
+let queueSearchTimer = null;
+$('#queueSearch').addEventListener('input', () => {
+  clearTimeout(queueSearchTimer);
+  queueSearchTimer = setTimeout(refresh, 300);
+});
+$('#queueRisk').addEventListener('change', refresh);
+$('#queueStatus').addEventListener('change', refresh);
 
 // ---------------------------------------------------------------------------
 // Вкладка «Симуляция»: хронология цепочки, счётчики трудоёмкости, граф атаки

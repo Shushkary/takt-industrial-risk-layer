@@ -169,6 +169,30 @@ body {
 }
 
 /* Очередь */
+.queue-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.queue-filters input,
+.queue-filters select {
+  background: var(--bg);
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.queue-filters input[type='search'] {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
 .queue-list {
   max-height: 70vh;
   overflow: auto;
