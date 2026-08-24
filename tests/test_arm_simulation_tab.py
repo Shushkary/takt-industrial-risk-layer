@@ -34,11 +34,19 @@ def _app() -> str:
     return _APP.read_text(encoding="utf-8")
 
 
+def _help_buttons() -> set[str]:
+    """Ключи всех кнопок «?»: и в статической разметке, и в собранных кодом строках.
+
+    Часть кнопок создаётся при отрисовке — например, у значений в «Итоге разбора». Проверять
+    одну разметку значило бы считать такие пояснения мёртвыми, а такие кнопки — беспризорными.
+    """
+    return set(_HELP_ATTR.findall(_index())) | set(re.findall(r"help: '([a-z0-9_]+)'", _app()))
+
+
 def test_every_help_button_has_a_registry_entry() -> None:
     """Кнопка «?» без записи в реестре открывала бы пустое окно."""
-    used = set(_HELP_ATTR.findall(_index()))
     declared = set(_HELP_KEY.findall(_app()))
-    missing = sorted(used - declared)
+    missing = sorted(_help_buttons() - declared)
     assert not missing, f"нет пояснений для: {missing}"
 
 
@@ -50,9 +58,8 @@ def test_registry_has_no_unused_entries() -> None:
     карточку события, а не пояснение, и оба текста не видел никто. Теперь у них есть кнопки в
     заголовке колонок списка шагов.
     """
-    used = set(_HELP_ATTR.findall(_index()))
     declared = set(_HELP_KEY.findall(_app()))
-    orphans = sorted(declared - used)
+    orphans = sorted(declared - _help_buttons())
     assert not orphans, f"пояснения без кнопки: {orphans}"
 
 
@@ -107,6 +114,8 @@ def test_method_modal_states_what_is_measured_and_what_is_modelled() -> None:
         "focusNote",
         "stepFilter",
         "stepFilterNote",
+        "simResponse",
+        "simResponseEmpty",
         "manualActions",
         "taktActions",
         "reductionValue",
@@ -140,7 +149,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260822-06"}, versions
+    assert versions >= {"20260822-07"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -271,6 +280,39 @@ def test_tab_switch_hides_the_other_view() -> None:
     block = app[start : app.index("\n}", start)]
     assert ".layout" in block and "hidden = isSimulation" in block
     assert "$('#simulationView').hidden = !isSimulation" in block
+
+
+def test_recommendations_are_not_rendered_as_case_facts() -> None:
+    """Граница продукта обязана быть видимой ровно там, где её можно прочитать неверно.
+
+    Прецедент: «Изоляция узлов: ws-17» стояла теми же `dt`/`dd`, что и «Класс риска», в одном
+    списке с состоянием кейса, и отличалась от факта только сноской мелким шрифтом внизу
+    блока. Отсутствие кнопок исполнения необходимо, но недостаточно.
+    """
+    app = _app()
+    summary = app[app.index("function renderSummary()") : app.index("\n}", app.index("function renderSummary()"))]
+    assert "response_options" not in summary, "рекомендации снова в списке фактов кейса"
+
+    options = app[
+        app.index("function renderResponseOptions()") : app.index("\n}", app.index("function renderResponseOptions()"))
+    ]
+    assert "$('#simResponse')" in options
+
+    index = _index()
+    view = index[index.index('id="simulationView"') : index.index('id="modal"')]
+    assert "<h5>Рекомендации по реагированию</h5>" in view, "у рекомендаций нет своего заголовка"
+    assert 'data-help="response"' in view, "у рекомендаций нет своего пояснения"
+    # Оговорка стоит при рекомендациях, а не сноской в конце блока.
+    subblock = view[view.index('class="subblock"') :]
+    assert "ТАКТ не выполняет действия реагирования" in subblock
+
+
+def test_every_summary_value_has_an_explanation() -> None:
+    """`simulation.md` обещает кнопку пояснения у каждого значения — в «Итоге разбора» её не было."""
+    app = _app()
+    rows = app[app.index("const SUMMARY_ROWS = [") : app.index("];", app.index("const SUMMARY_ROWS = ["))]
+    for key in ("risk_class", "status", "event_count", "unlabelled", "invariants"):
+        assert f"help: '{key}'" in rows, key
 
 
 def test_selection_mechanism_is_visible_in_the_step_row() -> None:

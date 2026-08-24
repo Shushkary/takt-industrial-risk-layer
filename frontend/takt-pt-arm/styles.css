@@ -857,6 +857,23 @@ ol.steps {
   border-color: var(--warn);
 }
 
+/* Подблок внутри блока: рекомендации отделены от фактов кейса рамкой и своим заголовком. */
+.subblock {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.block-head.sub {
+  justify-content: flex-start;
+  margin-bottom: 4px;
+}
+
+.block-head.sub h5 {
+  margin: 0;
+  font-size: 13px;
+}
+
 .step-nav {
   display: flex;
   flex-wrap: wrap;

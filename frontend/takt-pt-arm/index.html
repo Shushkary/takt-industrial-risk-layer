@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260822-06" />
+    <link rel="stylesheet" href="./styles.css?v=20260822-07" />
   </head>
   <body>
     <header class="top">
@@ -249,7 +249,16 @@
             <button class="help" type="button" data-help="sim_summary" aria-label="Пояснение: итог разбора">?</button>
           </div>
           <dl id="simSummary" class="facts"></dl>
-          <p class="muted small">ТАКТ не выполняет действия реагирования и не отправляет команды.</p>
+
+          <div class="subblock">
+            <div class="block-head sub">
+              <h5>Рекомендации по реагированию</h5>
+              <button class="help sm" type="button" data-help="response" aria-label="Пояснение: варианты реагирования">?</button>
+            </div>
+            <p class="muted small">Не состояние кейса, а перечень для решения аналитика. ТАКТ не выполняет действия реагирования и не отправляет команды: исполняет внешняя система после подтверждения.</p>
+            <dl id="simResponse" class="facts"></dl>
+            <p id="simResponseEmpty" class="muted small" hidden>Применимых действий по отличительным сущностям этого кейса нет.</p>
+          </div>
         </div>
         <div class="block">
           <div class="block-head">
@@ -305,6 +314,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260822-06"></script>
+    <script src="./app.min.js?v=20260822-07"></script>
   </body>
 </html>

@@ -148,6 +148,14 @@ const HELP = {
       'Что делать: инцидент, видимый из нескольких источников, надёжнее того же инцидента из одного. Если источник отсутствует — сначала проверить, подключён ли он, и только потом считать это признаком.',
     ],
   },
+  unlabelled: {
+    title: 'Без разметки фазы',
+    body: [
+      'Сколько событий кейса пришли без разметки фазы цепочки атаки. Они остаются в кейсе, но шагами цепочки не считаются: фазу проставляет источник или датасет, ТАКТ её не вычисляет и не додумывает.',
+      'Как правило это события, добранные расширением разбора до уровня узла: вместе с ними в кейс приходит штатная активность тех же узлов.',
+      'Что делать: читать их как контекст, а не как цепочку. Сами события — на вкладке «Расследование», в цепочке событий кейса. Если разметка нужна регулярно, её проставляют на источнике.',
+    ],
+  },
   invariants: {
     title: 'Сработавшие инварианты',
     body: [
@@ -1461,25 +1469,65 @@ function updatePosition() {
   $('#playerPosition').textContent = `шаг ${simCursor} из ${steps}`;
 }
 
+// Строка «название — значение» с кнопкой пояснения. Реестр `HELP` обслуживает и статическую
+// разметку, и строки, собранные здесь: обработчик ловит любой элемент с `data-help`.
+function factRow(list, label, value, help) {
+  const dt = document.createElement('dt');
+  dt.textContent = label;
+  if (help) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'help sm';
+    button.dataset.help = help;
+    button.setAttribute('aria-label', `Пояснение: ${label.toLowerCase()}`);
+    button.textContent = '?';
+    dt.append(' ', button);
+  }
+  const dd = document.createElement('dd');
+  dd.textContent = value;
+  list.append(dt, dd);
+}
+
+// Состав «Итога разбора»: что показываем и каким пояснением объясняем. Реестр `HELP` один на
+// весь АРМ, поэтому ключ здесь тот же, что у кнопок в разметке.
+const SUMMARY_ROWS = [
+  {
+    label: 'Класс риска',
+    help: 'risk_class',
+    value: () => `${term('risk_class', simulation.risk_class)} · ${score(simulation.risk_score)}`,
+  },
+  { label: 'Статус', help: 'status', value: () => term('case_status', simulation.status) },
+  {
+    label: 'Событий в кейсе',
+    help: 'event_count',
+    value: () => `${simulation.events_total}, из них шагов цепочки ${simulation.chain_length}`,
+  },
+  { label: 'Без разметки фазы', help: 'unlabelled', value: () => String(simulation.events_without_phase) },
+  {
+    label: 'Сработавшие инварианты',
+    help: 'invariants',
+    value: () => (simulation.invariants || []).map(invariantTitle).join(', ') || 'нет',
+  },
+];
+
 function renderSummary() {
   const facts = $('#simSummary');
   facts.replaceChildren();
-  const rows = [
-    ['Класс риска', `${term('risk_class', simulation.risk_class)} · ${Number(simulation.risk_score).toFixed(3)}`],
-    ['Статус', term('case_status', simulation.status)],
-    ['Событий в кейсе', `${simulation.events_total}, из них шагов цепочки ${simulation.chain_length}`],
-    ['Без разметки фазы', String(simulation.events_without_phase)],
-    ['Сработавшие инварианты', (simulation.invariants || []).map(invariantTitle).join(', ') || 'нет'],
-  ];
-  for (const option of simulation.response_options || []) {
-    rows.push([option.title, option.objects || '—']);
-  }
-  for (const [label, value] of rows) {
-    const dt = document.createElement('dt');
-    dt.textContent = label;
-    const dd = document.createElement('dd');
-    dd.textContent = value;
-    facts.append(dt, dd);
+  for (const row of SUMMARY_ROWS) factRow(facts, row.label, row.value(), row.help);
+  renderResponseOptions();
+}
+
+// Рекомендации вынесены из фактов кейса в отдельный подблок со своим заголовком.
+// Раньше «Изоляция узлов: ws-17» стояла теми же `dt`/`dd`, что и «Класс риска», и отличалась
+// от состояния кейса только сноской мелким шрифтом внизу блока. Граница продукта — «критичные
+// действия не выполняются» — обязана быть видимой ровно здесь, а не подразумеваться.
+function renderResponseOptions() {
+  const list = $('#simResponse');
+  list.replaceChildren();
+  const options = simulation.response_options || [];
+  $('#simResponseEmpty').hidden = options.length > 0;
+  for (const option of options) {
+    factRow(list, option.title, option.objects || '—');
   }
 }
 
