@@ -86,10 +86,89 @@ WORK_PHASE_RU: dict[str, str] = {
 CONFIDENCE_GRADE_RU: tuple[str, ...] = ("высокая", "средняя", "низкая")
 """Оценки обоснованности вывода. Уже по-русски — перечислены для полноты словаря."""
 
+CORRELATION_RULE_RU: dict[str, str] = {
+    "pivot": "ядро",
+    "host-expansion": "расширение",
+    "manual_attach": "прицеплено аналитиком",
+    "manual_detach": "отцеплено аналитиком",
+    "manual_merge": "объединено аналитиком",
+    "manual_split": "разделено аналитиком",
+}
+"""Основание попадания события в кейс (`correlation_evidence.rule`)."""
+
+CHAIN_STEP_KIND_RU: dict[str, str] = {
+    "process_spawn": "запуск процесса",
+    "network_move": "сетевое перемещение",
+}
+"""Вид перехода в реконструкции цепочки (`attack_chain.steps[].kind`)."""
+
+GRAPH_EDGE_KIND_RU: dict[str, str] = {
+    "initiated": "запустил",
+    "spawned": "породил",
+    "runs": "выполняет",
+    "network": "обратился к",
+}
+"""Вид связи между сущностями кейса (`graph.edges[].type`)."""
+
+TYPICALITY_RU: dict[str, str] = {
+    "first_seen": "первое появление",
+    "rare": "редко: менее 3 событий",
+    "typical": "часто: 3 и более событий",
+}
+"""Частота сущности в накопленной истории. Это счётчик событий, а не модель поведения:
+порог назван прямо в самом названии, чтобы «обычная активность» не читалась как вывод
+о нормальности."""
+
+DQ_REASON_RU: dict[str, str] = {
+    "telemetry_gap": "разрыв в телеметрии",
+    "stale_data": "устаревшие данные",
+    "source_reputation_drift": "просадка доверия к источнику",
+}
+"""Причины неполной наблюдаемости (`dq_reasons`)."""
+
+LEDGER_ISSUE_RU: dict[str, str] = {
+    "line_sha_mismatch": "контрольная сумма записи не сходится",
+    "payload_sha_mismatch": "контрольная сумма содержимого не сходится",
+    "prev_chain_mismatch": "разрыв цепочки: ссылка на предыдущую запись не сходится",
+    "chain_mismatch": "контрольная сумма цепочки не сходится",
+}
+"""Нарушения целостности append-only журнала (`issue` в ответе проверки).
+
+Это сообщение аналитик читает в тот момент, когда доказательный контур под вопросом:
+код вроде `prev_chain_mismatch` здесь хуже всего, потому что требует перевода на ходу."""
+
 
 def risk_class_ru(value: str) -> str:
     """Название класса риска. Неизвестный код возвращается как есть, а не подменяется догадкой."""
     return RISK_CLASS_RU.get((value or "").strip().upper(), value)
+
+
+def case_status_ru(value: str) -> str:
+    """Название статуса дела. Неизвестный код возвращается как есть."""
+    return CASE_STATUS_RU.get((value or "").strip(), value)
+
+
+def plural_ru(count: int, one: str, few: str, many: str) -> str:
+    """Согласование существительного с числительным: 1 событие, 2 события, 5 событий.
+
+    Нужно там, где текст собирается продуктом и уходит пользователю: «Собрано 41 событий»
+    в сводке кейса читается как небрежность ровно в том месте, где продукт объясняет
+    основание вывода.
+    """
+    tail_two = abs(count) % 100
+    tail_one = abs(count) % 10
+    if 11 <= tail_two <= 14:
+        return many
+    if tail_one == 1:
+        return one
+    if 2 <= tail_one <= 4:
+        return few
+    return many
+
+
+def events_ru(count: int) -> str:
+    """«1 событие» / «2 события» / «5 событий» вместе с числом."""
+    return f"{count} {plural_ru(count, 'событие', 'события', 'событий')}"
 
 
 def vocabulary() -> dict[str, dict[str, str]]:
@@ -101,4 +180,10 @@ def vocabulary() -> dict[str, dict[str, str]]:
         "event_source": dict(EVENT_SOURCE_RU),
         "entity_type": dict(ENTITY_TYPE_RU),
         "artifact_type": dict(ARTIFACT_TYPE_RU),
+        "correlation_rule": dict(CORRELATION_RULE_RU),
+        "chain_step_kind": dict(CHAIN_STEP_KIND_RU),
+        "graph_edge_kind": dict(GRAPH_EDGE_KIND_RU),
+        "typicality": dict(TYPICALITY_RU),
+        "dq_reason": dict(DQ_REASON_RU),
+        "ledger_issue": dict(LEDGER_ISSUE_RU),
     }

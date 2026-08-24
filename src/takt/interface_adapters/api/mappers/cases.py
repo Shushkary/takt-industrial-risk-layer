@@ -17,6 +17,7 @@ from takt.domain.entities.case import (
     RemediationAttempt,
 )
 from takt.domain.invariants.catalog import invariant_titles_by_id
+from takt.domain.services.case_lifecycle import allowed_transitions
 from takt.domain.services.decision_brief import decision_brief
 from takt.domain.services.forensic_verdict import case_forensic_verdict
 from takt.domain.services.verdict_confidence import MissingContextItem, verdict_confidence
@@ -447,6 +448,9 @@ def case_to_detail(c: Case) -> CaseDetail:
         dq_score=c.dq_score,
         dq_partial=c.dq_partial,
         dq_reasons=list(c.dq_reasons),
+        # Переходы считает домен: свой список в интерфейсе разошёлся бы с правилом
+        # жизненного цикла молча, и аналитик узнавал бы о тупике только по отказу.
+        allowed_status_transitions=[status.value for status in allowed_transitions(c.status)],
         pdf_last_sha256=c.pdf_last_sha256,
         pdf_last_generated_at=c.pdf_last_generated_at,
     )

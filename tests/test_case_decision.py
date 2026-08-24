@@ -75,7 +75,7 @@ def test_submit_case_decision_invalid_transition():
     )
     repo.save(c)
     uc = SubmitCaseDecisionUseCase(repo, baseline)
-    with pytest.raises(ValueError, match="invalid transition"):
+    with pytest.raises(ValueError, match="недопустимый переход статуса"):
         uc.execute("c-term", CaseStatus.TRIAGE, ts)
 
 

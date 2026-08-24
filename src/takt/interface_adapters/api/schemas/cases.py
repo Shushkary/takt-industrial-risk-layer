@@ -270,6 +270,7 @@ class CaseDetail(BaseModel):
     dq_score: float
     dq_partial: bool
     dq_reasons: list[str]
+    allowed_status_transitions: list[str] = Field(default_factory=list)
     pdf_last_sha256: str = ""
     pdf_last_generated_at: str = ""
 

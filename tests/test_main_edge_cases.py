@@ -284,7 +284,7 @@ def test_post_decision_invalid_transition_400() -> None:
         )
         r = client.post(f"/cases/{cid}/decision", json={"status": "TRIAGE"})
     assert r.status_code == 400
-    assert "invalid transition" in r.json()["detail"].lower()
+    assert "недопустимый переход статуса" in r.json()["detail"]
 
 
 def test_siem_forward_case_not_found() -> None:

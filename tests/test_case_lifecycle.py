@@ -5,7 +5,11 @@ from datetime import datetime, timezone
 import pytest
 
 from takt.domain.entities.case import Case, CaseStatus
-from takt.domain.services.case_lifecycle import can_transition, transition_case
+from takt.domain.services.case_lifecycle import (
+    allowed_transitions,
+    can_transition,
+    transition_case,
+)
 
 
 def test_valid_triage():
@@ -66,6 +70,39 @@ def test_terminal_confirmed_rejects_any_transition():
     assert can_transition(c.status, CaseStatus.TRIAGE) is False
     with pytest.raises(ValueError):
         transition_case(c, CaseStatus.TRIAGE)
+
+
+def test_allowed_transitions_lists_exactly_what_passes():
+    """Интерфейс предлагает статусы из этого списка: расхождение вернуло бы тупиковый выбор."""
+    for current in CaseStatus:
+        allowed = allowed_transitions(current)
+        assert all(can_transition(current, target) for target in allowed)
+        rejected = {status for status in CaseStatus if status not in allowed}
+        assert not any(can_transition(current, target) for target in rejected)
+
+
+def test_terminal_status_offers_nothing():
+    assert allowed_transitions(CaseStatus.CONFIRMED) == ()
+    assert allowed_transitions(CaseStatus.FALSE_POSITIVE) == ()
+
+
+def test_rejected_transition_speaks_the_product_language():
+    """Текст уходит пользователю в `detail` ответа API, латиница там читается как сбой."""
+    ts = datetime.now(timezone.utc)
+    c = Case(
+        case_id="1",
+        status=CaseStatus.CONFIRMED,
+        title="t",
+        risk_class="HIGH",
+        risk_score=0.9,
+        created_at=ts,
+    )
+    with pytest.raises(ValueError) as excinfo:
+        transition_case(c, CaseStatus.TRIAGE)
+    message = str(excinfo.value)
+    assert "недопустимый переход статуса" in message
+    assert "подтверждено" in message and "в разборе" in message
+    assert "CONFIRMED" not in message and "TRIAGE" not in message
 
 
 def test_case_append_audit_line_format():

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260824-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260824-03" />
   </head>
   <body>
     <header class="top">
@@ -58,6 +58,7 @@
               <span id="caseId" class="case-id">—</span>
               <span id="caseStatus" class="chip">—</span>
               <button id="changeStatusButton" class="link" type="button">изменить статус</button>
+              <span id="statusTerminalNote" class="muted small" hidden>конечный статус, дальше не меняется</span>
               <button class="help sm" type="button" data-help="status" aria-label="Пояснение: статус кейса">?</button>
             </div>
             <div id="statusForm" class="status-form" hidden>
@@ -115,7 +116,7 @@
               <button class="help" type="button" data-help="missing" aria-label="Пояснение: маршрут добора контекста">?</button>
             </div>
             <ul id="missingList" class="plain"></ul>
-            <p class="muted small">Пока перечень непуст, вердикт остаётся неопределённым.</p>
+            <p class="muted small">Пока перечень полон, вердикт остаётся неопределённым.</p>
           </div>
 
           <div class="block">
@@ -218,7 +219,7 @@
             <div class="block-head">
               <h4>Журнал действий</h4>
               <div class="head-actions">
-                <button id="verifyLedgerButton" class="link" type="button">Целостность журнала: проверить</button>
+                <button id="verifyLedgerButton" class="link" type="button">Проверить целостность журнала</button>
                 <button class="help" type="button" data-help="journal" aria-label="Пояснение: журнал действий">?</button>
               </div>
             </div>
@@ -238,6 +239,8 @@
           <dl id="entityFacts" class="facts"></dl>
           <input id="findingComment" type="text" placeholder="комментарий (необязательно)" maxlength="2000" />
           <button id="addFinding" class="action" type="button">Добавить в находки</button>
+          <h3 class="entity-subhead">Связанные кейсы</h3>
+          <div id="entityRelatedCases" class="chips"></div>
           <h3 class="entity-subhead">Окружение</h3>
           <ul id="entityEnvironment" class="plain small"></ul>
         </div>
@@ -292,7 +295,7 @@
             <div class="counter">
               <span class="counter-label">Сокращение действий <button class="help sm" type="button" data-help="reduction" aria-label="Пояснение: сокращение">?</button></span>
               <span id="reductionValue" class="counter-value">—</span>
-              <span class="counter-sub muted small">итог совпадает с /simulation</span>
+              <span class="counter-sub muted small">итог совпадает с ответом продукта</span>
             </div>
           </div>
         </div>
@@ -346,6 +349,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260824-02"></script>
+    <script src="./app.min.js?v=20260824-03"></script>
   </body>
 </html>

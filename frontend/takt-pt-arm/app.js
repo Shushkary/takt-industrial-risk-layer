@@ -171,7 +171,7 @@ const HELP = {
     title: 'Основание попадания события в кейс',
     body: [
       '«Ядро» — событие совпало с отличительной сущностью инцидента: учётной записью, адресом или артефактом, по которым кейс собирался. «Расширение» — событие добрано по узлу за окно инцидента и собственного признака атаки не имеет.',
-      'Значение приходит из ответа продукта (correlation_evidence), интерфейс его не вычисляет. Полная причина — в подсказке при наведении.',
+      'Значение приходит из ответа продукта (поле correlation_evidence), интерфейс его не вычисляет. Полная причина — в подсказке при наведении.',
       'Что делать: разбирать сверху вниз ядро, а расширение отсеивать. Вместе с расширением в кейс попадает штатная активность тех же узлов — это цена полноты, а не ошибка сборки.',
     ],
   },
@@ -219,7 +219,7 @@ const HELP = {
     title: 'Журнал действий по кейсу',
     body: [
       'Все действия, изменившие состояние кейса: сборка, находки, подтверждение пакета, смена статуса. В записи — время, автор и суть действия.',
-      'Журнал append-only и связан цепочкой хэшей: изменить прошлую запись нельзя, целостность проверяется отдельно по кнопке.',
+      'Журнал только дополняется и связан цепочкой контрольных сумм: изменить прошлую запись нельзя, целостность проверяется отдельно по кнопке.',
       'Что делать: передавая смену, ссылаться на журнал, а не пересказывать сделанное. По нему же считается сокращение ручных действий.',
     ],
   },
@@ -266,7 +266,7 @@ const HELP = {
   source: {
     title: 'Источник события',
     body: [
-      '«Защита рабочих станций» — агент на узле, «система сбора событий» — правило корреляции, «сетевые события» — поток Netflow, «промышленная телеметрия» — телеметрия и конвейер сборки. Исходный код класса источника остаётся в подсказке при наведении.',
+      '«Защита рабочих станций» — агент на узле, «система сбора событий» — правило корреляции, «сетевые события» — поток Netflow, «промышленная телеметрия» — телеметрия и конвейер сборки. Код класса источника остаётся в подсказке при наведении: по нему источник ищется в данных и настройках.',
       'Что делать: помнить разную природу свидетельств. Агент показывает, что произошло на узле; сетевой поток — что ушло по сети; система сбора событий — что уже решило вышестоящее средство.',
     ],
   },
@@ -308,7 +308,7 @@ const HELP = {
   dq_score: {
     title: 'Качество данных',
     body: [
-      'Доля признаков, вычисленных по событиям кейса без пропусков: 1.00 — данные полные. Пометка «(неполные)» означает частичную наблюдаемость; причины перечислены под значением — код приходит из ответа продукта (dq_reasons), выдуманный перевод хуже кода.',
+      'Доля признаков, вычисленных по событиям кейса без пропусков: 1.00 — данные полные. Пометка «(неполные)» означает частичную наблюдаемость, причины перечислены под значением.',
       'Что делать: значение ниже 1.00 — причина запросить исходные журналы, а не понижать значимость инцидента. Неполнота снижает обоснованность вывода, но организационный документ не заменяет.',
     ],
   },
@@ -325,7 +325,7 @@ const HELP = {
     body: [
       'Одна величина вместо четырёх разбросанных признаков достоверности: полнота организационного контекста (вес 0.40), качество данных (0.25), доверие к источникам (0.20) и обоснование корреляции (0.15). Рядом — вердикт триады и разложение по составляющим с причинами, по которым составляющая не равна единице.',
       'Организационный контекст весит больше остальных: без него безупречные по качеству данные всё равно не дают вывода о легитимности. Доверие к источникам считается по слабейшему звену — вывод не крепче худшего из каналов.',
-      'Пока перечень «Чего не хватает» непуст, обоснованность не бывает высокой, каким бы ни было качество данных. Что делать: называть эту величину в разговоре с руководителем и регулятором вместо перечисления отдельных метрик.',
+      'Пока перечень «Чего не хватает» полон, обоснованность не бывает высокой, каким бы ни было качество данных. Что делать: называть эту величину в разговоре с руководителем и регулятором вместо перечисления отдельных метрик.',
     ],
   },
   missing: {
@@ -356,6 +356,7 @@ let selectedEntity = null;
 let pollTimer = null;
 let lastFocused = null;
 let currentCaseStatus = '';
+let currentCaseTransitions = [];
 let lastWorkspaceEvents = [];
 let currentCaseEventCount = null;
 let lastCaseFindings = [];
@@ -509,12 +510,26 @@ function queueSignature(items) {
   return items.map((item) => `${item.case_id}:${item.status}:${item.risk_score}:${item.event_count}`).join('|');
 }
 
+// Порядок очереди: сначала класс риска от высшего к низшему, внутри класса — балл, при
+// равном балле выше собранный инцидент (больше событий), чтобы он не терялся среди одиночных
+// срабатываний. Ранг класса берётся из словаря продукта — там классы перечислены по возрастанию,
+// поэтому своя лестница классов в интерфейсе не заводится и не разойдётся с продуктом.
+function riskRank(riskClass) {
+  return Object.keys(vocabulary.risk_class || {}).indexOf(String(riskClass || ''));
+}
+
+function compareByRisk(a, b) {
+  return (
+    riskRank(b.risk_class) - riskRank(a.risk_class) ||
+    Number(b.risk_score) - Number(a.risk_score) ||
+    Number(b.event_count || 0) - Number(a.event_count || 0)
+  );
+}
+
 let lastQueueSignature = null;
 
 function renderQueue() {
-  const ordered = [...cases].sort(
-    (a, b) => Number(b.risk_score) - Number(a.risk_score) || Number(b.event_count || 0) - Number(a.event_count || 0)
-  );
+  const ordered = [...cases].sort(compareByRisk);
   const signature = queueSignature(ordered);
   if (signature === lastQueueSignature) {
     updateActiveQueueItem();
@@ -577,6 +592,7 @@ async function openCase(caseId) {
 function renderCase(workspace) {
   const item = workspace.case || {};
   currentCaseStatus = item.status || '';
+  currentCaseTransitions = item.allowed_status_transitions || [];
   lastWorkspaceEvents = workspace.events || [];
   currentCaseEventCount = lastWorkspaceEvents.length;
   $('#staleCaseBanner').hidden = true;
@@ -589,7 +605,7 @@ function renderCase(workspace) {
   $('#riskScore').textContent = score(item.risk_score);
   $('#eventCount').textContent = String((workspace.events || []).length);
   $('#dqScore').textContent = `${score(item.dq_score)}${item.dq_partial ? ' (неполные)' : ''}`;
-  const dqReasons = item.dq_reasons || [];
+  const dqReasons = (item.dq_reasons || []).map((reason) => term('dq_reason', reason));
   $('#dqReasons').hidden = !dqReasons.length;
   $('#dqReasons').textContent = dqReasons.length ? `Причины: ${dqReasons.join(', ')}` : '';
   $('#caseXai').textContent = item.xai_summary || '';
@@ -615,11 +631,6 @@ function renderCase(workspace) {
 // корректировкой). Раньше это не показывалось на вкладке расследования вовсе — реконструкция
 // была только в «Симуляции», а связанные кейсы виднелись лишь строкой хэшей в карточке сущности.
 
-const CHAIN_STEP_KIND_RU = {
-  process_spawn: 'запуск процесса',
-  network_move: 'сетевое перемещение',
-};
-
 function renderReconstruction(attackChain) {
   const steps = attackChain.steps || [];
   $('#reconstructionEntry').textContent = attackChain.entry_point
@@ -633,20 +644,22 @@ function renderReconstruction(attackChain) {
   }
   for (const step of steps) {
     const item = document.createElement('li');
-    const kind = CHAIN_STEP_KIND_RU[step.kind] || step.kind;
+    const kind = term('chain_step_kind', step.kind);
     item.innerHTML = `<span class="mono small muted">${escapeHtml(utc(step.observed_at))}</span> ${escapeHtml(kind)}: <span class="mono">${escapeHtml(step.from_entity)}</span> → <span class="mono">${escapeHtml(step.to_entity)}</span> <span class="muted small">(${escapeHtml(step.operation)})</span>`;
     list.appendChild(item);
   }
 }
 
-function renderRelatedCases(relatedCases) {
-  const box = $('#relatedCasesList');
+// Связанные кейсы показываются в двух местах — в блоке кейса и в карточке сущности.
+// Отрисовка одна: раньше в блоке были кликабельные чипы, а в карточке те же идентификаторы
+// шли строкой через запятую, и одни и те же данные выглядели как разные сведения.
+function fillCaseChips(box, caseIds, emptyText) {
   box.replaceChildren();
-  if (!relatedCases.length) {
-    box.innerHTML = '<span class="muted small">связанных кейсов нет</span>';
+  if (!caseIds.length) {
+    box.innerHTML = `<span class="muted small">${escapeHtml(emptyText)}</span>`;
     return;
   }
-  for (const caseId of relatedCases) {
+  for (const caseId of caseIds) {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'chip sm chip-button';
@@ -654,6 +667,10 @@ function renderRelatedCases(relatedCases) {
     chip.addEventListener('click', () => openCase(caseId));
     box.appendChild(chip);
   }
+}
+
+function renderRelatedCases(relatedCases) {
+  fillCaseChips($('#relatedCasesList'), relatedCases, 'связанных кейсов нет');
 }
 
 // --- Журнал действий --------------------------------------------------------
@@ -700,7 +717,7 @@ async function verifyAuditLedger() {
     toast(
       result.ok
         ? `Целостность подтверждена: проверено записей — ${result.checked_entries}`
-        : `Нарушение целостности: ${result.issue} (проверено ${result.checked_entries} из журнала)`
+        : `Нарушение целостности: ${term('ledger_issue', result.issue)} (проверено записей — ${result.checked_entries})`
     );
   } catch (error) {
     toast(
@@ -717,12 +734,6 @@ async function verifyAuditLedger() {
 // контекста. Расчёт целиком на стороне продукта (`verdict_confidence` в GET /cases/{id});
 // здесь только показ — второй, «свой» расчёт в интерфейсе разошёлся бы с доказательным
 // контуром и с тем, что уходит руководителю.
-
-const VERDICT_TEXT = {
-  LEG: 'легитимное',
-  ILLEG: 'нелегитимное',
-  UNDET: 'неопределённое',
-};
 
 function renderConfidence(confidence) {
   const badge = $('#verdictBadge');
@@ -742,7 +753,7 @@ function renderConfidence(confidence) {
   }
 
   const verdict = String(confidence.verdict || 'UNDET');
-  badge.textContent = VERDICT_TEXT[verdict] || verdict;
+  badge.textContent = term('verdict', verdict);
   badge.className = `verdict ${verdict.toLowerCase()}`;
   grade.textContent = confidence.grade || '—';
   grade.className = `grade ${gradeClass(confidence.grade)}`;
@@ -805,11 +816,13 @@ function renderMissing(items) {
 function openStatusForm() {
   const select = $('#statusFormSelect');
   select.replaceChildren();
-  for (const [code, title] of Object.entries(vocabulary.case_status || {})) {
-    if (code === currentCaseStatus) continue;
+  // Предлагаются только переходы, которые пройдут: список считает домен и отдаёт в карточке
+  // дела (`allowed_status_transitions`). Свой список в интерфейсе показывал бы тупиковые
+  // варианты, и аналитик узнавал бы об отказе только после нажатия «Сохранить».
+  for (const code of currentCaseTransitions) {
     const option = document.createElement('option');
     option.value = code;
-    option.textContent = title;
+    option.textContent = term('case_status', code);
     select.appendChild(option);
   }
   $('#statusFormReason').value = '';
@@ -822,7 +835,11 @@ function openStatusForm() {
 
 function closeStatusForm() {
   $('#statusForm').hidden = true;
-  $('#changeStatusButton').hidden = false;
+  // У конечного статуса переходов нет: вместо кнопки, которая всё равно упрётся в отказ,
+  // рядом со статусом остаётся пояснение, почему менять нечего.
+  const terminal = currentCaseTransitions.length === 0;
+  $('#changeStatusButton').hidden = terminal;
+  $('#statusTerminalNote').hidden = !terminal;
 }
 
 async function submitStatusForm() {
@@ -901,19 +918,17 @@ function entityButton(type, value) {
   return `<button type="button" class="entity-link" data-entity-type="${escapeHtml(type)}" data-entity-id="${escapeHtml(value)}">${escapeHtml(value)}</button>`;
 }
 
-// Основание попадания события в кейс. Значение приходит из `correlation_evidence` ответа API:
-// свой вывод здесь разошёлся бы с тем, что уходит в доказательный пакет.
-const EVIDENCE_RULE_RU = {
-  pivot: 'ядро',
-  'host-expansion': 'расширение',
-  manual: 'добавлено аналитиком',
-};
+// Основание попадания события в кейс приходит из `correlation_evidence` ответа API, название —
+// из словаря продукта. Здесь остаётся только классификация «ядро или нет»: это логика разбора,
+// а не название, и от неё зависит подсветка строки и фильтр «только ядро».
+function isPivotRule(rule) {
+  return rule === 'pivot';
+}
 
 function evidenceCell(item) {
   if (!item) return '<span class="muted small">—</span>';
-  const label = EVIDENCE_RULE_RU[item.rule] || item.rule;
-  const kind = item.rule === 'pivot' ? 'core' : 'expanded';
-  return `<span class="evidence ${kind}" title="${escapeHtml(item.reason || '')}">${escapeHtml(label)}</span>`;
+  const kind = isPivotRule(item.rule) ? 'core' : 'expanded';
+  return `<span class="evidence ${kind}" title="${escapeHtml(item.reason || '')}">${escapeHtml(term('correlation_rule', item.rule))}</span>`;
 }
 
 let lastChainEvents = [];
@@ -938,7 +953,7 @@ function paintChain() {
   for (const event of ordered) {
     const evidence = lastChainEvidence.get(event.event_id);
     if (!evidence) unknownCount += 1;
-    else if (evidence.rule === 'pivot') coreCount += 1;
+    else if (isPivotRule(evidence.rule)) coreCount += 1;
     else expandedCount += 1;
   }
   // Отсеивать по основанию нечего, если оснований в кейсе нет ни у одного события.
@@ -951,7 +966,7 @@ function paintChain() {
   let shown = 0;
   for (const event of ordered) {
     const evidence = lastChainEvidence.get(event.event_id);
-    const isCore = Boolean(evidence) && evidence.rule === 'pivot';
+    const isCore = Boolean(evidence) && isPivotRule(evidence.rule);
     if (coreOnly && !isCore) continue;
     shown += 1;
     const entities = event.entities || {};
@@ -985,7 +1000,6 @@ function renderGraph(graph) {
     box.innerHTML = '<span class="muted small">связей нет</span>';
     return;
   }
-  const kinds = { initiated: 'запустил', spawned: 'породил', runs: 'выполняет', network: 'обратился к' };
   const seen = new Set();
   for (const edge of edges) {
     const key = `${edge.source}|${edge.type}|${edge.target}`;
@@ -994,7 +1008,7 @@ function renderGraph(graph) {
     const row = document.createElement('div');
     row.className = 'graph-row';
     row.innerHTML = `<span class="mono">${escapeHtml(edge.source)}</span>
-      <span class="edge">${escapeHtml(kinds[edge.type] || edge.type)}</span>
+      <span class="edge">${escapeHtml(term('graph_edge_kind', edge.type))}</span>
       <span class="mono">${escapeHtml(edge.target)}</span>`;
     box.appendChild(row);
   }
@@ -1103,7 +1117,7 @@ function paintResponse() {
   if (!responseRows.length) {
     wrap.hidden = true;
     empty.hidden = false;
-    empty.textContent = 'кейс собран не пивотом: отличительные сущности не заданы, предлагать действия не по чему';
+    empty.textContent = 'кейс собран не пивотом: отличительные сущности не заданы, поэтому предлагать нечего';
     $('#confirmResponseButton').disabled = true;
     return;
   }
@@ -1198,6 +1212,7 @@ function resetEntityPanel() {
   $('#entityId').textContent = '';
   $('#entityType').textContent = '—';
   $('#entityFacts').replaceChildren();
+  $('#entityRelatedCases').replaceChildren();
   $('#entityEnvironment').replaceChildren();
   $('#findingComment').value = '';
 }
@@ -1225,20 +1240,18 @@ async function openEntity(type, id) {
     const card = await api(`/entities/${encodeURIComponent(type)}/${encodeURIComponent(id)}/card`);
     const typicality = card.typicality || {};
     const eventCount = card.event_count ?? (card.environment || []).length;
-    // «Частота в истории» — счётчик событий, а не модель поведения: explanation с бэкенда
-    // приходит на английском для журналов, а не для интерфейса аналитика, поэтому здесь не
-    // показывается — считаем по event_count сами, тем же порогом, что и typicality.status.
-    let frequency = typicality.status || '—';
-    if (typicality.status === 'first_seen') frequency = 'первое появление';
-    else if (typicality.status === 'rare') frequency = 'редко: менее 3 событий';
-    else if (typicality.status === 'typical') frequency = `часто: 3 и более событий (${eventCount})`;
+    // «Частота в истории» — счётчик событий, а не модель поведения. Название с порогом
+    // приходит из словаря продукта; `typicality.explanation` не показывается — он на
+    // английском и написан для журналов, а не для интерфейса аналитика.
+    const frequency = typicality.status
+      ? `${term('typicality', typicality.status)} (${eventCount})`
+      : '—';
     const rows = [
       ['Событий всего', eventCount],
       ['Частота в истории', frequency],
       ['Первое появление', card.first_seen ? utc(card.first_seen) : '—'],
       ['Последнее появление', card.last_seen ? utc(card.last_seen) : '—'],
       ['Источники', (card.sources || []).map((source) => term('event_source', source)).join(', ') || '—'],
-      ['Связанные кейсы', (card.related_cases || []).join(', ') || '—'],
     ];
     for (const [label, value] of rows) {
       const dt = document.createElement('dt');
@@ -1247,6 +1260,9 @@ async function openEntity(type, id) {
       dd.textContent = String(value);
       facts.append(dt, dd);
     }
+    // Связанные кейсы — отдельным блоком во всю ширину панели, а не ячейкой списка фактов:
+    // в колонке 127 px чипы встают в столбец и растягивают карточку на 660 px.
+    fillCaseChips($('#entityRelatedCases'), card.related_cases || [], 'связанных кейсов нет');
     const recent = (card.environment || []).slice(0, 10);
     if (!recent.length) {
       environment.innerHTML = '<li class="muted small">событий нет</li>';
@@ -1267,6 +1283,7 @@ async function openEntity(type, id) {
     const dd = document.createElement('dd');
     dd.textContent = `недоступна: ${error.message}`;
     facts.append(dt, dd);
+    $('#entityRelatedCases').innerHTML = '<span class="muted small">недоступно</span>';
     environment.innerHTML = '<li class="muted small">окружение недоступно</li>';
   }
 }
@@ -1404,9 +1421,7 @@ async function refresh() {
       }
     }
     if (!selectedCaseId && cases.length) {
-      const top = [...cases].sort(
-        (a, b) => Number(b.risk_score) - Number(a.risk_score) || Number(b.event_count || 0) - Number(a.event_count || 0)
-      )[0];
+      const top = [...cases].sort(compareByRisk)[0];
       openCase(top.case_id);
     }
   } catch (error) {

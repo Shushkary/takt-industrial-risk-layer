@@ -20,10 +20,17 @@ from takt.domain.services.verdict_confidence import GRADE_HIGH, GRADE_LOW, GRADE
 from takt.domain.vocabulary import (
     ARTIFACT_TYPE_RU,
     CASE_STATUS_RU,
+    CHAIN_STEP_KIND_RU,
     CONFIDENCE_GRADE_RU,
+    CORRELATION_RULE_RU,
+    DQ_REASON_RU,
     EVENT_SOURCE_RU,
+    GRAPH_EDGE_KIND_RU,
+    LEDGER_ISSUE_RU,
     RISK_CLASS_RU,
+    TYPICALITY_RU,
     VERDICT_RU,
+    events_ru,
     risk_class_ru,
     vocabulary,
 )
@@ -122,8 +129,30 @@ def test_confidence_grades_match_the_service() -> None:
 
 @pytest.mark.parametrize(
     "table",
-    [CASE_STATUS_RU, EVENT_SOURCE_RU, VERDICT_RU, RISK_CLASS_RU],
-    ids=["status", "source", "verdict", "risk_class"],
+    [
+        CASE_STATUS_RU,
+        EVENT_SOURCE_RU,
+        VERDICT_RU,
+        RISK_CLASS_RU,
+        CORRELATION_RULE_RU,
+        CHAIN_STEP_KIND_RU,
+        GRAPH_EDGE_KIND_RU,
+        TYPICALITY_RU,
+        DQ_REASON_RU,
+        LEDGER_ISSUE_RU,
+    ],
+    ids=[
+        "status",
+        "source",
+        "verdict",
+        "risk_class",
+        "correlation_rule",
+        "chain_step_kind",
+        "graph_edge_kind",
+        "typicality",
+        "dq_reason",
+        "ledger_issue",
+    ],
 )
 def test_names_are_actually_russian(table: dict[str, str]) -> None:
     """Латиница в названии означает недопереведённое обозначение."""
@@ -157,6 +186,12 @@ def test_vocabulary_bundles_every_table() -> None:
         "event_source",
         "entity_type",
         "artifact_type",
+        "correlation_rule",
+        "chain_step_kind",
+        "graph_edge_kind",
+        "typicality",
+        "dq_reason",
+        "ledger_issue",
     }
     assert payload["case_status"][CaseStatus.CONFIRMED.value] == "подтверждено"
 
@@ -203,3 +238,41 @@ def test_generated_case_title_is_russian() -> None:
     # Операция — значение из данных источника: она остаётся как есть, иначе доказательство
     # разойдётся с журналом.
     assert "WRITE_REGISTER" in title
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        "correlation_rule",
+        "chain_step_kind",
+        "graph_edge_kind",
+        "typicality",
+        "dq_reason",
+        "ledger_issue",
+    ],
+)
+def test_new_tables_are_published_to_the_interface(table: str) -> None:
+    """Таблица, которой нет в ответе `/catalog/vocabulary`, вынудит АРМ завести свою."""
+    assert table in vocabulary(), table
+
+
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [
+        (0, "0 событий"),
+        (1, "1 событие"),
+        (2, "2 события"),
+        (4, "4 события"),
+        (5, "5 событий"),
+        (11, "11 событий"),
+        (14, "14 событий"),
+        (21, "21 событие"),
+        (25, "25 событий"),
+        (41, "41 событие"),
+        (102, "102 события"),
+        (111, "111 событий"),
+    ],
+)
+def test_events_ru_agrees_with_the_numeral(count: int, expected: str) -> None:
+    """«Собрано 41 событий» в сводке кейса — небрежность там, где продукт объясняет вывод."""
+    assert events_ru(count) == expected

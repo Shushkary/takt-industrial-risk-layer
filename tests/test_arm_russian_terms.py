@@ -46,7 +46,20 @@ def test_vocabulary_is_loaded_before_the_first_render() -> None:
 
 @pytest.mark.parametrize(
     "table",
-    ["risk_class", "case_status", "event_source", "entity_type", "artifact_type"],
+    [
+        "risk_class",
+        "case_status",
+        "event_source",
+        "entity_type",
+        "artifact_type",
+        "verdict",
+        "correlation_rule",
+        "chain_step_kind",
+        "graph_edge_kind",
+        "typicality",
+        "dq_reason",
+        "ledger_issue",
+    ],
 )
 def test_each_vocabulary_table_is_actually_used(table: str) -> None:
     """Таблица, которую никто не читает, — это перевод, который пользователь не увидит."""
@@ -116,13 +129,13 @@ def test_untranslated_code_falls_back_to_the_code_itself() -> None:
 
 
 def test_markup_has_no_latin_designations_left() -> None:
-    """В видимом тексте разметки латиницей остаются только UTC и путь API."""
+    """В видимом тексте разметки латиницей остаётся только обозначение зоны UTC.
+
+    Путь `/simulation` из подписи счётчика убран: адрес endpoint ничего не говорит аналитику,
+    а исключение в стороже открывало дорогу следующей латинице.
+    """
     text = _INDEX.read_text(encoding="utf-8")
     visible = re.findall(r">([^<>]*[A-Za-z]{2,}[^<>]*)<", text)
 
-    unexpected = [
-        item.strip()
-        for item in visible
-        if item.strip() and "UTC" not in item and "/simulation" not in item
-    ]
+    unexpected = [item.strip() for item in visible if item.strip() and "UTC" not in item]
     assert not unexpected, unexpected

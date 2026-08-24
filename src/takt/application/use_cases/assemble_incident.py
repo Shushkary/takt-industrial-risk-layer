@@ -43,6 +43,7 @@ from takt.domain.entities.case import (
 from takt.domain.entities.event import NormalizedEvent
 from takt.domain.invariants.evaluator import risk_vectors_from_invariants
 from takt.domain.ports.case_repository import CaseRepositoryPort
+from takt.domain.vocabulary import events_ru
 
 # Разбор за один запрос к хранилищу: фикстура INC-002 — 1030 событий, страничный
 # обход по 500 держит и её, и заметно больший поток.
@@ -496,13 +497,14 @@ def _summary(
 ) -> str:
     sources = sorted({event.source.value for event in assembled})
     text = (
-        f"Собрано {len(assembled)} событий из источников: {', '.join(sources)}. "
+        f"Собрано {events_ru(len(assembled))} из источников: {', '.join(sources)}. "
         f"Ядро по отличительным сущностям ({', '.join(str(seed) for seed in seeds)}) — "
-        f"{len(core_ids)} событий."
+        f"{events_ru(len(core_ids))}."
     )
     if expanded_ids:
         text += (
-            f" Расширение до уровня узла ({', '.join(expand_hosts)}) добавило {len(expanded_ids)}"
-            " событий без отличительных признаков; отсев остаётся за аналитиком."
+            f" Расширение до уровня узла ({', '.join(expand_hosts)}) добавило "
+            f"{events_ru(len(expanded_ids))} без отличительных признаков; "
+            "отсев остаётся за аналитиком."
         )
     return text
