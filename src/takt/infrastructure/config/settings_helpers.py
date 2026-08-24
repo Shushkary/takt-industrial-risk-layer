@@ -118,6 +118,32 @@ def apply_storage_env_overrides(weights: dict[str, Any]) -> None:
         weights["storage"] = {"backend": mode, "sqlite_path": "data/takt_cases.db"}
 
 
+RISK_SCALES = ("industrial", "soc")
+
+
+def apply_risk_scale(weights: dict[str, Any]) -> None:
+    """Выбирает шкалу классов риска по контуру: `risk_scale` в YAML или **TAKT_RISK_SCALE**.
+
+    Расчёт балла для обоих контуров один и тот же — меняются только пороги классов. Причина
+    в том, что достижимый максимум шкалы равен 0.800: вектор качества данных и множитель
+    качества связаны обратно, поэтому вес 0.20 не «обналичивается». Пороги 0.65/0.85 назначены
+    как доли от 1.0, и в SOC-контуре, где промышленные векторы не поднимаются срабатываниями,
+    это оставляло классы «высокий» и «критический» практически недостижимыми.
+
+    Выбранная шкала подставляется в `risk_class_thresholds`, поэтому дальше по коду ничего не
+    меняется: и оценка события, и сборка инцидента читают один и тот же ключ.
+    """
+    scale = (os.environ.get("TAKT_RISK_SCALE", "") or str(weights.get("risk_scale", "industrial"))).strip().lower()
+    if scale not in RISK_SCALES:
+        raise ValueError(f"risk scale must be one of {', '.join(RISK_SCALES)}, not {scale!r}")
+    if scale == "industrial":
+        return
+    thresholds = weights.get("risk_class_thresholds_soc")
+    if not isinstance(thresholds, dict):
+        raise ValueError("risk_scale: soc требует секцию risk_class_thresholds_soc в конфигурации")
+    weights["risk_class_thresholds"] = dict(thresholds)
+
+
 def sqlite_storage_db_path(weights: Mapping[str, Any], *, project_root: Path) -> Path | None:
     """Путь к файлу SQLite при `storage.backend: sqlite`; иначе None."""
     raw = weights.get("storage")

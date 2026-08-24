@@ -44,6 +44,7 @@ from takt.application.use_cases.verify_forensic_bundle import VerifyForensicBund
 from takt.domain.entities.case import Case
 from takt.domain.entities.event import EventSource, NormalizedEvent
 from takt.infrastructure.config.settings_helpers import (
+    apply_risk_scale,
     apply_storage_env_overrides,
     case_repository_from_weights,
     expected_behavior_from_weights,
@@ -357,6 +358,7 @@ def create_app() -> FastAPI:
     _ensure_explicit_takt_config_under_project(cfg_path)
     weights = load_risk_weights(cfg_path)
     apply_storage_env_overrides(weights)
+    apply_risk_scale(weights)
     stor = weights.get("storage") if isinstance(weights.get("storage"), dict) else {}
     case_backend = str(stor.get("backend", "memory")).strip().lower()
     app.state.case_storage_backend = "sqlite" if case_backend == "sqlite" else "memory"

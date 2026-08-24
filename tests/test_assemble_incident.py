@@ -372,14 +372,15 @@ def test_incident_inherits_measured_vectors_of_its_parts() -> None:
     держался только страховкой «не ниже худшего вошедшего дела» — то есть сборка не
     добавляла к оценке ничего, хотя её смысл ровно обратный.
     """
+    # Взято одно срабатывание, которое не поднимает ни ритм выше измеренного, ни контекст:
+    # `c2_external_dns` даёт ритм 0.55 и граф 0.9, а измеренные значения — 0.75 и 0.45.
+    # Так видно именно перенос измерений, а не результат срабатывания.
     measured = {"rhythm": 0.75, "graph": 0.9, "context": 0.45, "user": 0.1, "data_quality": 0.0}
     weak = _pipeline_case("pipeline-1", ["c2_external_dns"], 0.05, "LOW")
     weak.risk_vectors = dict(measured)
-    shift = _pipeline_case("pipeline-2", ["out_of_shift_access"], 0.04, "LOW")
 
     repo = InMemoryCaseStore()
     repo.save(weak)
-    repo.save(shift)
     use_case = AssembleIncidentUseCase(
         events=_FakeEventStore(_chain_and_background()),
         repo=repo,
@@ -390,8 +391,6 @@ def test_incident_inherits_measured_vectors_of_its_parts() -> None:
     vectors = result.case.risk_vectors
     assert vectors["rhythm"] == pytest.approx(0.75), "измеренный ритм вошедшего дела потерян"
     assert vectors["context"] == pytest.approx(0.45), "измеренный контекст вошедшего дела потерян"
-    # Пользовательский вектор поднят объединением: 0.1 у части, 0.7 по out_of_shift_access.
-    assert vectors["user"] == pytest.approx(0.7)
 
 
 def test_assembled_case_stores_its_own_vectors() -> None:

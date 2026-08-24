@@ -155,11 +155,21 @@ def integrity_boost(invariant_ids: list[str]) -> float:
 
 
 def rhythm_boost(invariant_ids: list[str]) -> float:
+    """Нарушение темпа обмена. Маркеры обоих треков: промышленный опрос и SOC-признаки.
+
+    До 2026-08-24 в наборе были только промышленные инварианты, и вектор ритма для
+    SOC-инцидента оставался нулевым при любом наборе срабатываний. Маячковый обмен с C2,
+    скан и серия неуспешных аутентификаций — это ровно аномалия темпа: именно по
+    периодичности такой обмен и находят сетевые средства обнаружения.
+    """
     markers = {
         InvariantId.ILLEGAL_FUNCTION_CODE.value,
         InvariantId.PAYLOAD_LENGTH_DRIFT.value,
         InvariantId.POLLING_JITTER.value,
         InvariantId.POLLING_PERIOD_DOUBLING_SUSPECT.value,
+        InvariantId.C2_EXTERNAL_DNS.value,
+        InvariantId.RECONNAISSANCE.value,
+        InvariantId.BRUTE_FORCE.value,
     }
     return 0.55 if markers & set(invariant_ids) else 0.0
 
@@ -197,6 +207,21 @@ def hitl_context_boost(invariant_ids: list[str]) -> float:
     return 0.6 if InvariantId.EXPERT_DISSONANCE.value in invariant_ids else 0.0
 
 
+def organizational_context_boost(invariant_ids: list[str]) -> float:
+    """Отсутствие организационного объяснения у действия.
+
+    Вектор контекста отвечает на вопрос «есть ли у этого действия наряд, заявка, окно
+    работ». Работа вне штатной смены и расхождение контекста отвечают на него прямо, но до
+    2026-08-24 вектор контекста поднимал единственный инвариант — расхождение с экспертной
+    оценкой. `context_dissonance` при этом не поднимал вектор контекста вовсе.
+    """
+    markers = {
+        InvariantId.OUT_OF_SHIFT_ACCESS.value,
+        InvariantId.CONTEXT_DISSONANCE.value,
+    }
+    return 0.6 if markers & set(invariant_ids) else 0.0
+
+
 def trust_boost(invariant_ids: list[str]) -> float:
     return 0.55 if InvariantId.TRUST_INDEX_DROP.value in invariant_ids else 0.0
 
@@ -226,7 +251,7 @@ def risk_vectors_from_invariants(
     graph = 0.8 if InvariantId.JUMP_SERVER_BYPASS.value in ids else 0.1
     graph = max(graph, integrity_boost(ids), graph_topology_boost(ids))
     rhythm = max(base_rhythm, rhythm_boost(ids), physics_boost(ids), request_reply_boost(ids))
-    context = max(base_context, hitl_context_boost(ids))
+    context = max(base_context, hitl_context_boost(ids), organizational_context_boost(ids))
     user = 0.7 if InvariantId.OUT_OF_SHIFT_ACCESS.value in ids else 0.1
     user = max(user, user_boost(ids), trust_boost(ids))
     return RiskBreakdown(

@@ -13,6 +13,7 @@
 |---|---|---|
 | `TAKT_CONFIG` | Путь к YAML с весами/порогами (по умолчанию `config/risk_weights.yaml`) | — |
 | `TAKT_STORAGE` | `memory` или `sqlite`; переопределяет `storage.backend` из YAML без правки файла | `case_storage`, `expected_behavior_storage` |
+| `TAKT_RISK_SCALE` | `industrial` (по умолчанию) или `soc`; выбирает шкалу классов риска — пороги SOC-контура пересчитаны на достижимый максимум балла 0.800, см. `docs/risk_scale_calibration.md` | — |
 | `TAKT_SQLITE_PATH` | Путь к файлу SQLite (при `storage.backend: sqlite`) | — |
 | `TAKT_SQLITE_BUSY_TIMEOUT_MS` | `PRAGMA busy_timeout`, мс; диапазон **100–300000**; невалидное или вне диапазона — **5000** | `sqlite_busy_timeout_ms` |
 | `TAKT_REQUEST_ID_HEADER` | Необязательное имя входящего заголовка для ID запроса (1–64 символов: буквы/цифры/`-`/`_`, напр. `X-Correlation-ID`); просматривается раньше `X-Request-ID`; ответ всегда содержит `X-Request-ID`; невалидное значение игнорируется | `request_id_alternate_header` (если задано и не дублирует `X-Request-ID`) |
