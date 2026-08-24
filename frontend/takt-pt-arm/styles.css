@@ -697,6 +697,23 @@ ul.plain li {
   margin: 2px 0;
 }
 
+.journal-item {
+  display: block;
+}
+
+.journal-time {
+  font-family: var(--mono);
+  color: var(--muted);
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.journal-actor {
+  color: var(--accent);
+  font-size: 12px;
+  margin-right: 6px;
+}
+
 /* Служебное */
 .muted {
   color: var(--muted);

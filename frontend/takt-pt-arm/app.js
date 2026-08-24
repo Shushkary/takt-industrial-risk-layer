@@ -198,6 +198,14 @@ const HELP = {
       'Что делать: фиксировать сущность сразу после подтверждения её участия, чтобы не собирать идентификаторы заново при передаче смены.',
     ],
   },
+  journal: {
+    title: 'Журнал действий по кейсу',
+    body: [
+      'Все действия, изменившие состояние кейса: сборка, находки, подтверждение пакета, смена статуса. В записи — время, автор и суть действия.',
+      'Журнал append-only и связан цепочкой хэшей: изменить прошлую запись нельзя, целостность проверяется отдельно по кнопке.',
+      'Что делать: передавая смену, ссылаться на журнал, а не пересказывать сделанное. По нему же считается сокращение ручных действий.',
+    ],
+  },
   response: {
     title: 'Варианты реагирования',
     body: [
@@ -569,6 +577,62 @@ function renderCase(workspace) {
   renderGraph(workspace.graph || { nodes: [], edges: [] });
   renderResponse(workspace.events || [], workspace.artifacts || [], item.correlation_evidence || []);
   renderFindings(item.findings || []);
+  renderJournal(item.audit_log || []);
+}
+
+// --- Журнал действий --------------------------------------------------------
+//
+// Append-only журнал кейса (`case.audit_log`), не отдельный расчёт: строка имеет вид
+// `<время ISO> | <действие>[ | actor=<id>]`. Записи без `actor=` — операции конвейера,
+// а не человека, показываются как «система».
+
+function parseAuditLine(line) {
+  const sepIndex = line.indexOf(' | ');
+  const at = sepIndex >= 0 ? line.slice(0, sepIndex) : '';
+  let action = sepIndex >= 0 ? line.slice(sepIndex + 3) : line;
+  let actor = 'система';
+  const actorSep = action.lastIndexOf(' | actor=');
+  if (actorSep >= 0) {
+    actor = action.slice(actorSep + 9).trim() || actor;
+    action = action.slice(0, actorSep);
+  }
+  return { at, action, actor };
+}
+
+function renderJournal(auditLog) {
+  const list = $('#journalList');
+  list.replaceChildren();
+  if (!auditLog.length) {
+    list.innerHTML = '<li class="muted small">записей нет</li>';
+    return;
+  }
+  // Новые действия сверху: журнал читают, чтобы понять, что случилось только что,
+  // а не с чего кейс начинался.
+  for (const line of [...auditLog].reverse()) {
+    const { at, action, actor } = parseAuditLine(line);
+    const item = document.createElement('li');
+    item.className = 'journal-item';
+    item.innerHTML = `<span class="journal-time">${escapeHtml(utc(at))}</span><span class="journal-actor">${escapeHtml(actor)}</span><span>${escapeHtml(action)}</span>`;
+    list.appendChild(item);
+  }
+}
+
+async function verifyAuditLedger() {
+  if (!selectedCaseId) return;
+  try {
+    const result = await api(`/cases/${encodeURIComponent(selectedCaseId)}/audit-ledger/verify`);
+    toast(
+      result.ok
+        ? `Целостность подтверждена: проверено записей — ${result.checked_entries}`
+        : `Нарушение целостности: ${result.issue} (проверено ${result.checked_entries} из журнала)`
+    );
+  } catch (error) {
+    toast(
+      error.status === 501
+        ? 'Проверка целостности недоступна для текущего хранилища'
+        : `Проверка не выполнена: ${error.message}`
+    );
+  }
 }
 
 // --- Обоснованность вывода -------------------------------------------------
@@ -1222,6 +1286,7 @@ $('#statusFormReason').addEventListener('input', () => {
 });
 $('#coreOnly').addEventListener('change', paintChain);
 $('#confirmResponseButton').addEventListener('click', confirmResponsePackage);
+$('#verifyLedgerButton').addEventListener('click', verifyAuditLedger);
 
 let queueSearchTimer = null;
 $('#queueSearch').addEventListener('input', () => {
