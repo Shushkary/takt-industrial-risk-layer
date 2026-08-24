@@ -446,6 +446,28 @@ body {
 table.chain {
   width: 100%;
   border-collapse: collapse;
+  /* Фиксированная раскладка: при `auto` браузер считает ширину колонок по содержимому и
+     max-width на ячейке игнорирует — таблица уезжала за колонку на 555 px. */
+  table-layout: fixed;
+}
+
+/* Доли подобраны на датасете INC-002 так, чтобы значения, по которым аналитик принимает
+   решение, не усекались вовсе: время, основание, узел и учётная запись помещаются целиком.
+   Класс источника (четыре известных значения), адрес и артефакт усекаются многоточием —
+   полное значение остаётся в подсказке и копируется по клику. */
+table.chain th:nth-child(1), table.chain td:nth-child(1) { width: 22%; }
+table.chain th:nth-child(2), table.chain td:nth-child(2) { width: 12%; }
+table.chain th:nth-child(3), table.chain td:nth-child(3) { width: 10%; }
+table.chain th:nth-child(4), table.chain td:nth-child(4) { width: 18%; }
+table.chain th:nth-child(5), table.chain td:nth-child(5) { width: 11%; }
+table.chain th:nth-child(6), table.chain td:nth-child(6) { width: 10%; }
+table.chain th:nth-child(7), table.chain td:nth-child(7) { width: 9%; }
+table.chain th:nth-child(8), table.chain td:nth-child(8) { width: 8%; }
+
+/* Метка времени — 19 знаков моноширинным: на 14px она не помещается в свою долю и усекалась
+   бы многоточием, а это первичный ключ доказательства. */
+table.chain td:nth-child(1) {
+  font-size: 12px;
 }
 
 table.chain th,
@@ -458,16 +480,21 @@ table.chain td {
 }
 
 /* Операция, узел, учётная запись, адрес и артефакт — значения источника переменной длины
-   (объекты конвейера сборки приходят в поле узла с префиксом вида `pipeline:`). Перенос не
-   меняет и не сокращает значение, только не даёт ему растянуть таблицу за пределы колонки. */
-table.chain td:nth-child(4),
-table.chain td:nth-child(5),
-table.chain td:nth-child(6),
-table.chain td:nth-child(7),
-table.chain td:nth-child(8) {
-  white-space: normal;
-  overflow-wrap: anywhere;
-  max-width: 190px;
+   (объекты конвейера сборки приходят в поле узла с префиксом вида `pipeline:`). Длинное
+   значение усекается многоточием, полное остаётся в подсказке и копируется по клику.
+   Переносить нельзя: перенос рвал `PROCESS_START` на «PROCESS_S / TART», а адрес — на пять
+   строк, то есть портил именно то значение, которое аналитик предъявляет как доказательство. */
+table.chain td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+table.chain .entity-link,
+table.chain .copyable {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 
 table.chain th {

@@ -752,7 +752,7 @@ function paintChain() {
     row.innerHTML = `
       <td class="mono">${escapeHtml(utc(event.observed_at))}</td>
       <td>${evidenceCell(evidence)}</td>
-      <td><span class="chip sm" title="${escapeHtml(event.source)}">${escapeHtml(term('event_source', event.source))}</span></td>
+      <td><span class="chip sm" title="${escapeHtml(`${term('event_source', event.source)} (${event.source})`)}">${escapeHtml(term('event_source', event.source))}</span></td>
       <td class="mono">${escapeHtml(event.operation)}</td>
       <td>${entityButton('host', entities.host_id)}</td>
       <td>${entityButton('user', entities.user_id)}</td>
