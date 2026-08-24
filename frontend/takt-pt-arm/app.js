@@ -202,8 +202,9 @@ const HELP = {
   entity: {
     title: 'Карточка сущности',
     body: [
-      'История выбранной сущности по всем принятым событиям, а не только по событиям кейса.',
-      'Что делать: проверить, впервые ли сущность ведёт себя так. Если такая активность для неё обычна, событие в кейсе скорее фон.',
+      'История и окружение выбранной сущности по всем принятым событиям, а не только по событиям кейса: когда впервые и последний раз встречалась, из каких источников, в каких кейсах участвует и что происходило вокруг.',
+      '«Частота в истории» — счётчик событий, а не модель поведения: «часто» означает три и более событий в накопленной истории и само по себе не говорит, что активность нормальна.',
+      'Что делать: смотреть окружение и связанные кейсы. Если сущность встречается впервые или редко, событие в кейсе весит больше.',
     ],
   },
   findings: {
@@ -307,8 +308,8 @@ const HELP = {
   dq_score: {
     title: 'Качество данных',
     body: [
-      'Доля признаков, вычисленных по событию без пропусков: 1.00 — данные полные.',
-      'Что делать: значение ниже 1.00 означает, что часть проверок не выполнялась. Это причина запросить исходные журналы, а не понижать значимость инцидента.',
+      'Доля признаков, вычисленных по событиям кейса без пропусков: 1.00 — данные полные. Пометка «(неполные)» означает частичную наблюдаемость; причины перечислены под значением — код приходит из ответа продукта (dq_reasons), выдуманный перевод хуже кода.',
+      'Что делать: значение ниже 1.00 — причина запросить исходные журналы, а не понижать значимость инцидента. Неполнота снижает обоснованность вывода, но организационный документ не заменяет.',
     ],
   },
   event_count: {
@@ -582,6 +583,9 @@ function renderCase(workspace) {
   $('#riskScore').textContent = score(item.risk_score);
   $('#eventCount').textContent = String((workspace.events || []).length);
   $('#dqScore').textContent = `${score(item.dq_score)}${item.dq_partial ? ' (неполные)' : ''}`;
+  const dqReasons = item.dq_reasons || [];
+  $('#dqReasons').hidden = !dqReasons.length;
+  $('#dqReasons').textContent = dqReasons.length ? `Причины: ${dqReasons.join(', ')}` : '';
   $('#caseXai').textContent = item.xai_summary || '';
 
   renderConfidence(item.verdict_confidence);
@@ -1168,6 +1172,7 @@ function resetEntityPanel() {
   $('#entityId').textContent = '';
   $('#entityType').textContent = '—';
   $('#entityFacts').replaceChildren();
+  $('#entityEnvironment').replaceChildren();
 }
 
 async function openEntity(type, id) {
@@ -1186,13 +1191,22 @@ async function openEntity(type, id) {
   for (const button of document.querySelectorAll('.entity-link')) {
     button.classList.toggle('active', button.dataset.entityType === type && button.dataset.entityId === id);
   }
+  const environment = $('#entityEnvironment');
+  environment.replaceChildren();
   try {
     const card = await api(`/entities/${encodeURIComponent(type)}/${encodeURIComponent(id)}/card`);
     const typicality = card.typicality || {};
-    const known = { first_seen: 'встречается впервые', rare: 'редкая сущность', typical: 'обычная активность' };
+    const eventCount = card.event_count ?? (card.environment || []).length;
+    // «Частота в истории» — счётчик событий, а не модель поведения: explanation с бэкенда
+    // приходит на английском для журналов, а не для интерфейса аналитика, поэтому здесь не
+    // показывается — считаем по event_count сами, тем же порогом, что и typicality.status.
+    let frequency = typicality.status || '—';
+    if (typicality.status === 'first_seen') frequency = 'первое появление';
+    else if (typicality.status === 'rare') frequency = 'редко: менее 3 событий';
+    else if (typicality.status === 'typical') frequency = `часто: 3 и более событий (${eventCount})`;
     const rows = [
-      ['Событий всего', card.event_count ?? (card.environment || []).length],
-      ['Историчность', known[typicality.status] || typicality.status || '—'],
+      ['Событий всего', eventCount],
+      ['Частота в истории', frequency],
       ['Первое появление', card.first_seen ? utc(card.first_seen) : '—'],
       ['Последнее появление', card.last_seen ? utc(card.last_seen) : '—'],
       ['Источники', (card.sources || []).map((source) => term('event_source', source)).join(', ') || '—'],
@@ -1205,12 +1219,27 @@ async function openEntity(type, id) {
       dd.textContent = String(value);
       facts.append(dt, dd);
     }
+    const recent = (card.environment || []).slice(0, 10);
+    if (!recent.length) {
+      environment.innerHTML = '<li class="muted small">событий нет</li>';
+    } else {
+      for (const event of recent) {
+        const item = document.createElement('li');
+        item.innerHTML = `<span class="mono small muted">${escapeHtml(utc(event.observed_at))}</span> <span class="chip sm" title="${escapeHtml(event.source)}">${escapeHtml(term('event_source', event.source))}</span> <span class="mono small">${escapeHtml(event.operation)}</span>`;
+        environment.appendChild(item);
+      }
+      const total = document.createElement('li');
+      total.className = 'muted small';
+      total.textContent = `всего в истории: ${card.environment_total ?? recent.length}`;
+      environment.appendChild(total);
+    }
   } catch (error) {
     const dt = document.createElement('dt');
-    dt.textContent = 'Историчность';
+    dt.textContent = 'Частота в истории';
     const dd = document.createElement('dd');
     dd.textContent = `недоступна: ${error.message}`;
     facts.append(dt, dd);
+    environment.innerHTML = '<li class="muted small">окружение недоступно</li>';
   }
 }
 

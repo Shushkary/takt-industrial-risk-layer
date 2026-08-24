@@ -343,6 +343,12 @@ body {
   font-weight: 600;
 }
 
+.entity-subhead {
+  margin: 12px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
