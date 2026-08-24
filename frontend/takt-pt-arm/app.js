@@ -357,6 +357,7 @@ let pollTimer = null;
 let lastFocused = null;
 let currentCaseStatus = '';
 let lastWorkspaceEvents = [];
+let currentCaseEventCount = null;
 let lastCaseFindings = [];
 
 // --- Работа с API ----------------------------------------------------------
@@ -577,6 +578,8 @@ function renderCase(workspace) {
   const item = workspace.case || {};
   currentCaseStatus = item.status || '';
   lastWorkspaceEvents = workspace.events || [];
+  currentCaseEventCount = lastWorkspaceEvents.length;
+  $('#staleCaseBanner').hidden = true;
   closeStatusForm();
   $('#caseId').textContent = item.case_id || '—';
   $('#caseStatus').textContent = term('case_status', item.status);
@@ -1370,6 +1373,16 @@ async function refresh() {
       total !== null ? `Показано ${cases.length} из ${total}` : `Показано ${cases.length}`;
     setConnection('ok');
     $('#lastSync').textContent = `обновлено ${utc(new Date().toISOString())} UTC`;
+    // Опрос обновляет только очередь; открытая карточка кейса иначе могла молча устареть.
+    // Сравнение — по сводке из той же очереди, полная перерисовка карточки произошла бы
+    // резко под курсором аналитика и сбросила бы прокрутку/отметки в пакете реагирования.
+    if (selectedCaseId) {
+      const openSummary = cases.find((item) => item.case_id === selectedCaseId);
+      if (openSummary) {
+        const stale = openSummary.status !== currentCaseStatus || Number(openSummary.event_count) !== currentCaseEventCount;
+        $('#staleCaseBanner').hidden = !stale;
+      }
+    }
     if (!selectedCaseId && cases.length) {
       const top = [...cases].sort(
         (a, b) => Number(b.risk_score) - Number(a.risk_score) || Number(b.event_count || 0) - Number(a.event_count || 0)
@@ -1414,6 +1427,10 @@ $('#statusFormReason').addEventListener('input', () => {
 $('#coreOnly').addEventListener('change', paintChain);
 $('#confirmResponseButton').addEventListener('click', confirmResponsePackage);
 $('#verifyLedgerButton').addEventListener('click', verifyAuditLedger);
+$('#staleCaseRefresh').addEventListener('click', () => {
+  $('#staleCaseBanner').hidden = true;
+  if (selectedCaseId) openCase(selectedCaseId);
+});
 
 let queueSearchTimer = null;
 $('#queueSearch').addEventListener('input', () => {

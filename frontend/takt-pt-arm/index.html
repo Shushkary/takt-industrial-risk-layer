@@ -49,6 +49,10 @@
         <p id="workEmpty" class="muted pad">Выберите кейс в очереди.</p>
 
         <div id="workBody" hidden>
+          <div id="staleCaseBanner" class="stale-banner" hidden>
+            <span>Данные кейса изменились с момента открытия.</span>
+            <button id="staleCaseRefresh" class="link" type="button">Обновить</button>
+          </div>
           <div class="summary">
             <div class="summary-line">
               <span id="caseId" class="case-id">—</span>
