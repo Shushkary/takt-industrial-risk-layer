@@ -409,15 +409,32 @@ function term(table, code) {
   return (vocabulary[table] || {})[value] || value;
 }
 
-function firstArtifact(event) {
-  const item = (event.artifacts || [])[0];
-  return item ? `${term('artifact_type', item.type)}: ${item.value}` : '';
+// Контрольная сумма в 64 знака растягивает таблицу вдвое. Полное значение остаётся
+// в подсказке и копируется по клику: аналитику оно нужно целиком, но не на экране.
+function shorten(value, keep = 12) {
+  const text = String(value ?? '');
+  return text.length <= keep * 2 + 1 ? text : `${text.slice(0, keep)}…${text.slice(-keep)}`;
+}
+
+function copyable(value, label) {
+  if (!value) return '';
+  return `<button type="button" class="copyable" data-copy="${escapeHtml(value)}" title="${escapeHtml(value)}">${escapeHtml(label ?? shorten(value))}</button>`;
+}
+
+function artifactCell(event) {
+  const items = event.artifacts || [];
+  if (!items.length) return '';
+  const first = `${term('artifact_type', items[0].type)}: ${copyable(items[0].value)}`;
+  if (items.length <= 1) return first;
+  const rest = items.slice(1).map((item) => `${term('artifact_type', item.type)}: ${item.value}`).join('; ');
+  return `<span title="${escapeHtml(rest)}">${first} <span class="muted small">и ещё ${items.length - 1}</span></span>`;
 }
 
 function addressOf(entities) {
   if (!entities) return '';
   const parts = [entities.src_address, entities.dst_address].filter(Boolean);
-  return parts.join(' → ');
+  if (!parts.length) return '';
+  return parts.map((value) => copyable(value)).join(' → ');
 }
 
 // --- Очередь ---------------------------------------------------------------
@@ -680,8 +697,8 @@ function paintChain() {
       <td class="mono">${escapeHtml(event.operation)}</td>
       <td>${entityButton('host', entities.host_id)}</td>
       <td>${entityButton('user', entities.user_id)}</td>
-      <td class="mono small">${escapeHtml(addressOf(entities))}</td>
-      <td class="small">${escapeHtml(firstArtifact(event))}</td>`;
+      <td class="mono small">${addressOf(entities)}</td>
+      <td class="small">${artifactCell(event)}</td>`;
     body.appendChild(row);
   }
   $('#chainCount').textContent = `Показано ${shown} из ${ordered.length} · ядро ${coreCount} · расширение ${expandedCount}`;
@@ -912,6 +929,14 @@ document.addEventListener('click', (event) => {
   const helpButton = event.target.closest('[data-help]');
   if (helpButton) {
     openHelp(helpButton.dataset.help);
+    return;
+  }
+  const copyButton = event.target.closest('[data-copy]');
+  if (copyButton) {
+    navigator.clipboard.writeText(copyButton.dataset.copy).then(
+      () => toast('Значение скопировано'),
+      () => toast('Скопировать не удалось: буфер обмена недоступен')
+    );
     return;
   }
   if (event.target === $('#modal')) closeHelp();

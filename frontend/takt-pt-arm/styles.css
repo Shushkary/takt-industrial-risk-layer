@@ -415,7 +415,8 @@ body {
 
 /* Цепочка */
 .table-scroll {
-  overflow-x: auto;
+  max-height: 60vh;
+  overflow: auto;
 }
 
 table.chain {
@@ -425,11 +426,24 @@ table.chain {
 
 table.chain th,
 table.chain td {
-  padding: 6px 8px;
+  padding: 6px 6px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
   white-space: nowrap;
+}
+
+/* Операция, узел, учётная запись, адрес и артефакт — значения источника переменной длины
+   (объекты конвейера сборки приходят в поле узла с префиксом вида `pipeline:`). Перенос не
+   меняет и не сокращает значение, только не даёт ему растянуть таблицу за пределы колонки. */
+table.chain td:nth-child(4),
+table.chain td:nth-child(5),
+table.chain td:nth-child(6),
+table.chain td:nth-child(7),
+table.chain td:nth-child(8) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 190px;
 }
 
 table.chain th {
@@ -443,6 +457,21 @@ table.chain th {
 
 table.chain tr:hover td {
   background: #161e2b;
+}
+
+.copyable {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-family: var(--mono);
+  cursor: copy;
+  text-decoration: underline dotted;
+}
+
+.copyable:hover {
+  color: var(--accent);
 }
 
 tr.row-expanded {

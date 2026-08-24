@@ -110,7 +110,7 @@ def test_untranslated_code_falls_back_to_the_code_itself() -> None:
     """Выдуманный перевод хуже кода: его нельзя сверить с ответом API."""
     app = _app()
     start = app.index("function term(")
-    block = app[start : app.index("\nfunction firstArtifact(", start)]
+    block = app[start : app.index("\nfunction shorten(", start)]
 
     assert "|| value" in block
 
