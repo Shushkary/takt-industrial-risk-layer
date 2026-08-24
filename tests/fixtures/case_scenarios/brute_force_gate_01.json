@@ -184,7 +184,7 @@
     "invariant_hits": [
       "brute_force"
     ],
-    "risk_class": "LOW",
+    "risk_class": "MEDIUM",
     "verdict": "ILLEG"
   },
   "organizational_context": [],
