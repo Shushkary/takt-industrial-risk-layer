@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260825-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260825-03" />
   </head>
   <body>
     <header class="top">
@@ -120,6 +120,7 @@
 
             <p id="caseXai" class="xai"></p>
             <button class="link" type="button" data-help="xai">как собран кейс</button>
+            <button class="link" type="button" data-help="clicks">почему кликов меньше</button>
           </div>
 
           <div class="block confidence-block">
@@ -482,6 +483,28 @@
 
         <div class="block">
           <div class="block-head">
+            <h4>За счёт чего сокращены действия</h4>
+            <div class="head-actions">
+              <button id="lmButton" class="link" type="button" data-help="lm">Роль языковой модели</button>
+              <button class="help" type="button" data-help="saved_actions" aria-label="Пояснение: за счёт чего сокращены действия">?</button>
+            </div>
+          </div>
+          <p id="savedActionsBasis" class="muted small">—</p>
+          <table class="response-table">
+            <thead>
+              <tr>
+                <th scope="col">Шаг ручного разбора</th>
+                <th scope="col">Действий по модели</th>
+                <th scope="col">Чем закрыт в ТАКТ</th>
+              </tr>
+            </thead>
+            <tbody id="savedActions"></tbody>
+          </table>
+          <p class="muted small">Все перечисленные механизмы детерминированы: языковая модель ни в одном из них не участвует, и счётчики выше получены без неё.</p>
+        </div>
+
+        <div class="block">
+          <div class="block-head">
             <h4>Плеер цепочки</h4>
             <button class="help" type="button" data-help="player" aria-label="Пояснение: плеер цепочки">?</button>
           </div>
@@ -529,6 +552,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260825-02"></script>
+    <script src="./app.min.js?v=20260825-03"></script>
   </body>
 </html>

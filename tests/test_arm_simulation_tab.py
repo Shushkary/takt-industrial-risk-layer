@@ -67,6 +67,8 @@ def test_simulation_help_topics_are_present() -> None:
         "step",
         "seconds_per_action",
         "counter_time",
+        "saved_actions",
+        "lm",
     }
     assert required <= declared, f"не хватает пояснений: {sorted(required - declared)}"
 
@@ -110,6 +112,9 @@ def test_method_modal_states_what_is_measured_and_what_is_modelled() -> None:
         "secondsPerAction",
         "timeValue",
         "timeDelta",
+        "savedActions",
+        "savedActionsBasis",
+        "lmButton",
     ],
 )
 def test_simulation_elements_exist(element_id: str) -> None:
@@ -127,7 +132,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260825-02"}, versions
+    assert versions >= {"20260825-03"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -158,6 +163,52 @@ def test_counters_reach_the_reported_totals() -> None:
     start = app.index("function cumulative(")
     block = app[start : app.index("}\n", app.index("return Math.round", start))]
     assert "if (index >= steps) return total;" in block
+
+
+def test_saved_actions_block_matches_the_manual_process_model() -> None:
+    """Шаги в блоке «За счёт чего сокращены действия» — те же, что в модели трудоёмкости.
+
+    Блок объясняет разбор `effort.model_breakdown`, а ключи этого разбора задаёт домен модели
+    ручного процесса. Разъедься они — интерфейс показал бы прочерк вместо механизма, и никто
+    бы не заметил: строка на месте, текст пустой.
+    """
+    from takt.application.use_cases.investigation_effort import ManualProcessModel
+
+    app = _app()
+    start = app.index("const MANUAL_STEP_MECHANISM = {")
+    block = app[start : app.index("\n};", start)]
+    steps = ManualProcessModel().actions(sources=1, entities=1, events=1)
+    for step in steps:
+        assert f"'{step}'" in block, f"шаг модели без пояснения механизма: {step}"
+
+
+def test_saved_actions_are_taken_from_the_product_answer() -> None:
+    """Блок не пересчитывает трудоёмкость: иначе его итог разошёлся бы со счётчиками выше."""
+    app = _app()
+    start = app.index("function renderSavedActions(")
+    block = app[start : app.index(chr(10) + "}" + chr(10), start)]
+    assert "simulation.effort" in block
+    assert "model_breakdown" in block
+
+
+def test_language_model_help_states_that_the_module_is_absent() -> None:
+    """Пояснение про языковую модель обязано различать замысел и поставку.
+
+    Иначе на демонстрации кнопка «Роль языковой модели» читается как заявление о том, что
+    модель уже работает, — а сокращение действий получено без неё.
+    """
+    entry = _help_entries()["lm"]
+    assert "в поставке нет" in entry
+    assert "вне контура вердикта" in entry
+    assert "журнале аудита" in entry
+    assert "product_boundary.md" in entry
+
+
+def test_clicks_help_does_not_pass_the_journal_off_as_a_click_count() -> None:
+    """Журнал считает действия, меняющие состояние дела, а навигацию не видит вовсе."""
+    entry = _help_entries()["clicks"]
+    assert "не клики" in entry
+    assert "actor" in entry or "меткой актора" in entry
 
 
 def test_simulation_view_declares_no_active_control() -> None:
