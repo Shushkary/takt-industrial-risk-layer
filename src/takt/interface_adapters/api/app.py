@@ -144,6 +144,7 @@ from takt.interface_adapters.api.routers.attack_chain import register_attack_cha
 from takt.interface_adapters.api.routers.audit_engagements import register_audit_engagement_routes
 from takt.interface_adapters.api.routers.audit_ledger import register_audit_ledger_routes
 from takt.interface_adapters.api.routers.case_actions import register_case_action_routes
+from takt.interface_adapters.api.routers.case_groups import register_case_group_routes
 from takt.interface_adapters.api.routers.cases import register_case_routes
 from takt.interface_adapters.api.routers.catalog import register_catalog_routes
 from takt.interface_adapters.api.routers.compliance import register_compliance_routes
@@ -697,6 +698,8 @@ def create_app() -> FastAPI:
     register_forensic_routes(api_ctx)
     register_audit_engagement_routes(api_ctx)
     register_compliance_routes(api_ctx)
+    # Раньше register_case_routes: иначе `/cases/groups` попадёт в `/cases/{case_id}`.
+    register_case_group_routes(api_ctx)
     register_case_routes(api_ctx)
     register_attack_chain_routes(api_ctx)
     register_simulation_routes(api_ctx)

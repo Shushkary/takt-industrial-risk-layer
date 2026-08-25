@@ -127,6 +127,13 @@ const HELP = {
     action: 'Начинать смену с фильтра по классу риска и статусу «новое». Поток однотипных одиночных срабатываний с одинаковым баллом — материал для правки правила, а не для разбора поштучно.',
     doc: 'docs/customer_value_map.md',
   },
+  queue_groups: {
+    title: 'Сведение однотипных дел',
+    what: '«Дела» — очередь как она есть. «По узлам» — однотипные срабатывания одного узла одной строкой. «По правилам» — то же без учёта узла: сколько дел породила каждая операция.',
+    source: 'Сведение выполняет продукт, а не браузер: очередь показывается страницами, и группировка загруженной страницы считала бы сотню дел из нескольких сотен и молча ошибалась бы в счётчике. Однотипность определяется активом, операцией и классом риска; время в ключ не входит намеренно — собственная дедупликация продукта работает по корзине времени и одинаковые срабатывания в разные минуты не сводит.',
+    action: 'Начинать смену с разреза «по правилам»: строка на несколько десятков дел — это материал для правки правила, а не для разбора поштучно. Переход по строке открывает дела за ней. Ни одно дело при этом не меняется и ни с чем не сливается: сведение — способ показа, а не сборки.',
+    doc: 'docs/customer_value_map.md',
+  },
   summary: {
     title: 'Сводка инцидента',
     what: 'Идентификатор, статус, заголовок и оценка риска кейса.',
@@ -2104,8 +2111,67 @@ let accessKeyPromptShown = false;
 
 const QUEUE_PAGE_LIMIT = 100;
 
-function queueQueryString() {
-  const params = new URLSearchParams({ sort: 'risk_score_desc', limit: String(QUEUE_PAGE_LIMIT) });
+// --- Очередь: дела или сведённые строки ------------------------------------
+//
+// Собственная дедупликация продукта работает по `burst_fingerprint`, а в него входит корзина
+// времени: одинаковые срабатывания на одном активе, попавшие в разные минуты, остаются
+// разными делами. На демонстрационном датасете из-за этого 263 дела «низкий: ALLOWED» —
+// ровно та усталость от однотипных срабатываний, ради которой продукт и покупают.
+//
+// Сведение выполняет продукт (`GET /cases/groups`), а не браузер: очередь показывается
+// страницами, и группировка загруженной страницы считала бы 100 дел из 284 и молча врала бы
+// в счётчике. Ни одно дело при этом не меняется — это способ показа, а не сборки.
+
+const QUEUE_MODE_STORAGE = 'takt.queue_mode';
+const QUEUE_MODES = { cases: 'queueModeCases', asset: 'queueModeAsset', operation: 'queueModeRule' };
+
+function readStoredQueueMode() {
+  try {
+    const stored = localStorage.getItem(QUEUE_MODE_STORAGE);
+    return stored in QUEUE_MODES ? stored : 'cases';
+  } catch (error) {
+    return 'cases';
+  }
+}
+
+let queueMode = readStoredQueueMode();
+// Отбор, полученный переходом из сведённой строки. Держится отдельно от видимых фильтров:
+// в них нет ни актива, ни операции, и подменять ими подпись поля поиска было бы враньём.
+let queueDrill = null;
+let groups = [];
+
+function setQueueMode(mode) {
+  queueMode = mode;
+  try {
+    localStorage.setItem(QUEUE_MODE_STORAGE, mode);
+  } catch (error) {
+    // Без хранилища выбор действует до перезагрузки.
+  }
+  // Переход к сведённому виду снимает отбор по группе: иначе аналитик увидел бы одну строку
+  // и решил, что очередь пуста.
+  if (mode !== 'cases') queueDrill = null;
+  applyQueueMode();
+  lastQueueSignature = null;
+  refresh();
+}
+
+function applyQueueMode() {
+  for (const [mode, id] of Object.entries(QUEUE_MODES)) {
+    $(`#${id}`).classList.toggle('active', mode === queueMode);
+  }
+  $('#queueDrill').hidden = !queueDrill;
+  if (queueDrill) $('#queueDrillText').textContent = `Отбор из сведённой строки: ${queueDrill.label}`;
+}
+
+function clearQueueDrill() {
+  queueDrill = null;
+  applyQueueMode();
+  lastQueueSignature = null;
+  refresh();
+}
+
+function groupsQueryString() {
+  const params = new URLSearchParams({ group_by: queueMode, limit: String(QUEUE_PAGE_LIMIT) });
   const risk = $('#queueRisk').value;
   const status = $('#queueStatus').value;
   const search = $('#queueSearch').value.trim();
@@ -2115,8 +2181,107 @@ function queueQueryString() {
   return params.toString();
 }
 
+async function refreshGroups() {
+  const { data, headers } = await apiWithHeaders(`/cases/groups?${groupsQueryString()}`);
+  groups = Array.isArray(data) ? data : [];
+  renderGroups();
+  const totalGroups = headers.get('X-Total-Count');
+  const totalCases = headers.get('X-Total-Cases');
+  const shown = `Показано ${groups.length}${totalGroups !== null ? ` из ${totalGroups}` : ''} ${plural(Number(totalGroups ?? groups.length), 'строка', 'строки', 'строк')}`;
+  $('#queueCount').textContent =
+    totalCases !== null ? `${shown} · ${totalCases} ${plural(Number(totalCases), 'дело', 'дела', 'дел')}` : shown;
+}
+
+// Согласование существительного с числительным. Продукт делает то же самое на своей стороне
+// (`plural_ru`), но эти подписи собираются в интерфейсе и в ответе не приходят.
+function plural(count, one, few, many) {
+  const tailTwo = Math.abs(count) % 100;
+  const tailOne = Math.abs(count) % 10;
+  if (tailTwo >= 11 && tailTwo <= 14) return many;
+  if (tailOne === 1) return one;
+  if (tailOne >= 2 && tailOne <= 4) return few;
+  return many;
+}
+
+function renderGroups() {
+  const list = $('#queueList');
+  list.replaceChildren();
+  $('#queueEmpty').hidden = groups.length > 0;
+  for (const group of groups) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'group-item';
+    const where = group.primary_asset_id
+      ? escapeHtml(group.primary_asset_id)
+      : group.assets
+        ? `${group.assets} ${plural(group.assets, 'актив', 'актива', 'активов')}`
+        : '—';
+    const statuses = Object.entries(group.by_status || {})
+      .map(([code, count]) => `${term('case_status', code)}: ${count}`)
+      .join(' · ');
+    button.innerHTML = `
+      <span class="group-line">
+        <span class="group-count">${escapeHtml(String(group.cases))} ${escapeHtml(plural(group.cases, 'дело', 'дела', 'дел'))}</span>
+        <span class="risk ${escapeHtml(String(group.risk_class || '').toLowerCase())}">${escapeHtml(term('risk_class', group.risk_class))}</span>
+        <span class="muted small">до ${escapeHtml(score(group.max_risk_score))}</span>
+      </span>
+      <span class="queue-title mono">${escapeHtml(group.trigger_operation || '—')}</span>
+      <span class="queue-meta">${where} · ${escapeHtml(String(group.events))} ${escapeHtml(plural(group.events, 'событие', 'события', 'событий'))} · ${escapeHtml(statuses)}</span>`;
+    button.addEventListener('click', () => drillIntoGroup(group));
+    list.appendChild(button);
+  }
+}
+
+// Переход из сведённой строки к делам за ней. Группа не открывается как дело: у неё нет ни
+// состава событий, ни вердикта, и показать её карточкой значило бы предъявить вывод, которого
+// продукт не делал.
+function drillIntoGroup(group) {
+  queueDrill = {
+    asset: group.primary_asset_id || '',
+    operation: group.trigger_operation || '',
+    riskClass: group.risk_class || '',
+    label: `${group.trigger_operation || '—'} · ${group.primary_asset_id || `${group.assets} ${plural(group.assets, 'актив', 'актива', 'активов')}`} · ${term('risk_class', group.risk_class)}`,
+    topCaseId: group.top_case_id || '',
+  };
+  queueMode = 'cases';
+  try {
+    localStorage.setItem(QUEUE_MODE_STORAGE, 'cases');
+  } catch (error) {
+    // Без хранилища выбор действует до перезагрузки.
+  }
+  applyQueueMode();
+  lastQueueSignature = null;
+  refresh().then(() => {
+    if (queueDrill && queueDrill.topCaseId) openCase(queueDrill.topCaseId);
+  });
+}
+
+function queueQueryString() {
+  const params = new URLSearchParams({ sort: 'risk_score_desc', limit: String(QUEUE_PAGE_LIMIT) });
+  const risk = $('#queueRisk').value;
+  const status = $('#queueStatus').value;
+  const search = $('#queueSearch').value.trim();
+  if (risk) params.set('risk_classes', risk);
+  if (status) params.set('status', status);
+  if (search) params.set('title_contains', search);
+  // Отбор из сведённой строки: актива и операции в видимых фильтрах нет, и подменять ими
+  // подпись поля поиска значило бы обещать поиск, которого там не происходит.
+  if (queueDrill) {
+    if (queueDrill.asset) params.set('primary_asset_id', queueDrill.asset);
+    if (queueDrill.operation) params.set('trigger_operation_contains', queueDrill.operation);
+    if (queueDrill.riskClass) params.set('risk_classes', queueDrill.riskClass);
+  }
+  return params.toString();
+}
+
 async function refresh() {
   try {
+    if (queueMode !== 'cases') {
+      await refreshGroups();
+      setConnection('ok');
+      $('#lastSync').textContent = `обновлено ${utc(new Date().toISOString()).slice(11)} ${zoneLabel()}`;
+      return;
+    }
     const { data, headers } = await apiWithHeaders(`/cases?${queueQueryString()}`);
     cases = Array.isArray(data) ? data : data.items || [];
     renderQueue();
@@ -2141,6 +2306,7 @@ async function refresh() {
       const top = [...cases].sort(compareByRisk)[0];
       openCase(top.case_id);
     }
+    return;
   } catch (error) {
     if (error.status === 401) {
       setConnection('auth');
@@ -2226,6 +2392,10 @@ $('#queueSearch').addEventListener('input', () => {
   clearTimeout(queueSearchTimer);
   queueSearchTimer = setTimeout(refresh, 300);
 });
+$('#queueModeCases').addEventListener('click', () => setQueueMode('cases'));
+$('#queueModeAsset').addEventListener('click', () => setQueueMode('asset'));
+$('#queueModeRule').addEventListener('click', () => setQueueMode('operation'));
+$('#queueDrillClear').addEventListener('click', clearQueueDrill);
 $('#queueRisk').addEventListener('change', refresh);
 $('#queueStatus').addEventListener('change', refresh);
 
@@ -2584,6 +2754,7 @@ $('#resetPlayer').addEventListener('click', () => {
 // перерисоваться словами — мигание на пустом месте.
 fillHelpHints();
 applyTimeZone();
+applyQueueMode();
 
 loadVocabulary().then(() => {
   loadSession();

@@ -32,6 +32,13 @@ CASE_LIST_SORT_KEYS = frozenset(
 )
 VALID_RISK_CLASSES = frozenset({"LOW", "MEDIUM", "HIGH", "CRITICAL"})
 
+CASE_GROUP_KEYS = frozenset({"asset", "operation"})
+"""Два разреза одной очереди.
+
+`asset` — актив, операция и класс риска: отвечает на вопрос «какой узел шумит».
+`operation` — операция и класс риска: отвечает на вопрос «какое правило шумит», то есть даёт
+материал для правки правила, а не для разбора срабатываний поштучно."""
+
 
 @dataclass(frozen=True, slots=True)
 class CasesListQuery:
@@ -69,6 +76,31 @@ class CasesListQuery:
 class CasesListResult:
     items: list[Case]
     total_before_slice: int
+
+
+@dataclass(frozen=True, slots=True)
+class CaseGroup:
+    """Однотипные дела, сведённые в одну строку очереди."""
+
+    key: str
+    primary_asset_id: str
+    assets: int
+    trigger_operation: str
+    risk_class: str
+    cases: int
+    events: int
+    max_risk_score: float
+    top_case_id: str
+    first_created_at: str
+    last_created_at: str
+    by_status: dict[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class CasesGroupResult:
+    items: list[CaseGroup]
+    total_groups: int
+    total_cases: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +156,72 @@ class CasesQueryService:
         if query.limit is not None:
             sliced = sliced[: query.limit]
         return CasesListResult(items=sliced, total_before_slice=total)
+
+    @staticmethod
+    def group_key(case: Case, group_by: str = "asset") -> str:
+        """Ключ однотипности: актив, операция и класс риска.
+
+        Собственный `burst_fingerprint` дела для этого не годится: в него входит корзина
+        времени, поэтому одинаковые срабатывания на одном активе попадают в разные корзины и
+        считаются разными делами. Именно из-за этого очередь на демонстрационном датасете
+        состоит из 263 почти одинаковых дел «низкий: ALLOWED» — дедупликация работает, но
+        только внутри одной минуты. Ключ группы время не включает намеренно.
+
+        Класс риска входит в ключ: одинаковые операции с разной оценкой — это разные строки
+        очереди, и слить их значило бы спрятать более тяжёлое дело за более лёгким.
+        """
+        asset = (case.primary_asset_id or "").strip()
+        operation = (case.trigger_operation or "").strip()
+        if group_by == "operation":
+            return f"|{operation}|{case.risk_class}"
+        return f"{asset}|{operation}|{case.risk_class}"
+
+    def group_cases(self, query: CasesListQuery, group_by: str = "asset") -> CasesGroupResult:
+        """Очередь, сведённая по однотипности. Фильтры те же, что у списка дел.
+
+        Группировка не меняет ни одного дела: это способ показа, а не сборки. Каждое дело
+        остаётся отдельным и открывается как раньше — иначе правка состава и вердикт по
+        группе стали бы неотличимы от вердикта по делу.
+        """
+        if group_by not in CASE_GROUP_KEYS:
+            raise ValueError(f"unsupported group_by: {group_by}")
+        items = self._apply_filters(list(self._require_repo().list_all()), query)
+        buckets: dict[str, list[Case]] = {}
+        for case in items:
+            buckets.setdefault(self.group_key(case, group_by), []).append(case)
+
+        groups: list[CaseGroup] = []
+        for key, cases in buckets.items():
+            top = max(cases, key=lambda c: (c.risk_score, c.case_id))
+            created = sorted(c.created_at.astimezone(UTC).isoformat(timespec="seconds") for c in cases)
+            assets = {c.primary_asset_id for c in cases if c.primary_asset_id}
+            groups.append(
+                CaseGroup(
+                    key=key,
+                    # В разрезе по операции активов у группы несколько: показать актив
+                    # представителя значило бы приписать всей группе один узел.
+                    primary_asset_id=top.primary_asset_id if len(assets) <= 1 else "",
+                    assets=len(assets),
+                    trigger_operation=top.trigger_operation,
+                    risk_class=top.risk_class,
+                    cases=len(cases),
+                    events=sum(len(c.normalized_event_ids) for c in cases),
+                    max_risk_score=top.risk_score,
+                    top_case_id=top.case_id,
+                    first_created_at=created[0],
+                    last_created_at=created[-1],
+                    by_status=dict(Counter(c.status.value for c in cases)),
+                )
+            )
+
+        # Порядок: сначала самое тяжёлое, при равном балле — самое многочисленное. Ключ
+        # замыкает сравнение, чтобы повторный прогон давал тот же порядок.
+        groups.sort(key=lambda g: (-g.max_risk_score, -g.cases, g.key))
+        total_cases = sum(g.cases for g in groups)
+        sliced = groups[query.offset :]
+        if query.limit is not None:
+            sliced = sliced[: query.limit]
+        return CasesGroupResult(items=sliced, total_groups=len(groups), total_cases=total_cases)
 
     def stats(self) -> CasesStats:
         all_c = list(self._require_repo().list_all())

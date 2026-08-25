@@ -26,6 +26,7 @@ EXPECTED_ROUTE_CONTRACTS = [
     ("GET", "/cases/{case_id}/simulation", ("Cases",), None),
     ("GET", "/cases/export/full.json", ("Export",), "CasesFullExportResponse"),
     ("POST", "/cases/import/full.json", ("Export",), "CasesImportResponse"),
+    ("GET", "/cases/groups", ("Cases",), "CaseGroupOut"),
     ("GET", "/cases/stats", ("Cases",), "CasesStatsResponse"),
     ("GET", "/cases/{case_id}", ("Cases",), "CaseDetail"),
     ("GET", "/cases/{case_id}/attack-chain", ("Cases",), None),

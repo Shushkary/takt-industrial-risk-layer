@@ -489,3 +489,43 @@ def test_attached_documents_stay_visible_with_their_checksum() -> None:
     assert "function renderPermits(" in app
     assert "organizational_context_sha256" in app
     assert 'id="permitList"' in index
+
+# --- Сведение однотипных дел в очереди (P3-3) -------------------------------
+
+
+def test_queue_can_be_shown_collapsed_by_the_product() -> None:
+    """Группировка загруженной страницы считала бы сотню дел из нескольких сотен."""
+    app = _app()
+
+    assert "/cases/groups" in app
+    assert "group_by" in app
+    assert 'id="queueModeRule"' in _index()
+
+
+def test_collapsed_row_is_not_opened_as_a_case() -> None:
+    """У группы нет ни состава событий, ни вердикта: карточка предъявила бы вывод, которого нет."""
+    app = _app()
+    start = app.index("function drillIntoGroup(")
+    block = app[start : app.index("\n}", start)]
+
+    assert "queueDrill" in block
+    assert "top_case_id" in block
+
+
+def test_group_filter_does_not_pretend_to_be_the_search_field() -> None:
+    """Ни актива, ни операции в видимых фильтрах нет — отбор показывается отдельной строкой."""
+    index = _index()
+    app = _app()
+
+    assert 'id="queueDrill"' in index
+    assert 'id="queueDrillClear"' in index
+    assert "primary_asset_id" in app
+    assert "trigger_operation_contains" in app
+
+
+def test_counters_agree_with_russian_numerals() -> None:
+    """«284 дела» и «1 дело» — подпись собирается интерфейсом и в ответе продукта не приходит."""
+    app = _app()
+
+    assert "function plural(" in app
+    assert "'дело', 'дела', 'дел'" in app

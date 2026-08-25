@@ -47,7 +47,7 @@ _FORWARDED_HEADERS = (
 )
 # Заголовки ответа, которые АРМ читает сам. Молча потерянный `X-Total-Count` выглядит не как
 # ошибка прокси, а как «счётчик очереди показывает не то»: в счётчике пропадает общее число дел.
-_RELAYED_RESPONSE_HEADERS = ("X-Total-Count", "X-Request-ID")
+_RELAYED_RESPONSE_HEADERS = ("X-Total-Count", "X-Total-Cases", "X-Request-ID")
 _PROXY_TIMEOUT_SEC = 30.0
 
 

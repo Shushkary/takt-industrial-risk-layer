@@ -134,6 +134,7 @@ def test_key_header_reaches_the_backend_and_total_count_comes_back(arm_root: Pat
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("X-Total-Count", "282")
+            self.send_header("X-Total-Cases", "284")
             self.end_headers()
             self.wfile.write(payload)
 
@@ -161,6 +162,8 @@ def test_key_header_reaches_the_backend_and_total_count_comes_back(arm_root: Pat
             # Счётчик очереди читает общее число дел из этого заголовка: потерянный по дороге,
             # он выглядит как «АРМ показывает не то», а не как ошибка стенда.
             assert response.headers.get("X-Total-Count") == "282"
+            # Сведённая очередь считает и строки, и дела за ними — обе величины нужны АРМ.
+            assert response.headers.get("X-Total-Cases") == "284"
     finally:
         stand.shutdown()
         stand.server_close()

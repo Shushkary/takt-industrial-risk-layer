@@ -313,3 +313,30 @@ class CasesStatsResponse(BaseModel):
     distinct_invariant_hits: int
     invariant_hits_occurrences_total: int
     by_last_event_source: dict[str, int]
+
+
+class CaseGroupOut(BaseModel):
+    """Однотипные дела одной строкой очереди.
+
+    Группировка — способ показа, а не сборки: ни одно дело при этом не меняется и не
+    сливается с другим. Нужна потому, что собственная дедупликация продукта работает по
+    `burst_fingerprint` с корзиной времени и не сводит одинаковые срабатывания, попавшие в
+    разные минуты.
+    """
+
+    key: str
+    primary_asset_id: str
+    """Актив группы; пустой в разрезе по операции, когда активов несколько."""
+
+    assets: int
+    """Сколько различных активов попало в группу."""
+
+    trigger_operation: str
+    risk_class: str
+    cases: int
+    events: int
+    max_risk_score: float
+    top_case_id: str
+    first_created_at: str
+    last_created_at: str
+    by_status: dict[str, int]

@@ -1270,3 +1270,65 @@ ol.steps {
   padding: 1px 6px;
   font-size: 11px;
 }
+
+/* Вид очереди: дела или сведённые строки. Переключатель стоит над фильтрами, потому что
+   он меняет не отбор, а то, что считается строкой очереди. */
+.queue-modes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.mode {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mode.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.queue-drill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 12px 0;
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.group-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.group-item:hover,
+.group-item:focus-visible {
+  background: var(--panel);
+}
+
+.group-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.group-count {
+  font-weight: 600;
+}
