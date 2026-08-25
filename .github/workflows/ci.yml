@@ -56,6 +56,18 @@ jobs:
       - name: Import linter
         run: lint-imports --config pyproject.toml
 
+      # Статический анализ прогоняется один раз, а не на каждой версии матрицы: правила ruff
+      # от версии интерпретатора не зависят, а mypy привязан к python_version из pyproject.
+      # Гейт заведён после того, как накопившиеся 2372 находки ruff и 110 ошибок mypy были
+      # разобраны: без него они нарастают обратно и проверка снова становится неприменимой.
+      - name: Ruff
+        if: matrix.python-version == '3.11'
+        run: ruff check src tests scripts
+
+      - name: Mypy
+        if: matrix.python-version == '3.11'
+        run: mypy src
+
   frontend-ci:
     runs-on: ubuntu-latest
     defaults:
