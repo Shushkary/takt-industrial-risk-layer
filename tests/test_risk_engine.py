@@ -159,29 +159,65 @@ def test_extreme_eps_saturates_top_of_scale() -> None:
     assert scores == [pytest.approx(1.0), pytest.approx(1.0)]
 
 
-def test_combine_risk_higher_dq_score_increases_final_score():
-    """dq_score — качество данных источника; выше dq_score → больший dq_factor → выше итог."""
-    weights = {
-        "rhythm": 0.2,
-        "graph": 0.2,
-        "context": 0.2,
-        "user": 0.2,
-        "data_quality": 0.2,
-    }
-    v = RiskBreakdown(
-        rhythm=0.5,
-        graph=0.5,
-        context=0.5,
-        user=0.5,
-        data_quality=0.9,
-    )
-    high_dq = combine_risk(
-        v, weights, dq_score=0.9, eps_estimate=50_000_000.0, mandel_cap=100.0, eps_soft_cap=100_000.0
-    )
-    low_dq = combine_risk(
-        v, weights, dq_score=0.4, eps_estimate=50_000_000.0, mandel_cap=100.0, eps_soft_cap=100_000.0
-    )
-    assert high_dq.score > low_dq.score
+_PRODUCT_WEIGHTS = {
+    "rhythm": 0.22,
+    "graph": 0.22,
+    "context": 0.18,
+    "user": 0.18,
+    "data_quality": 0.20,
+}
+
+
+def test_combine_risk_does_not_scale_score_by_dq_score() -> None:
+    """Качество данных влияет одним каналом — вектором; аргумент dq_score балл не масштабирует.
+
+    До 2026-08-24 итог умножался на множитель, выведенный из dq_score. Одно и то же измерение
+    входило в оценку дважды и в противоположных направлениях, а при dq_score = 0 балл
+    обнулялся независимо от признаков атаки. Решением владельца множитель снят: при неизменных
+    векторах значение dq_score на балл не влияет вовсе.
+    """
+    v = RiskBreakdown(rhythm=0.5, graph=0.5, context=0.5, user=0.5, data_quality=0.3)
+
+    scores = [
+        combine_risk(
+            v,
+            _PRODUCT_WEIGHTS,
+            dq_score=dq_score,
+            eps_estimate=100.0,
+            mandel_cap=100.0,
+            eps_soft_cap=100_000.0,
+        ).score
+        for dq_score in (1.0, 0.7, 0.4, 0.0)
+    ]
+
+    assert scores == [pytest.approx(scores[0])] * len(scores)
+
+
+def test_combine_risk_worse_data_raises_score_through_its_vector() -> None:
+    """Ухудшение данных повышает балл — намеренная смена знака (решение владельца 2026-08-24).
+
+    Вызывающие задают вектор качества как `1 - dq_score`
+    (`assess_risk.py`, `assemble_incident.py`), поэтому потеря видимости поднимает вектор и
+    вместе с ним итог. Прежде она итог понижала: испорченные данные смягчали разбор.
+    """
+    def _score(dq_score: float) -> float:
+        vectors = RiskBreakdown(
+            rhythm=0.5,
+            graph=0.5,
+            context=0.5,
+            user=0.5,
+            data_quality=1.0 - dq_score,
+        )
+        return combine_risk(
+            vectors,
+            _PRODUCT_WEIGHTS,
+            dq_score=dq_score,
+            eps_estimate=100.0,
+            mandel_cap=100.0,
+            eps_soft_cap=100_000.0,
+        ).score
+
+    assert _score(0.30) > _score(0.95)
 
 
 def test_combine_risk_returns_assessment_with_same_breakdown():
