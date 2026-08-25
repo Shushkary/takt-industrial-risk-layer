@@ -18,6 +18,7 @@
         <button id="tabSimulation" class="tab" type="button" aria-pressed="false">Симуляция</button>
       </nav>
       <div class="top-state">
+        <button id="timeZoneToggle" class="link" type="button">время: UTC</button>
         <button class="link" type="button" data-help="glossary">словарь понятий</button>
         <span id="sessionActor" class="actor" hidden>—</span>
         <button id="accessKeyToggle" class="link" type="button">ключ доступа</button>
@@ -159,7 +160,7 @@
               <table class="chain">
                 <thead>
                   <tr>
-                    <th scope="col">Время, UTC <button class="help sm" type="button" data-help="time_utc" aria-label="Пояснение: время события">?</button></th>
+                    <th scope="col">Время, <span id="chainTimeZone">UTC</span> <button class="help sm" type="button" data-help="time_utc" aria-label="Пояснение: время события">?</button></th>
                     <th scope="col">Основание <button class="help sm" type="button" data-help="evidence" aria-label="Пояснение: основание попадания события в кейс">?</button></th>
                     <th scope="col">Источник <button class="help sm" type="button" data-help="source" aria-label="Пояснение: источник события">?</button></th>
                     <th scope="col">Операция <button class="help sm" type="button" data-help="operation" aria-label="Пояснение: операция">?</button></th>

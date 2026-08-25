@@ -282,3 +282,36 @@ def test_glossary_is_reachable_from_the_header() -> None:
     index = _index()
     header = index[index.index("<header") : index.index("</header>")]
     assert 'data-help="glossary"' in header
+
+# --- Зона показа времени (F-16) ---------------------------------------------
+
+
+def test_time_zone_is_switchable_and_remembered() -> None:
+    """Раньше выбора не было, и пояснение прямо предлагало переводить время в уме."""
+    app = _app()
+    index = _index()
+
+    assert "takt.time_zone" in app
+    assert "function toggleTimeZone(" in app
+    assert 'id="timeZoneToggle"' in index
+
+
+def test_time_is_never_shown_without_naming_the_zone() -> None:
+    """Время без обозначения зоны — это не время, а число, которое каждый читает по-своему."""
+    app = _app()
+
+    assert "function zoneLabel(" in app
+    assert "function stamp(" in app
+    # Подпись колонки цепочки берёт зону из того же места, что и значения.
+    assert "$('#chainTimeZone').textContent = zoneLabel();" in app
+    assert 'id="chainTimeZone"' in _index()
+
+
+def test_switching_the_zone_does_not_touch_stored_time() -> None:
+    """Пересчёт — только для показа: в запросах и доказательном пакете время остаётся исходным."""
+    app = _app()
+    start = app.index("function toggleTimeZone(")
+    block = app[start : app.index("\n}", start)]
+
+    # Переключатель перерисовывает карточку и не отправляет ничего в продукт.
+    assert "api(" not in block

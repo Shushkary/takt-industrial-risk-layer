@@ -406,11 +406,64 @@ async function apiWithHeaders(path, options) {
 
 // --- Формат ----------------------------------------------------------------
 
+// --- Время: UTC или зона рабочего места ------------------------------------
+//
+// Продукт хранит время в UTC — так события четырёх источников с разными зонами
+// выстраиваются в один ряд. Аналитик же сверяет их с журналами заказчика, которые ведутся
+// по местному времени. Раньше выбора не было, и пояснение прямо предлагало переводить время
+// в уме. Пересчёт — только для показа: в данных, запросах и доказательном пакете время
+// остаётся тем, которое пришло от источника.
+
+const TIME_ZONE_STORAGE = 'takt.time_zone';
+
+function readStoredTimeZone() {
+  try {
+    return localStorage.getItem(TIME_ZONE_STORAGE) === 'local' ? 'local' : 'utc';
+  } catch (error) {
+    return 'utc';
+  }
+}
+
+let timeZoneMode = readStoredTimeZone();
+
+function storeTimeZone(mode) {
+  timeZoneMode = mode === 'local' ? 'local' : 'utc';
+  try {
+    localStorage.setItem(TIME_ZONE_STORAGE, timeZoneMode);
+  } catch (error) {
+    // Без хранилища выбор действует до перезагрузки — это лучше, чем отказ переключаться.
+  }
+}
+
+// Обозначение зоны показывается всегда: время без зоны — это не время, а число, которое
+// каждый читает по-своему.
+function zoneLabel() {
+  if (timeZoneMode === 'utc') return 'UTC';
+  const shift = -new Date().getTimezoneOffset();
+  const sign = shift < 0 ? '-' : '+';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `UTC${sign}${pad(Math.floor(Math.abs(shift) / 60))}:${pad(Math.abs(shift) % 60)}`;
+}
+
 function utc(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value ?? '—');
   const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+  const local = timeZoneMode === 'local';
+  const year = local ? date.getFullYear() : date.getUTCFullYear();
+  const month = local ? date.getMonth() : date.getUTCMonth();
+  const day = local ? date.getDate() : date.getUTCDate();
+  const hours = local ? date.getHours() : date.getUTCHours();
+  const minutes = local ? date.getMinutes() : date.getUTCMinutes();
+  const seconds = local ? date.getSeconds() : date.getUTCSeconds();
+  return `${year}-${pad(month + 1)}-${pad(day)} ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+// Время вместе с обозначением зоны — там, где значение стоит само по себе, без подписи
+// колонки над ним.
+function stamp(value) {
+  if (Number.isNaN(new Date(value).getTime())) return String(value ?? '—');
+  return `${utc(value)} ${zoneLabel()}`;
 }
 
 function score(value) {
@@ -658,7 +711,7 @@ function renderReconstruction(attackChain) {
   for (const step of steps) {
     const item = document.createElement('li');
     const kind = term('chain_step_kind', step.kind);
-    item.innerHTML = `<span class="mono small muted">${escapeHtml(utc(step.observed_at))}</span> ${escapeHtml(kind)}: <span class="mono">${escapeHtml(step.from_entity)}</span> → <span class="mono">${escapeHtml(step.to_entity)}</span> <span class="muted small">(${escapeHtml(step.operation)})</span>`;
+    item.innerHTML = `<span class="mono small muted">${escapeHtml(stamp(step.observed_at))}</span> ${escapeHtml(kind)}: <span class="mono">${escapeHtml(step.from_entity)}</span> → <span class="mono">${escapeHtml(step.to_entity)}</span> <span class="muted small">(${escapeHtml(step.operation)})</span>`;
     list.appendChild(item);
   }
 }
@@ -718,7 +771,7 @@ function renderJournal(auditLog) {
     const { at, action, actor } = parseAuditLine(line);
     const item = document.createElement('li');
     item.className = 'journal-item';
-    item.innerHTML = `<span class="journal-time">${escapeHtml(utc(at))}</span><span class="journal-actor">${escapeHtml(actor)}</span><span>${escapeHtml(action)}</span>`;
+    item.innerHTML = `<span class="journal-time">${escapeHtml(stamp(at))}</span><span class="journal-actor">${escapeHtml(actor)}</span><span>${escapeHtml(action)}</span>`;
     list.appendChild(item);
   }
 }
@@ -1258,8 +1311,8 @@ async function openEntity(type, id) {
     const rows = [
       ['Событий всего', eventCount],
       ['Частота в истории', frequency],
-      ['Первое появление', card.first_seen ? utc(card.first_seen) : '—'],
-      ['Последнее появление', card.last_seen ? utc(card.last_seen) : '—'],
+      ['Первое появление', card.first_seen ? stamp(card.first_seen) : '—'],
+      ['Последнее появление', card.last_seen ? stamp(card.last_seen) : '—'],
       ['Источники', (card.sources || []).map((source) => term('event_source', source)).join(', ') || '—'],
     ];
     for (const [label, value] of rows) {
@@ -1278,7 +1331,7 @@ async function openEntity(type, id) {
     } else {
       for (const event of recent) {
         const item = document.createElement('li');
-        item.innerHTML = `<span class="mono small muted">${escapeHtml(utc(event.observed_at))}</span> <span class="chip sm" title="${escapeHtml(event.source)}">${escapeHtml(term('event_source', event.source))}</span> <span class="mono small">${escapeHtml(event.operation)}</span>`;
+        item.innerHTML = `<span class="mono small muted">${escapeHtml(stamp(event.observed_at))}</span> <span class="chip sm" title="${escapeHtml(event.source)}">${escapeHtml(term('event_source', event.source))}</span> <span class="mono small">${escapeHtml(event.operation)}</span>`;
         environment.appendChild(item);
       }
       const total = document.createElement('li');
@@ -1309,7 +1362,7 @@ function renderFindings(findings) {
     const text = finding.text || `${finding.entity_type || ''}: ${finding.entity_id || ''}`;
     const meta = [];
     if (finding.author) meta.push(finding.author);
-    if (finding.created_at) meta.push(utc(finding.created_at));
+    if (finding.created_at) meta.push(stamp(finding.created_at));
     if ((finding.event_ids || []).length) meta.push(`событий: ${finding.event_ids.length}`);
     const row = document.createElement('li');
     row.innerHTML = `<div>${escapeHtml(text)}</div>${meta.length ? `<div class="muted small">${escapeHtml(meta.join(' · '))}</div>` : ''}`;
@@ -1553,6 +1606,26 @@ async function forgetAccessKey() {
 
 // --- Обновление и запуск ---------------------------------------------------
 
+// Обозначение зоны в шапке колонки цепочки: значений в ней 41, и подписывать каждое
+// отдельно значило бы сорок один раз повторить одно и то же слово.
+function applyTimeZone() {
+  $('#chainTimeZone').textContent = zoneLabel();
+  $('#timeZoneToggle').textContent = `время: ${zoneLabel()}`;
+  $('#timeZoneToggle').title =
+    timeZoneMode === 'utc'
+      ? 'Показать время в зоне этого рабочего места'
+      : 'Показать время в UTC — так его хранит продукт';
+}
+
+function toggleTimeZone() {
+  storeTimeZone(timeZoneMode === 'utc' ? 'local' : 'utc');
+  applyTimeZone();
+  // Перерисовывается вся карточка: время стоит и в цепочке, и в журнале, и в находках,
+  // и в карточке сущности — точечная перерисовка оставила бы часть значений в старой зоне.
+  if (selectedCaseId) openCase(selectedCaseId);
+  else paintChain();
+}
+
 // Состояния: ok — связь есть; auth — продукт ответил 401; off — связи нет.
 // «Требуется ключ доступа» отделено от «нет связи» намеренно: раньше штатная конфигурация
 // продукта выглядела в АРМ как отказ backend, и аналитику нечего было предпринять.
@@ -1589,7 +1662,9 @@ async function refresh() {
     $('#queueCount').textContent =
       total !== null ? `Показано ${cases.length} из ${total}` : `Показано ${cases.length}`;
     setConnection('ok');
-    $('#lastSync').textContent = `обновлено ${utc(new Date().toISOString())} UTC`;
+    // Только время: дата опроса — это «сегодня», и в шапке она занимает место, вытесняя
+    // состояние связи на вторую строку.
+    $('#lastSync').textContent = `обновлено ${utc(new Date().toISOString()).slice(11)} ${zoneLabel()}`;
     // Опрос обновляет только очередь; открытая карточка кейса иначе могла молча устареть.
     // Сравнение — по сводке из той же очереди, полная перерисовка карточки произошла бы
     // резко под курсором аналитика и сбросила бы прокрутку/отметки в пакете реагирования.
@@ -1642,6 +1717,7 @@ document.addEventListener('keydown', (event) => {
   else if (event.key === 'Tab') trapFocus(event);
 });
 
+$('#timeZoneToggle').addEventListener('click', toggleTimeZone);
 $('#accessKeyToggle').addEventListener('click', toggleAccessKeyForm);
 $('#accessKeySave').addEventListener('click', saveAccessKey);
 $('#accessKeyForget').addEventListener('click', forgetAccessKey);
@@ -1767,7 +1843,7 @@ function renderSteps() {
     row.style.borderLeftColor = phaseColor(step.attack_phase);
     row.innerHTML = `
       <button type="button" class="step-open">
-        <span class="step-time mono">${escapeHtml(utc(step.observed_at))}</span>
+        <span class="step-time mono">${escapeHtml(stamp(step.observed_at))}</span>
         <span class="step-phase" style="color:${phaseColor(step.attack_phase)}">${escapeHtml(step.attack_phase_title_ru)}</span>
         <span class="step-op mono">${escapeHtml(step.operation)}</span>
         <span class="chip sm" title="${escapeHtml(step.source)}">${escapeHtml(term('event_source', step.source))}</span>
@@ -1945,7 +2021,7 @@ function openStep(order) {
   const artifacts = (step.artifacts || []).map((item) => `${term('artifact_type', item.type)}: ${item.value}`);
 
   const paragraphs = [
-    `Что произошло: источник «${term('event_source', step.source)}» зафиксировал ${step.operation} в ${utc(step.observed_at)} UTC.`,
+    `Что произошло: источник «${term('event_source', step.source)}» зафиксировал ${step.operation} в ${stamp(step.observed_at)}.`,
     `Фаза цепочки: ${step.attack_phase_title_ru}. Техника ATT&CK: ${step.mitre_technique || 'не сопоставлена'}. Разметка приходит от источника, ТАКТ её не вычисляет.`,
     `Чем выделено: ${detection.selected_by_title_ru || 'не зафиксировано'}. ${detection.reason || ''}`,
     detection.invariants && detection.invariants.length
@@ -2027,6 +2103,7 @@ $('#resetPlayer').addEventListener('click', () => {
 // Словарь грузится до первой отрисовки: иначе очередь успела бы показать коды, а затем
 // перерисоваться словами — мигание на пустом месте.
 fillHelpHints();
+applyTimeZone();
 
 loadVocabulary().then(() => {
   loadSession();
