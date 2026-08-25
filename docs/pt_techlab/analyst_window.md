@@ -23,6 +23,21 @@ python -m takt.tools.load_dataset --source ot      --path tests/fixtures/pt_tech
 `flow_bytes`) и проходит тот же нормализатор, что и приём через
 `POST /integrations/ingest/netflow`.
 
+Выгрузка сетевого сенсора PT NAD приходит не CSV, а построчным NDJSON — по одному
+JSON-объекту на строку, как в ответе `_search`/`scroll`. Для неё отдельный источник:
+
+```powershell
+python -m takt.tools.load_dataset --source nad --path <выгрузка>.ndjson
+```
+
+События из этой выгрузки попадают в класс `ndr`. Поле `credentials.password` схемы NAD
+содержит пароли, восстановленные из трафика: коннектор заменяет его маркером до записи
+в `payload` — см. [source_schema_nad.md](source_schema_nad.md). Битая строка загрузку не
+останавливает и журналируется без содержимого документа.
+
+Имя источника в команде называет **формат выгрузки**, а не класс события: `nad` приходит
+в `ndr`, `netflow` — в `network_events`. Настроенное доверие берётся по классу события.
+
 ## 2. Сборка инцидента
 
 ```powershell

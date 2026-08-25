@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
+from takt.domain.entities.event import EventSource, NormalizedEvent
+from takt.infrastructure.importers.nad_events import NadEventSourceReader
 from takt.infrastructure.importers.soc_csv import (
     CsvEventSourceReader,
     map_edr,
@@ -23,13 +26,40 @@ MAPPERS = {
     "ot": map_ot,
 }
 
+# Выгрузки, приходящие построчным NDJSON, а не CSV: по одному JSON-объекту на строку, как в
+# ответе `_search`/`scroll`. Читатель выгрузки PT NAD в продукте был и раньше, но точки входа
+# для него не было — принять выгрузку со стенда было нечем.
+NDJSON_READERS = {
+    "nad": NadEventSourceReader,
+}
+
+# Имя в командной строке называет формат выгрузки, а не класс источника события: выгрузка
+# PT NAD приходит в класс `ndr`, файл потоков, прочитанный как Netflow, — в `network_events`.
+# Класс нужен, чтобы взять для читателя настроенное доверие: настраивается оно по классу.
+SOURCE_CLASS = {
+    "edr": EventSource.EDR.value,
+    "siem": EventSource.SIEM.value,
+    "ndr": EventSource.NDR.value,
+    "netflow": EventSource.NETWORK.value,
+    "ot": EventSource.OT.value,
+    "nad": EventSource.NDR.value,
+}
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Потоковая загрузка SOC-датасета в TAKT")
-    parser.add_argument("--source", required=True, choices=sorted(MAPPERS))
+    parser.add_argument("--source", required=True, choices=sorted(SOURCE_CLASS))
     parser.add_argument("--path", required=True, type=Path)
     parser.add_argument("--progress-every", type=int, default=1000)
     return parser
+
+
+def _reader(source: str, path: Path, *, trust: float) -> Iterable[NormalizedEvent]:
+    """Читатель выгрузки по имени источника: CSV или построчный NDJSON."""
+    ndjson = NDJSON_READERS.get(source)
+    if ndjson is not None:
+        return ndjson(path, ingest_trust=trust)
+    return CsvEventSourceReader(path, MAPPERS[source], ingest_trust=trust)
 
 
 def run(*, source: str, path: Path, progress_every: int = 1000) -> int:
@@ -37,8 +67,8 @@ def run(*, source: str, path: Path, progress_every: int = 1000) -> int:
         print(f"error: file not found: {path}", file=sys.stderr)
         return 2
     app = create_app()
-    trust = float(app.state.trust_by_source.get(source, 1.0))
-    reader = CsvEventSourceReader(path, MAPPERS[source], ingest_trust=trust)
+    configured_trust = app.state.trust_by_source or {}
+    reader = _reader(source, path, trust=float(configured_trust.get(SOURCE_CLASS[source], 1.0)))
     processed = 0
     failed = 0
     try:
@@ -46,7 +76,9 @@ def run(*, source: str, path: Path, progress_every: int = 1000) -> int:
             try:
                 app.state.ingest_facade.assess_normalized_event(
                     event,
-                    trust_by_source={source: trust},
+                    # Доверие передаётся целиком, как его передаёт API: оценка ищет значение
+                    # по классу самого события, а не по имени из командной строки.
+                    trust_by_source=configured_trust,
                 )
                 processed += 1
                 if progress_every > 0 and processed % progress_every == 0:
