@@ -360,34 +360,78 @@ let currentCaseTransitions = [];
 let lastWorkspaceEvents = [];
 let currentCaseEventCount = null;
 let lastCaseFindings = [];
+let session = null;
+
+// --- Ключ доступа ----------------------------------------------------------
+//
+// Продукт по умолчанию требует ключ (TAKT_AUTH_REQUIRED), поэтому без заголовка каждый запрос
+// АРМ получал бы 401. Ключ хранится в браузере аналитика: серверной сессии у статической
+// страницы нет, а держать ключ в адресе нельзя — он попал бы в журналы прокси.
+//
+// Ключ определяет не только доступ, но и автора действий в append-only журнале кейса: без него
+// в журнале остаётся адрес клиента, а для доказательного пакета это не автор.
+
+const ACCESS_KEY_STORAGE = 'takt.access_key';
+
+function readStoredAccessKey() {
+  try {
+    return localStorage.getItem(ACCESS_KEY_STORAGE) || '';
+  } catch (error) {
+    // Приватный режим браузера: хранилище недоступно, ключ живёт до перезагрузки страницы.
+    return '';
+  }
+}
+
+let accessKeyValue = readStoredAccessKey();
+
+function storeAccessKey(value) {
+  accessKeyValue = value;
+  try {
+    if (value) localStorage.setItem(ACCESS_KEY_STORAGE, value);
+    else localStorage.removeItem(ACCESS_KEY_STORAGE);
+  } catch (error) {
+    // Без хранилища ключ действует до перезагрузки — это лучше, чем отказ работать.
+  }
+}
+
+function authHeaders() {
+  return accessKeyValue ? { 'X-TAKT-API-Key': accessKeyValue } : {};
+}
 
 // --- Работа с API ----------------------------------------------------------
 
+// Ошибка запроса с сохранённым кодом ответа: 401 (нет ключа) и 403 (роль не подходит)
+// показываются аналитику по-разному, и различить их можно только по коду.
+async function httpError(response) {
+  let message = `HTTP ${response.status}`;
+  try {
+    message = (await response.json()).detail || message;
+  } catch (error) {
+    // тело без JSON — оставляем код ответа
+  }
+  const error = new Error(message);
+  error.status = response.status;
+  return error;
+}
+
 async function api(path, options) {
   const request = { cache: 'no-store', ...options };
+  request.headers = { ...authHeaders(), ...((options && options.headers) || {}) };
   if (options && options.body) {
-    request.headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+    request.headers['Content-Type'] = 'application/json';
   }
   const response = await fetch(`${API_BASE}${path}`, request);
-  if (!response.ok) {
-    let message = `HTTP ${response.status}`;
-    try {
-      message = (await response.json()).detail || message;
-    } catch (error) {
-      // тело без JSON — оставляем код ответа
-    }
-    const httpError = new Error(message);
-    httpError.status = response.status;
-    throw httpError;
-  }
+  if (!response.ok) throw await httpError(response);
   return response.status === 204 ? null : response.json();
 }
 
 // Как api(), но возвращает и заголовки ответа — нужны для X-Total-Count при постраничном
 // списке кейсов. Отдельная функция, чтобы не менять поведение существующих вызовов api().
 async function apiWithHeaders(path, options) {
-  const response = await fetch(`${API_BASE}${path}`, { cache: 'no-store', ...options });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const request = { cache: 'no-store', ...options };
+  request.headers = { ...authHeaders(), ...((options && options.headers) || {}) };
+  const response = await fetch(`${API_BASE}${path}`, request);
+  if (!response.ok) throw await httpError(response);
   return { data: response.status === 204 ? null : await response.json(), headers: response.headers };
 }
 
@@ -838,7 +882,7 @@ function closeStatusForm() {
   // У конечного статуса переходов нет: вместо кнопки, которая всё равно упрётся в отказ,
   // рядом со статусом остаётся пояснение, почему менять нечего.
   const terminal = currentCaseTransitions.length === 0;
-  $('#changeStatusButton').hidden = terminal;
+  $('#changeStatusButton').hidden = terminal || !permissions().case_write;
   $('#statusTerminalNote').hidden = !terminal;
 }
 
@@ -1379,13 +1423,105 @@ function toast(message) {
   }, 4000);
 }
 
+// --- Кто работает: ключ доступа, роль, доступные действия -------------------
+
+// Права по ролям приходят из продукта (`GET /session`), а не вычисляются здесь: своя копия
+// матрицы RBAC разошлась бы с `rbac.py` при первом же изменении правил — и разошлась бы молча.
+// Пока ответа нет, действия показываются: спрятать их из-за недоступного маршрута значило бы
+// выдать сбой связи за отсутствие прав. Отказ в этом случае всё равно придёт от продукта.
+const PERMISSIONS_UNKNOWN = { case_write: true, case_relink: true, administration: true };
+
+function permissions() {
+  return (session && session.permissions) || PERMISSIONS_UNKNOWN;
+}
+
+async function loadSession() {
+  try {
+    session = await api('/session');
+  } catch (error) {
+    session = null;
+  }
+  renderSession();
+}
+
+function renderSession() {
+  const box = $('#sessionActor');
+  if (!session) {
+    box.hidden = true;
+    box.textContent = '—';
+  } else if (session.auth_mode === 'disabled') {
+    // Ключи в продукте не заданы вовсе. Показывать «администратор» в этом режиме — значит
+    // выдавать отсутствие проверки за назначенную роль.
+    box.hidden = false;
+    box.textContent = 'аутентификация не настроена';
+    box.title =
+      'Ключи доступа в продукте не заданы: роль условная, автором действий в журнале останется адрес клиента. Режим стенда, не эксплуатации.';
+  } else {
+    const role = term('role', session.role);
+    box.hidden = false;
+    box.textContent = session.actor_id ? `${session.actor_id} · ${role}` : role;
+    box.title = 'Автор действий в журнале кейса и роль ключа доступа';
+  }
+  applyPermissions();
+}
+
+// Недоступное роли действие скрывается, а не показывается с отказом после нажатия.
+function applyPermissions() {
+  const canWrite = permissions().case_write;
+  $('#addFinding').hidden = !canWrite;
+  $('#findingComment').hidden = !canWrite;
+  $('#findingRoleNote').hidden = canWrite;
+  $('#confirmResponseButton').hidden = !canWrite;
+  $('#responseRoleNote').hidden = canWrite;
+  if (!canWrite) {
+    $('#changeStatusButton').hidden = true;
+    $('#statusForm').hidden = true;
+  }
+}
+
+function openAccessKeyForm() {
+  $('#accessKeyForm').hidden = false;
+  $('#accessKeyInput').value = accessKeyValue;
+  $('#accessKeyInput').focus();
+}
+
+function toggleAccessKeyForm() {
+  if ($('#accessKeyForm').hidden) openAccessKeyForm();
+  else $('#accessKeyForm').hidden = true;
+}
+
+async function saveAccessKey() {
+  storeAccessKey($('#accessKeyInput').value.trim());
+  $('#accessKeyForm').hidden = true;
+  await loadVocabulary();
+  await loadSession();
+  await refresh();
+  if (selectedCaseId) await openCase(selectedCaseId);
+}
+
+async function forgetAccessKey() {
+  storeAccessKey('');
+  $('#accessKeyInput').value = '';
+  session = null;
+  renderSession();
+  await refresh();
+}
+
 // --- Обновление и запуск ---------------------------------------------------
 
+// Состояния: ok — связь есть; auth — продукт ответил 401; off — связи нет.
+// «Требуется ключ доступа» отделено от «нет связи» намеренно: раньше штатная конфигурация
+// продукта выглядела в АРМ как отказ backend, и аналитику нечего было предпринять.
 function setConnection(state, detail = '') {
   const box = $('#connection');
   box.className = `conn ${state}`;
-  box.textContent = state === 'ok' ? 'связь есть' : state === 'off' ? `нет связи${detail ? `: ${detail}` : ''}` : 'подключение';
+  if (state === 'ok') box.textContent = 'связь есть';
+  else if (state === 'auth') box.textContent = 'требуется ключ доступа';
+  else if (state === 'off') box.textContent = `нет связи${detail ? `: ${detail}` : ''}`;
+  else box.textContent = 'подключение';
 }
+
+let accessKeyPromptShown = false;
 
 const QUEUE_PAGE_LIMIT = 100;
 
@@ -1425,7 +1561,17 @@ async function refresh() {
       openCase(top.case_id);
     }
   } catch (error) {
-    setConnection('off', error.message);
+    if (error.status === 401) {
+      setConnection('auth');
+      // Форма открывается один раз: повторный опрос не должен отбирать фокус у аналитика,
+      // который в этот момент вводит ключ.
+      if (!accessKeyPromptShown) {
+        accessKeyPromptShown = true;
+        openAccessKeyForm();
+      }
+    } else {
+      setConnection('off', error.message);
+    }
   }
 }
 
@@ -1450,6 +1596,12 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !$('#modal').hidden) closeHelp();
 });
 
+$('#accessKeyToggle').addEventListener('click', toggleAccessKeyForm);
+$('#accessKeySave').addEventListener('click', saveAccessKey);
+$('#accessKeyForget').addEventListener('click', forgetAccessKey);
+$('#accessKeyInput').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') saveAccessKey();
+});
 $('#modalClose').addEventListener('click', closeHelp);
 $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
@@ -1833,6 +1985,7 @@ $('#resetPlayer').addEventListener('click', () => {
 // Словарь грузится до первой отрисовки: иначе очередь успела бы показать коды, а затем
 // перерисоваться словами — мигание на пустом месте.
 loadVocabulary().then(() => {
+  loadSession();
   refresh();
   pollTimer = setInterval(refresh, POLL_MS);
 });

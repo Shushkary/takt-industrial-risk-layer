@@ -119,6 +119,20 @@ TYPICALITY_RU: dict[str, str] = {
 порог назван прямо в самом названии, чтобы «обычная активность» не читалась как вывод
 о нормальности."""
 
+ROLE_RU: dict[str, str] = {
+    "analyst_l1": "аналитик первой линии",
+    "analyst_l2": "аналитик второй линии",
+    "manager": "руководитель",
+    "admin": "администратор",
+    "operator": "оператор",
+    "auditor": "аудитор",
+}
+"""Роль ключа доступа (`role` в ответе `GET /session`).
+
+Роль видна аналитику в шапке рабочего места: она объясняет, почему часть действий недоступна.
+Названия живут здесь, а не в АРМ, по общему правилу словаря — иначе при добавлении роли
+интерфейс молча показал бы код."""
+
 DQ_REASON_RU: dict[str, str] = {
     "telemetry_gap": "разрыв в телеметрии",
     "stale_data": "устаревшие данные",
@@ -186,4 +200,5 @@ def vocabulary() -> dict[str, dict[str, str]]:
         "typicality": dict(TYPICALITY_RU),
         "dq_reason": dict(DQ_REASON_RU),
         "ledger_issue": dict(LEDGER_ISSUE_RU),
+        "role": dict(ROLE_RU),
     }

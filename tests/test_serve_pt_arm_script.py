@@ -114,3 +114,59 @@ def test_unreachable_backend_answers_502_instead_of_hanging(running_server: str)
 
     assert err.value.code == 502
     assert json.loads(err.value.read())["error"] == "backend_unreachable"
+
+
+def test_key_header_reaches_the_backend_and_total_count_comes_back(arm_root: Path) -> None:
+    """Без этого заголовка стенд отвечал бы 401 на каждый запрос АРМ при включённой аутентификации.
+
+    Проверяется именно проброс: список `_FORWARDED_HEADERS` — белый, и забытая в нём строка
+    выглядит как «АРМ не умеет авторизоваться», а не как ошибка прокси.
+    """
+    import http.server
+
+    seen: dict[str, str] = {}
+
+    class _Backend(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            seen.update({k.lower(): v for k, v in self.headers.items()})
+            payload = b'{"ok": true}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("X-Total-Count", "282")
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, fmt: str, *args: object) -> None:
+            """Тишина в выводе теста."""
+
+    backend = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Backend)
+    backend_thread = threading.Thread(target=backend.serve_forever, daemon=True)
+    backend_thread.start()
+
+    stand = serve_pt_arm.build_server(
+        root=arm_root,
+        port=0,
+        api_base=f"http://127.0.0.1:{backend.server_address[1]}",
+    )
+    stand_thread = threading.Thread(target=stand.serve_forever, daemon=True)
+    stand_thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{stand.server_address[1]}/api/session",
+            headers={"X-TAKT-API-Key": "stand-key-42"},
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            assert response.status == 200
+            # Счётчик очереди читает общее число дел из этого заголовка: потерянный по дороге,
+            # он выглядит как «АРМ показывает не то», а не как ошибка стенда.
+            assert response.headers.get("X-Total-Count") == "282"
+    finally:
+        stand.shutdown()
+        stand.server_close()
+        stand_thread.join(timeout=5)
+        backend.shutdown()
+        backend.server_close()
+        backend_thread.join(timeout=5)
+
+    assert seen.get("x-takt-api-key") == "stand-key-42"

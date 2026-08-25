@@ -28,6 +28,7 @@ from takt.domain.vocabulary import (
     GRAPH_EDGE_KIND_RU,
     LEDGER_ISSUE_RU,
     RISK_CLASS_RU,
+    ROLE_RU,
     TYPICALITY_RU,
     VERDICT_RU,
     events_ru,
@@ -139,6 +140,7 @@ def test_confidence_grades_match_the_service() -> None:
         TYPICALITY_RU,
         DQ_REASON_RU,
         LEDGER_ISSUE_RU,
+        ROLE_RU,
     ],
     ids=[
         "status",
@@ -151,6 +153,7 @@ def test_confidence_grades_match_the_service() -> None:
         "typicality",
         "dq_reason",
         "ledger_issue",
+        "role",
     ],
 )
 def test_names_are_actually_russian(table: dict[str, str]) -> None:
@@ -158,6 +161,13 @@ def test_names_are_actually_russian(table: dict[str, str]) -> None:
     for code, name in table.items():
         letters = set(name.lower()) & _LATIN
         assert not letters, f"{code}: {name} содержит латиницу {sorted(letters)}"
+
+
+def test_every_access_role_has_a_russian_name() -> None:
+    """Роль видна в шапке рабочего места: новая роль без названия показалась бы кодом."""
+    from takt.infrastructure.security.api_keys import VALID_ROLES
+
+    assert set(ROLE_RU) == set(VALID_ROLES)
 
 
 def test_artifact_names_may_keep_proper_nouns() -> None:
@@ -191,6 +201,7 @@ def test_vocabulary_bundles_every_table() -> None:
         "typicality",
         "dq_reason",
         "ledger_issue",
+        "role",
     }
     assert payload["case_status"][CaseStatus.CONFIRMED.value] == "подтверждено"
 

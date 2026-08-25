@@ -59,6 +59,7 @@ def test_vocabulary_is_loaded_before_the_first_render() -> None:
         "typicality",
         "dq_reason",
         "ledger_issue",
+        "role",
     ],
 )
 def test_each_vocabulary_table_is_actually_used(table: str) -> None:
@@ -139,3 +140,31 @@ def test_markup_has_no_latin_designations_left() -> None:
 
     unexpected = [item.strip() for item in visible if item.strip() and "UTC" not in item]
     assert not unexpected, unexpected
+
+
+def test_arm_sends_the_access_key_with_every_request() -> None:
+    """Штатная конфигурация продукта требует ключ: без заголовка вкладка показывает только 401."""
+    app = _app()
+
+    assert "X-TAKT-API-Key" in app
+    assert "function authHeaders(" in app
+    start = app.index("async function api(")
+    assert "authHeaders()" in app[start : start + 400]
+
+
+def test_missing_key_is_not_reported_as_a_broken_backend() -> None:
+    """«Нет связи» вместо «нужен ключ» не оставляет аналитику ни одного действия."""
+    app = _app()
+
+    assert "требуется ключ доступа" in app
+    assert "error.status === 401" in app
+
+
+def test_arm_does_not_keep_its_own_copy_of_the_rbac_matrix() -> None:
+    """Права приходят из `GET /session`: своя копия разошлась бы с `rbac.py` молча."""
+    app = _app()
+
+    assert "'/session'" in app
+    assert "session.permissions" in app
+    for role in ("analyst_l1", "analyst_l2", "manager"):
+        assert role not in app, f"код роли {role} попал в интерфейс"

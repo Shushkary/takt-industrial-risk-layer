@@ -76,6 +76,50 @@ body {
   border-color: var(--crit);
 }
 
+/* «Требуется ключ доступа» — не отказ продукта, а незаконченная настройка рабочего места:
+   цвет предупреждения, а не аварии. */
+.conn.auth {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.actor {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Форма ключа доступа: выезжает под шапкой и не сдвигает раскладку рабочего места. */
+.key-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.key-form label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.key-form input {
+  flex: 0 1 320px;
+  min-width: 180px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
 /* Раскладка */
 .layout {
   display: grid;

@@ -18,10 +18,20 @@
         <button id="tabSimulation" class="tab" type="button" aria-pressed="false">Симуляция</button>
       </nav>
       <div class="top-state">
+        <span id="sessionActor" class="actor" hidden>—</span>
+        <button id="accessKeyToggle" class="link" type="button">ключ доступа</button>
         <span id="connection" class="conn">подключение</span>
         <span id="lastSync" class="muted small">—</span>
       </div>
     </header>
+
+    <div id="accessKeyForm" class="key-form" hidden>
+      <label for="accessKeyInput">Ключ доступа</label>
+      <input id="accessKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="ключ выдаёт администратор продукта" />
+      <button id="accessKeySave" class="action inline" type="button">Сохранить</button>
+      <button id="accessKeyForget" class="action inline" type="button">Забыть</button>
+      <span class="muted small">Ключ хранится в этом браузере и уходит заголовком запроса. Он же определяет автора действий в журнале кейса.</span>
+    </div>
 
     <main class="layout">
       <section class="panel queue" aria-labelledby="queueTitle">
@@ -211,6 +221,7 @@
             </div>
             <div class="response-actions">
               <button id="confirmResponseButton" class="action inline" type="button" disabled>Подтвердить пакет реагирования</button>
+              <span id="responseRoleNote" class="muted small" hidden>Роль работает только на чтение: подтверждение пакета недоступно.</span>
             </div>
             <p class="muted small">ТАКТ не выполняет эти действия и не отправляет команды. Исполняет внешняя система после подтверждения аналитика.</p>
           </div>
@@ -239,6 +250,7 @@
           <dl id="entityFacts" class="facts"></dl>
           <input id="findingComment" type="text" placeholder="комментарий (необязательно)" maxlength="2000" />
           <button id="addFinding" class="action" type="button">Добавить в находки</button>
+          <p id="findingRoleNote" class="muted small" hidden>Роль работает только на чтение: находки записывает первая линия.</p>
           <h3 class="entity-subhead">Связанные кейсы</h3>
           <div id="entityRelatedCases" class="chips"></div>
           <h3 class="entity-subhead">Окружение</h3>

@@ -86,6 +86,7 @@ EXPECTED_ROUTE_CONTRACTS = [
     ("GET", "/live", ("System",), "LiveResponse"),
     ("HEAD", "/live", ("System",), None),
     ("GET", "/ready", ("System",), "ReadyResponse"),
+    ("GET", "/session", ("System",), "SessionResponse"),
     ("HEAD", "/ready", ("System",), None),
     ("GET", "/topology/demo-graph", ("Catalog",), "DemoTopologyResponse"),
 ]

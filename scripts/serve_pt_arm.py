@@ -21,6 +21,7 @@ import http.server
 import json
 import urllib.error
 import urllib.request
+from email.message import Message
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +31,17 @@ DEFAULT_API_BASE = "http://127.0.0.1:8090"
 API_PREFIX = "/api"
 # Заголовки, которые имеет смысл пронести к backend. Остальные (Host, Connection,
 # Content-Length) пересобирает urllib, а лишние ломают запрос.
-_FORWARDED_HEADERS = ("Content-Type", "Accept", "Authorization", "X-Request-Id", "Idempotency-Key")
+_FORWARDED_HEADERS = (
+    "Content-Type",
+    "Accept",
+    "Authorization",
+    "X-TAKT-API-Key",
+    "X-Request-Id",
+    "Idempotency-Key",
+)
+# Заголовки ответа, которые АРМ читает сам. Молча потерянный `X-Total-Count` выглядит не как
+# ошибка прокси, а как «счётчик очереди показывает не то»: в счётчике пропадает общее число дел.
+_RELAYED_RESPONSE_HEADERS = ("X-Total-Count", "X-Request-ID")
 _PROXY_TIMEOUT_SEC = 30.0
 
 
@@ -71,10 +82,20 @@ def build_server(*, root: Path, port: int, api_base: str) -> http.server.Threadi
                     request.add_header(name, value)
             try:
                 with urllib.request.urlopen(request, timeout=_PROXY_TIMEOUT_SEC) as response:
-                    self._relay(response.status, response.headers.get("Content-Type"), response.read())
+                    self._relay(
+                        response.status,
+                        response.headers.get("Content-Type"),
+                        response.read(),
+                        extra=response.headers,
+                    )
             except urllib.error.HTTPError as err:
                 # Ошибку backend АРМ должен увидеть как есть: коды 4xx он разбирает сам.
-                self._relay(err.code, err.headers.get("Content-Type") if err.headers else None, err.read())
+                self._relay(
+                    err.code,
+                    err.headers.get("Content-Type") if err.headers else None,
+                    err.read(),
+                    extra=err.headers,
+                )
             except OSError as err:
                 # Backend стенда часто не поднят. Молчание выглядит как зависший АРМ, поэтому
                 # ответ явный и машиночитаемый.
@@ -84,10 +105,20 @@ def build_server(*, root: Path, port: int, api_base: str) -> http.server.Threadi
                 ).encode("utf-8")
                 self._relay(502, "application/json; charset=utf-8", payload)
 
-        def _relay(self, status: int, content_type: str | None, payload: bytes) -> None:
+        def _relay(
+            self,
+            status: int,
+            content_type: str | None,
+            payload: bytes,
+            extra: Message | None = None,
+        ) -> None:
             self.send_response(status)
             self.send_header("Content-Type", content_type or "application/json")
             self.send_header("Content-Length", str(len(payload)))
+            for name in _RELAYED_RESPONSE_HEADERS:
+                value = extra.get(name) if extra else None
+                if value:
+                    self.send_header(name, value)
             # Сборка АРМ кэшируется агрессивно; на стенде это скрывает свежие правки.
             self.send_header("Cache-Control", "no-store")
             self.end_headers()

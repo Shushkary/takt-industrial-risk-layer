@@ -142,3 +142,34 @@ class DataQualityResponse(BaseModel):
     dq_score: float
     partial_observability: bool
     reasons: list[str]
+
+
+class SessionPermissions(BaseModel):
+    """Что роль может делать — вычисляется той же матрицей, которая проверяет запросы.
+
+    Отдаётся, чтобы рабочее место **скрывало** недоступное действие, а не показывало его и
+    отвечало ошибкой после нажатия. Собственной копии матрицы в интерфейсе нет намеренно:
+    она разошлась бы с `rbac.py` при первом же изменении правил и разошлась бы молча.
+    """
+
+    case_write: bool
+    """Квалификация, решение по делу, находки и ручные наряды."""
+
+    case_relink: bool
+    """Ручные `attach`/`detach`, `merge`/`split` — вторая линия."""
+
+    administration: bool
+    """Импорт полного реестра, пересылка в СОБИ, аудит сервисного движка."""
+
+
+class SessionResponse(BaseModel):
+    """Кто работает в текущей сессии — для шапки рабочего места и для авторства находок.
+
+    `actor_id` — тот же идентификатор, который уходит в append-only журнал кейса. До появления
+    этого ответа интерфейс не мог назвать автора: в журнале оставался IP-адрес клиента.
+    """
+
+    actor_id: str
+    role: str
+    auth_mode: Literal["required", "optional", "disabled"]
+    permissions: SessionPermissions

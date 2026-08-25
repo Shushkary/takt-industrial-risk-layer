@@ -8,7 +8,7 @@ import time
 from datetime import UTC
 from typing import Any
 
-from fastapi import HTTPException, Response
+from fastapi import HTTPException, Request, Response
 
 from takt.domain.entities.case import CaseStatus
 from takt.infrastructure.http.cache_control_middleware import catalog_cache_max_age_sec
@@ -26,6 +26,7 @@ from takt.infrastructure.http.security_headers import hsts_enabled_from_env, hst
 from takt.infrastructure.http.timing_middleware import slow_log_threshold_seconds
 from takt.infrastructure.security.api_keys import api_key_entries_from_env
 from takt.infrastructure.security.auth_env import auth_mode_for_health
+from takt.infrastructure.security.rbac import role_satisfies
 from takt.infrastructure.security.trusted_proxies import trusted_proxy_networks_from_env
 from takt.infrastructure.security.webhook_allowlist import (
     siem_allowlist_mode_label,
@@ -33,7 +34,14 @@ from takt.infrastructure.security.webhook_allowlist import (
 )
 from takt.infrastructure.stores.sqlite_store import sqlite_busy_timeout_ms_from_env
 from takt.interface_adapters.api.dependencies import ApiContext
-from takt.interface_adapters.api.schemas.system import DataQualityResponse, HealthResponse, LiveResponse, ReadyResponse
+from takt.interface_adapters.api.schemas.system import (
+    DataQualityResponse,
+    HealthResponse,
+    LiveResponse,
+    ReadyResponse,
+    SessionPermissions,
+    SessionResponse,
+)
 
 _LOGGER = logging.getLogger("takt.api")
 
@@ -218,6 +226,25 @@ def register_system_routes(ctx: ApiContext) -> None:
     def ready_probe():
         _ready_or_fail()
         return Response()
+
+    @app.get("/session", response_model=SessionResponse, tags=["System"])
+    def session(request: Request):
+        """Кто предъявил ключ доступа: `actor_id` и роль.
+
+        Маршрут не публичный намеренно: без ключа он отвечает **401**, и рабочее место
+        отличает «требуется ключ доступа» от «нет связи с продуктом».
+        """
+        role = str(getattr(request.state, "takt_role", "") or "")
+        return SessionResponse(
+            actor_id=str(getattr(request.state, "takt_actor_id", "") or ""),
+            role=role,
+            auth_mode=auth_mode_for_health(),
+            permissions=SessionPermissions(
+                case_write=role_satisfies(role, "analyst_l1"),
+                case_relink=role_satisfies(role, "analyst_l2"),
+                administration=role_satisfies(role, "admin"),
+            ),
+        )
 
     @app.get("/data-quality", response_model=DataQualityResponse, tags=["System"])
     def data_quality():
