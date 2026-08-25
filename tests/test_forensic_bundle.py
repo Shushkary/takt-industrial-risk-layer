@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, datetime
 from io import BytesIO
 from types import SimpleNamespace
@@ -10,6 +11,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from takt.domain.entities.case import Case, CaseStatus
+from takt.domain.entities.compliance import (
+    CaseEvidenceChecklist,
+    ComplianceDataQualityReport,
+    ForensicReadinessReport,
+)
 from takt.infrastructure.export.forensic_bundle import ZipForensicBundleBuilder, ZipForensicBundleVerifier
 from takt.infrastructure.export.gossopka import case_to_gossopka_card, case_to_gossopka_transport_payload
 from takt.interface_adapters.api.main import create_app
@@ -681,3 +687,85 @@ def test_api_forensic_bundle_strict_mode_returns_503_when_signer_fails(monkeypat
     manifest = client.get(f"/cases/{case_id}/forensic-bundle/manifest")
     assert manifest.status_code == 503
     assert "forensic_signing_unavailable" in manifest.json()["detail"]
+
+
+def _reports(generated_at: datetime) -> dict[str, object]:
+    """Отчёты, которые API кладёт в пакет. Каждый датируется своим моментом."""
+    return {
+        "compliance_report": ComplianceDataQualityReport(
+            generated_at=generated_at, total_cases=1, open_cases=1
+        ),
+        "forensic_readiness_report": ForensicReadinessReport(
+            generated_at=generated_at, total_cases=1, ready_cases=0, not_ready_cases=1
+        ),
+        "case_evidence_checklist": CaseEvidenceChecklist(
+            generated_at=generated_at, case_id="fb-1", ready=False
+        ),
+    }
+
+
+def test_root_hash_does_not_depend_on_the_moment_of_generation() -> None:
+    """Повторная выгрузка того же дела обязана дать то же контрольное значение.
+
+    Требование детерминизма (CLAUDE.md, «Детерминизм контура вердикта»): повторный прогон на
+    тех же данных даёт то же агрегированное контрольное значение манифеста. До правки момент
+    формирования попадал в содержимое четырёх хэшируемых файлов, и корневой хэш менялся
+    каждую секунду — вместе с package_id.
+    """
+    builder = ZipForensicBundleBuilder()
+    early = datetime(2026, 5, 5, 11, 0, 0, tzinfo=UTC)
+    late = datetime(2026, 6, 9, 23, 47, 13, tzinfo=UTC)
+
+    meta_early, _ = builder.build_case_bundle(_case(), generated_at=early, **_reports(early))
+    meta_late, _ = builder.build_case_bundle(_case(), generated_at=late, **_reports(late))
+
+    assert meta_early.root_hash_sha256 == meta_late.root_hash_sha256
+    assert meta_early.package_id == meta_late.package_id
+
+
+def test_package_still_records_when_it_was_produced() -> None:
+    """Момент выгрузки не исчезает — он остаётся в манифесте, вне хэшируемой цепочки."""
+    builder = ZipForensicBundleBuilder()
+    early = datetime(2026, 5, 5, 11, 0, 0, tzinfo=UTC)
+    late = datetime(2026, 6, 9, 23, 47, 13, tzinfo=UTC)
+
+    meta_early, _ = builder.build_case_bundle(_case(), generated_at=early, **_reports(early))
+    meta_late, _ = builder.build_case_bundle(_case(), generated_at=late, **_reports(late))
+
+    assert meta_early.generated_at == early
+    assert meta_late.generated_at == late
+
+
+def test_root_hash_changes_when_the_case_changes() -> None:
+    """Неизменность по времени не должна превратиться в нечувствительность к данным."""
+    builder = ZipForensicBundleBuilder()
+    moment = datetime(2026, 5, 5, 11, 0, 0, tzinfo=UTC)
+    changed = _case()
+    changed.invariant_hits = [*changed.invariant_hits, "blind_write"]
+
+    base_meta, _ = builder.build_case_bundle(_case(), generated_at=moment, **_reports(moment))
+    changed_meta, _ = builder.build_case_bundle(changed, generated_at=moment, **_reports(moment))
+
+    assert base_meta.root_hash_sha256 != changed_meta.root_hash_sha256
+
+
+def test_manifest_and_archive_agree_across_a_second_boundary() -> None:
+    """Манифест описывает тот пакет, который отдаст zip, даже если вызовы разошлись по времени."""
+    app = create_app()
+    client = TestClient(app)
+    created = client.post(
+        "/assess",
+        json={
+            "observed_at": "2026-05-05T10:00:00+00:00",
+            "operation": "WRITE_COIL",
+            "asset_id": "plc-01",
+            "persist_case": True,
+        },
+    )
+    case_id = created.json()["case_id"]
+
+    manifest = client.get(f"/cases/{case_id}/forensic-bundle/manifest")
+    time.sleep(1.05 - (time.time() % 1))
+    archive = client.get(f"/cases/{case_id}/forensic-bundle.zip")
+
+    assert manifest.json()["root_hash_sha256"] == archive.headers["x-takt-forensic-root-hash"]

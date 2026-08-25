@@ -207,11 +207,41 @@ def _formal_verdict_records_payload(case: Case) -> list[dict[str, object]]:
     ]
 
 
-def _compliance_report_payload(report: ComplianceDataQualityReport) -> dict[str, object]:
+def _case_evidence_moment(case: Case) -> datetime:
+    """Момент, которым датируется **содержимое** доказательного пакета.
+
+    Берётся из данных дела — последней записи его журнала, а при её отсутствии из времени
+    создания, — а не из часов. Причина в требовании детерминизма: повторный прогон на тех же
+    данных обязан дать то же агрегированное контрольное значение манифеста
+    (`CLAUDE.md`, раздел «Детерминизм контура вердикта»). Пока содержимое датировалось
+    часами, корневой хэш и `package_id` менялись каждую секунду, и манифест, выданный одним
+    запросом, не совпадал с архивом, выданным следующим.
+
+    Журнал дела и так входит в пакет (`audit.txt`) и покрыт цепочкой хэшей, поэтому новая
+    зависимость от него ничего не добавляет: пакет меняется ровно тогда, когда менялось дело.
+
+    Момент физической выгрузки при этом не теряется — он остаётся в `manifest.json`, который
+    держит цепочку, но в неё не входит.
+    """
+    moments = [case.created_at if case.created_at.tzinfo else case.created_at.replace(tzinfo=UTC)]
+    for entry in case.audit_log:
+        head = str(entry).split(" | ", 1)[0].strip()
+        try:
+            parsed = datetime.fromisoformat(head)
+        except ValueError:
+            # Запись без разбираемой отметки времени — не повод отказывать в выгрузке.
+            continue
+        moments.append(parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC))
+    return max(moments)
+
+
+def _compliance_report_payload(
+    report: ComplianceDataQualityReport, *, generated_at: datetime
+) -> dict[str, object]:
     return {
         "format": "TAKT Compliance Data Quality Report",
         "format_version": "0.1",
-        "generated_at": _utc_iso(report.generated_at),
+        "generated_at": _utc_iso(generated_at),
         "total_cases": report.total_cases,
         "open_cases": report.open_cases,
         "by_status": dict(report.by_status),
@@ -297,11 +327,13 @@ def _formal_verdict_history(audit_log: list[str]) -> list[dict[str, str]]:
     return out
 
 
-def _forensic_readiness_payload(report: ForensicReadinessReport) -> dict[str, object]:
+def _forensic_readiness_payload(
+    report: ForensicReadinessReport, *, generated_at: datetime
+) -> dict[str, object]:
     return {
         "format": "TAKT Forensic Readiness Report",
         "format_version": "0.1",
-        "generated_at": _utc_iso(report.generated_at),
+        "generated_at": _utc_iso(generated_at),
         "total_cases": report.total_cases,
         "ready_cases": report.ready_cases,
         "not_ready_cases": report.not_ready_cases,
@@ -320,11 +352,13 @@ def _forensic_readiness_payload(report: ForensicReadinessReport) -> dict[str, ob
     }
 
 
-def _case_evidence_checklist_payload(checklist: CaseEvidenceChecklist) -> dict[str, object]:
+def _case_evidence_checklist_payload(
+    checklist: CaseEvidenceChecklist, *, generated_at: datetime
+) -> dict[str, object]:
     return {
         "format": "TAKT Case Evidence Checklist",
         "format_version": "0.1",
-        "generated_at": _utc_iso(checklist.generated_at),
+        "generated_at": _utc_iso(generated_at),
         "case_id": checklist.case_id,
         "ready": checklist.ready,
         "remediation_summary": dict(checklist.remediation_summary),
@@ -564,6 +598,8 @@ class ZipForensicBundleBuilder:
                 ]),
             ),
         ]
+        # Содержимое пакета датируется данными дела, а не часами: см. _case_evidence_moment.
+        evidence_at = _case_evidence_moment(case)
         raw_files, raw_index = _raw_evidence_files(case)
         if raw_files:
             evidence_files.extend(raw_files)
@@ -573,7 +609,7 @@ class ZipForensicBundleBuilder:
                 (
                     "compliance-data-quality-report.json",
                     "application/json",
-                    _json_bytes(_compliance_report_payload(compliance_report)),
+                    _json_bytes(_compliance_report_payload(compliance_report, generated_at=evidence_at)),
                 )
             )
         if forensic_readiness_report is not None:
@@ -581,7 +617,9 @@ class ZipForensicBundleBuilder:
                 (
                     "forensic-readiness-report.json",
                     "application/json",
-                    _json_bytes(_forensic_readiness_payload(forensic_readiness_report)),
+                    _json_bytes(
+                        _forensic_readiness_payload(forensic_readiness_report, generated_at=evidence_at)
+                    ),
                 )
             )
         if case_evidence_checklist is not None:
@@ -589,7 +627,9 @@ class ZipForensicBundleBuilder:
                 (
                     "case-evidence-checklist.json",
                     "application/json",
-                    _json_bytes(_case_evidence_checklist_payload(case_evidence_checklist)),
+                    _json_bytes(
+                        _case_evidence_checklist_payload(case_evidence_checklist, generated_at=evidence_at)
+                    ),
                 )
             )
         if supplemental_files:
@@ -598,7 +638,7 @@ class ZipForensicBundleBuilder:
         gossopka_payload = _json_bytes(
             case_to_gossopka_card(
                 case,
-                generated_at=generated_at,
+                generated_at=evidence_at,
             )
         )
         evidence_files.insert(2, ("gossopka-card.json", "application/json", gossopka_payload))
