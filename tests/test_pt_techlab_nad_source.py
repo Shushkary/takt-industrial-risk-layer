@@ -14,7 +14,6 @@ from takt.domain.entities.event import ArtifactType, EventSource
 from takt.infrastructure.importers.nad_events import (
     NadEventSourceReader,
     map_nad,
-    redact,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "pt_techlab"

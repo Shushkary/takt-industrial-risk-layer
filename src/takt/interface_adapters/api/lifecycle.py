@@ -4,8 +4,9 @@ import logging
 import os
 import socket
 import sys
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable
+from typing import Any
 
 from fastapi import FastAPI
 

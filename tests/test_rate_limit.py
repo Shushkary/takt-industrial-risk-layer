@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-
 from starlette.requests import Request
 
 from takt.infrastructure.http.rate_limit_middleware import (

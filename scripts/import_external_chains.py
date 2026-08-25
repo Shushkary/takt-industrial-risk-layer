@@ -318,9 +318,8 @@ def main() -> int:
     written = write_fixture(rows, args.out)
     phased = sum(1 for items in rows.values() for row in items if row[-2])
     print(
-        "converted scenario=%s total=%d phased=%d edr=%d siem=%d ndr=%d out=%s"
-        % (args.scenario, sum(written.values()), phased, written["edr"], written["siem"],
-           written["ndr"], args.out)
+        f"converted scenario={args.scenario} total={sum(written.values())} phased={phased} "
+        f"edr={written['edr']} siem={written['siem']} ndr={written['ndr']} out={args.out}"
     )
     return 0
 

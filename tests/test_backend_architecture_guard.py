@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 API_ROOT = ROOT / "src" / "takt" / "interface_adapters" / "api"
 STORES_ROOT = ROOT / "src" / "takt" / "infrastructure" / "stores"

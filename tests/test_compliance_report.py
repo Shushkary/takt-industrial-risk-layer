@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
@@ -18,7 +18,7 @@ def test_compliance_data_quality_report_counts_case_readiness() -> None:
             title="Risk HIGH: WRITE_COIL",
             risk_class="HIGH",
             risk_score=0.81,
-            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=UTC),
             normalized_event_ids=["ev-comp-1"],
             xai_summary="why",
             burst_fingerprint="plc-01|WRITE_COIL|5927148",
@@ -179,7 +179,7 @@ def test_compliance_mode_report_exposes_boundaries_and_operator_control(monkeypa
             title="Risk HIGH: WRITE_COIL",
             risk_class="HIGH",
             risk_score=0.81,
-            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=UTC),
             invariant_hits=["blind_command"],
             dq_partial=True,
         )
@@ -221,7 +221,7 @@ def test_record_remediation_attempt_updates_case_and_audit() -> None:
             title="Risk HIGH: WRITE_COIL",
             risk_class="HIGH",
             risk_score=0.81,
-            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=UTC),
             invariant_hits=["blind_command"],
         )
     )
@@ -290,7 +290,7 @@ def test_remediation_readiness_recheck_updates_attempt_and_audit() -> None:
             title="Risk HIGH: WRITE_COIL",
             risk_class="HIGH",
             risk_score=0.81,
-            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=UTC),
             invariant_hits=["blind_command"],
         )
     )
@@ -413,7 +413,7 @@ def test_forensic_readiness_can_return_only_not_ready_cases() -> None:
             title="Ready case",
             risk_class="HIGH",
             risk_score=0.82,
-            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 5, 5, 10, 0, tzinfo=UTC),
             invariant_hits=["blind_command"],
             audit_log=["2026-05-05T10:00:00+00:00 | forensic bundle generated root_hash=abc signature_status=unsigned_mvp"],
             manual_permits=[
@@ -422,7 +422,7 @@ def test_forensic_readiness_can_return_only_not_ready_cases() -> None:
                     case_id="ready-1",
                     work_order_number="WO-READY-1",
                     actor="test",
-                    created_at=datetime(2026, 5, 5, 10, 1, tzinfo=timezone.utc),
+                    created_at=datetime(2026, 5, 5, 10, 1, tzinfo=UTC),
                     asset_id="plc-01",
                     operation="WRITE_COIL",
                     verdict="legitimate",
@@ -433,7 +433,7 @@ def test_forensic_readiness_can_return_only_not_ready_cases() -> None:
             ],
             decision_records=[
                 CaseDecisionRecord(
-                    ts=datetime(2026, 5, 5, 10, 2, tzinfo=timezone.utc),
+                    ts=datetime(2026, 5, 5, 10, 2, tzinfo=UTC),
                     actor="test",
                     prev_status="TRIAGE",
                     next_status="CONFIRMED",
@@ -450,7 +450,7 @@ def test_forensic_readiness_can_return_only_not_ready_cases() -> None:
             title="Blocked case",
             risk_class="HIGH",
             risk_score=0.83,
-            created_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 5, 5, 11, 0, tzinfo=UTC),
             invariant_hits=["blind_command"],
         )
     )

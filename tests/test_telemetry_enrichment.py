@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.domain.entities.event import EventSource, NormalizedEvent
 from takt.domain.services.event_enrichment import apply_enrichment_rules
@@ -10,7 +10,7 @@ from takt.domain.services.telemetry_hints import apply_telemetry_hints
 def _ev(payload: dict) -> NormalizedEvent:
     return NormalizedEvent(
         event_id="e1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="IEC104",
         operation="POLL",

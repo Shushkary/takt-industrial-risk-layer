@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -13,7 +13,7 @@ from takt.domain.services.case_lifecycle import (
 
 
 def test_valid_triage():
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     c = Case(
         case_id="1",
         status=CaseStatus.NEW,
@@ -28,7 +28,7 @@ def test_valid_triage():
 
 
 def test_invalid_transition():
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     c = Case(
         case_id="1",
         status=CaseStatus.FALSE_POSITIVE,
@@ -42,7 +42,7 @@ def test_invalid_transition():
 
 
 def test_new_to_expected_behavior_and_reopen_to_triage():
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     c = Case(
         case_id="1",
         status=CaseStatus.NEW,
@@ -58,7 +58,7 @@ def test_new_to_expected_behavior_and_reopen_to_triage():
 
 
 def test_terminal_confirmed_rejects_any_transition():
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     c = Case(
         case_id="1",
         status=CaseStatus.CONFIRMED,
@@ -88,7 +88,7 @@ def test_terminal_status_offers_nothing():
 
 def test_rejected_transition_speaks_the_product_language():
     """Текст уходит пользователю в `detail` ответа API, латиница там читается как сбой."""
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     c = Case(
         case_id="1",
         status=CaseStatus.CONFIRMED,
@@ -106,7 +106,7 @@ def test_rejected_transition_speaks_the_product_language():
 
 
 def test_case_append_audit_line_format():
-    ts = datetime(2026, 8, 15, 14, 5, 9, tzinfo=timezone.utc)
+    ts = datetime(2026, 8, 15, 14, 5, 9, tzinfo=UTC)
     c = Case(
         case_id="a",
         status=CaseStatus.NEW,

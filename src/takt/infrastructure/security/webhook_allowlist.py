@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import ipaddress
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, Sequence
+from typing import Literal
 from urllib.parse import urlparse
 
 from takt.infrastructure.security.auth_env import takt_profile_from_env

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -12,7 +12,7 @@ from takt.infrastructure.stores.sqlite_store import SqliteCaseStore
 def test_sqlite_transaction_commits_on_success(tmp_path):
     db = tmp_path / "tx.db"
     store = SqliteCaseStore(db)
-    t0 = datetime(2026, 5, 5, 8, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 5, 8, 0, tzinfo=UTC)
     c = Case(
         case_id="tx1",
         status=CaseStatus.NEW,
@@ -32,7 +32,7 @@ def test_sqlite_transaction_commits_on_success(tmp_path):
 def test_sqlite_transaction_rollbacks_on_error(tmp_path):
     db = tmp_path / "tx2.db"
     store = SqliteCaseStore(db)
-    t0 = datetime(2026, 5, 5, 9, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 5, 9, 0, tzinfo=UTC)
     c = Case(
         case_id="tx-rollback",
         status=CaseStatus.NEW,

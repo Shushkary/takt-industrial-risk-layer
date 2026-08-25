@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Mapping, Protocol, Sequence
+from typing import Any, Protocol
 
 from takt.application.use_cases.process_event import ProcessEventUseCase, ProcessOutcome
 from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.entities.case import Case, RawEvidenceRef
 from takt.domain.entities.event import EventSource, NormalizedEvent
-from takt.domain.entities.maintenance import ServiceTicket
 from takt.domain.ports.case_repository import CaseRepositoryPort
 
 

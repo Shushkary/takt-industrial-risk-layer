@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from takt.domain.ports.hasher import HasherPort
@@ -14,7 +14,7 @@ class _UtcClock(SystemClockPort):
     __slots__ = ()
 
     def now_utc(self) -> datetime:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
 
 class _UuidShortCaseIds(IdProviderPort):

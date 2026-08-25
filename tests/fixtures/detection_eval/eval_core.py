@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from takt.domain.invariants.evaluator import collect_extended_invariants
+from scenarios import IN_SCOPE_INVARIANT_IDS, EvalScenario, all_scenarios
 
-from scenarios import IN_SCOPE_INVARIANT_IDS, EvalScenario, all_scenarios  # noqa: F401
+from takt.domain.invariants.evaluator import collect_extended_invariants
 
 
 @dataclass

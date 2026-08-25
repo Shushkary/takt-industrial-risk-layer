@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 import subprocess
 import sys
-import json
 from pathlib import Path
-import shutil
 
 
 def _remove_local_file_references(path: Path) -> None:

@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-
-from takt.domain.entities.case import Case, CaseStatus, InvariantHitRecord, Observation
 from takt.domain.engines.alert_fatigue import case_bucket_burst_fingerprint
+from takt.domain.entities.case import Case, CaseStatus, InvariantHitRecord, Observation
 from takt.infrastructure.stores.sqlite_store import SqliteCaseStore
 
 
@@ -21,7 +19,7 @@ def _case(
     risk: float = 0.2,
     inv: list[str] | None = None,
 ) -> Case:
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     hits = inv or []
     recs = [
         InvariantHitRecord(
@@ -38,7 +36,7 @@ def _case(
     return Case(
         case_id=case_id,
         status=CaseStatus.NEW,
-        title=f"Risk LOW: POLL",
+        title="Risk LOW: POLL",
         risk_class="LOW",
         risk_score=risk,
         created_at=t0,
@@ -86,7 +84,7 @@ def test_merge_duplicate_open_cases_v070_idempotent(tmp_path) -> None:
         assert len(one.observations) == 2
         srcs = {o.source for o in one.observations}
         assert srcs == {"plc_polling", "auth_logs"}
-        t_anchor = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+        t_anchor = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
         assert one.burst_fingerprint == case_bucket_burst_fingerprint(
             primary_asset_id="plc-01",
             trigger_operation="POLL",

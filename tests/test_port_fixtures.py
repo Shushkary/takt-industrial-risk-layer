@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.application.port_fixtures import FrozenClock, SequentialIdProvider
 
 
 def test_frozen_clock_returns_same_instant() -> None:
-    t = datetime(2025, 6, 1, 8, 30, tzinfo=timezone.utc)
+    t = datetime(2025, 6, 1, 8, 30, tzinfo=UTC)
     c = FrozenClock(at=t)
     assert c.now_utc() is t
     assert c.now_utc() is t

@@ -7,9 +7,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from takt.infrastructure.config.weights_loader import load_risk_weights
-from takt.interface_adapters.api.schemas.case_actions import FormalVerdictConfirmationBody
-from takt.interface_adapters.api.main import create_app
 from takt.infrastructure.stores.sqlite_store import CURRENT_DB_SCHEMA_VERSION
+from takt.interface_adapters.api.main import create_app
+from takt.interface_adapters.api.schemas.case_actions import FormalVerdictConfirmationBody
 
 
 def test_health_reports_sqlite_when_configured(tmp_path: Path, monkeypatch) -> None:

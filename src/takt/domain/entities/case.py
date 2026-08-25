@@ -98,7 +98,7 @@ class VerdictCounterfactual:
         }
 
     @classmethod
-    def from_dict(cls, data: object) -> "VerdictCounterfactual":
+    def from_dict(cls, data: object) -> VerdictCounterfactual:
         if not isinstance(data, dict):
             return cls()
         return cls(

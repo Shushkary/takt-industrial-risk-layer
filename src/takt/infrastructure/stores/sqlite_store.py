@@ -13,6 +13,7 @@ from takt.domain.entities.case import (
     CaseStatus,
 )
 from takt.domain.ports.case_repository import CaseRepositoryPort
+from takt.infrastructure.stores.sqlite_audit_engagement_store import SqliteAuditEngagementStore  # noqa: F401
 from takt.infrastructure.stores.sqlite_audit_ledger import (
     append_case_audit_ledger_line,
     verify_case_audit_ledger,
@@ -33,25 +34,26 @@ from takt.infrastructure.stores.sqlite_case_mapper import (
     _serialize_raw_evidence_refs,
     _serialize_remediation_attempts,
 )
+from takt.infrastructure.stores.sqlite_connection import _now_utc as _now_utc
 from takt.infrastructure.stores.sqlite_connection import (
     checkpoint_wal_best_effort as _checkpoint_wal_best_effort,
 )
 from takt.infrastructure.stores.sqlite_connection import (
     configure_sqlite_connection as _configure_sqlite_connection,
 )
-from takt.infrastructure.stores.sqlite_connection import (
-    dt_to_sql as _dt_to_sql,
-    _now_utc as _now_utc
-)
-from takt.infrastructure.stores.sqlite_schema import ensure_case_schema
+from takt.infrastructure.stores.sqlite_connection import dt_to_sql as _dt_to_sql
 from takt.infrastructure.stores.sqlite_connection import sqlite_busy_timeout_ms_from_env  # noqa: F401
 from takt.infrastructure.stores.sqlite_expected_behavior import SqliteExpectedBehavior  # noqa: F401
-from takt.infrastructure.stores.sqlite_audit_engagement_store import SqliteAuditEngagementStore  # noqa: F401
-from takt.infrastructure.stores.sqlite_idempotency import (  # noqa: F401
+from takt.infrastructure.stores.sqlite_idempotency import (
     idempotency_delete_expired as _idempotency_delete_expired,
+)
+from takt.infrastructure.stores.sqlite_idempotency import (
     idempotency_get as _idempotency_get,
+)
+from takt.infrastructure.stores.sqlite_idempotency import (
     idempotency_put as _idempotency_put,
 )
+from takt.infrastructure.stores.sqlite_schema import ensure_case_schema
 
 # Версия схемы БД кейсов (метаданные `app_metadata`); при миграциях увеличивать.
 CURRENT_DB_SCHEMA_VERSION = 8

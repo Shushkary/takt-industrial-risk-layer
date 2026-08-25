@@ -25,9 +25,7 @@ def takt_auth_required_from_env() -> bool:
     raw = os.environ.get("TAKT_AUTH_REQUIRED", "").strip().lower()
     if raw in ("", "1", "true", "yes", "on"):
         return True
-    if raw in ("0", "false", "no", "off"):
-        return False
-    return True
+    return raw not in ("0", "false", "no", "off")
 
 
 def takt_api_key_value() -> str:

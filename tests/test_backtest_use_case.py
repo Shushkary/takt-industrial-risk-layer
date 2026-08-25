@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.application.use_cases.assess_risk import AssessRiskUseCase
 from takt.application.use_cases.backtest import RunBacktestUseCase
@@ -26,8 +26,8 @@ def test_run_backtest_same_bucket_event_order_yields_identical_final_case_state(
     """Спринт 2: перестановка порядка событий в одном бакете → тот же итоговый кейс."""
     from itertools import permutations
 
-    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=timezone.utc)
-    t1 = datetime(2026, 4, 30, 12, 0, 5, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=UTC)
+    t1 = datetime(2026, 4, 30, 12, 0, 5, tzinfo=UTC)
 
     def mk_e(eid: str, ts) -> NormalizedEvent:
         return NormalizedEvent(
@@ -80,7 +80,7 @@ def test_run_backtest_merge_counts_and_histogram():
     assess = AssessRiskUseCase(_weights(), plc_hosts=frozenset({"plc-x"}))
     proc = ProcessEventUseCase(assess, repo)
     bt = RunBacktestUseCase(proc)
-    t0 = datetime(2026, 5, 1, 10, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 10, 0, tzinfo=UTC)
 
     def ev(eid: str) -> NormalizedEvent:
         return NormalizedEvent(
@@ -112,7 +112,7 @@ def test_run_backtest_passes_trust_and_custom_edges():
     assess = AssessRiskUseCase(_weights(), plc_hosts=frozenset({"plc-x"}))
     proc = ProcessEventUseCase(assess, repo)
     bt = RunBacktestUseCase(proc)
-    t0 = datetime(2026, 5, 2, 11, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 2, 11, 0, tzinfo=UTC)
 
     ev = NormalizedEvent(
         event_id="e1",

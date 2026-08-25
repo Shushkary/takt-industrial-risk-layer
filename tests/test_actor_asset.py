@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.domain.entities.actor import Actor
 from takt.domain.entities.asset import Asset
@@ -10,7 +10,7 @@ from takt.domain.entities.event import EventSource, NormalizedEvent
 def _ev(payload: dict) -> NormalizedEvent:
     return NormalizedEvent(
         event_id="e1",
-        observed_at=datetime(2026, 4, 1, 12, 0, tzinfo=timezone.utc),
+        observed_at=datetime(2026, 4, 1, 12, 0, tzinfo=UTC),
         source=EventSource.AUTH_LOGS,
         protocol="SSH",
         operation="LOGIN",

@@ -28,8 +28,8 @@ from datetime import UTC, datetime
 from takt.domain.entities.case import Case, CaseStatus
 from takt.domain.services.invariant_feedback import (
     MIN_SAMPLE_FOR_PROPOSAL,
-    PROPOSAL_KEEP,
     PROPOSAL_INSUFFICIENT_DATA,
+    PROPOSAL_KEEP,
     PROPOSAL_REVIEW_RULE,
     invariant_feedback,
 )

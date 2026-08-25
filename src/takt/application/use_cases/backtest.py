@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections import Counter, deque
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Iterable, Mapping
 
 from takt.application.use_cases.process_event import ProcessEventUseCase
 from takt.domain.engines.causal_mesh import GraphEdge

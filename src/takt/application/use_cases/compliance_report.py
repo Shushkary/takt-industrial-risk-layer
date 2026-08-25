@@ -14,7 +14,6 @@ from takt.domain.entities.compliance import (
 from takt.domain.ports.case_repository import CaseRepositoryPort
 from takt.domain.ports.system_ports import SystemClockPort
 
-
 FORENSIC_READINESS_MISSING_CODES = frozenset(
     {
         "complete_observability",

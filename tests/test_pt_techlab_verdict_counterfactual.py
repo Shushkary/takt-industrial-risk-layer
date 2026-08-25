@@ -18,8 +18,8 @@ from takt.application.use_cases.manual_permit import (
     AttachManualPermitUseCase,
     VerdictCounterfactual,
 )
-from takt.domain.entities.case import Case, CaseStatus, ManualPermit
 from takt.domain.engines import xai as xai_module
+from takt.domain.entities.case import Case, CaseStatus, ManualPermit
 from takt.infrastructure.export.forensic_bundle import (
     ZipForensicBundleBuilder,
     ZipForensicBundleVerifier,
@@ -29,7 +29,6 @@ from takt.infrastructure.stores.sqlite_case_mapper import (
     _deserialize_manual_permits,
     _serialize_manual_permits,
 )
-
 
 _CT = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
 _CASE_ASSET = "plc-01"
@@ -56,7 +55,7 @@ def _verdict(**over: object) -> object:
         work_order_number="WO-1",
     )
     base.update(over)
-    return AttachManualPermitUseCase._verdict(**base)  # noqa: SLF001 (test hook)
+    return AttachManualPermitUseCase._verdict(**base)
 
 
 def _case_with_permit(permit: ManualPermit) -> Case:

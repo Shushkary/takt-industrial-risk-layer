@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from io import BytesIO
 from zipfile import ZipFile
 
@@ -10,7 +11,7 @@ from takt.interface_adapters.api.main import create_app
 
 
 def test_manual_permit_exposes_organizational_document_model() -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from takt.domain.entities.case import ManualPermit, OrganizationalContextDocument
 
@@ -19,7 +20,7 @@ def test_manual_permit_exposes_organizational_document_model() -> None:
         case_id="case-1",
         work_order_number="WO-1",
         actor="operator",
-        created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 5, 5, 10, 0, tzinfo=UTC),
         asset_id="plc-01",
         operation="WRITE_COIL",
         verdict="legitimate",

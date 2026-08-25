@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 
 from takt.domain.entities.case import (
     Case,
+    CaseArtifact,
     CaseDecisionRecord,
     CaseStatus,
-    CaseArtifact,
     CorrelationEvidence,
     Finding,
     FormalVerdictRecord,
@@ -345,19 +345,33 @@ def _deserialize_raw_evidence_refs(raw: str) -> list[RawEvidenceRef]:
     return out
 
 
+def _column(row: sqlite3.Row, name: str, default: str) -> str:
+    """Значение колонки, если она есть в выборке; иначе `default`.
+
+    Колонки добавлялись к схеме по ходу развития, и дела, записанные раньше, их не содержат —
+    отсутствие колонки не ошибка, а более старая запись.
+
+    Проверка идёт через `keys()` намеренно. `sqlite3.Row` — не словарь: оператор `in` у него
+    ищет среди **значений**, а не среди имён колонок, поэтому подсказка ruff `name in row`
+    (SIM118) поменяла бы смысл проверки. Она стала бы ложной для каждой колонки, и загрузка
+    дела молча теряла бы наблюдения, срабатывания инвариантов, разрешения и решения.
+    """
+    return row[name] if name in row.keys() else default  # noqa: SIM118
+
+
 def _row_to_case(row: sqlite3.Row) -> Case:
-    observations_raw = str(row["observations"] if "observations" in row.keys() else "[]")
-    hits_raw = str(row["invariant_hit_records"] if "invariant_hit_records" in row.keys() else "[]")
-    permits_raw = str(row["manual_permits"] if "manual_permits" in row.keys() else "[]")
-    verdict_records_raw = str(row["formal_verdict_records"] if "formal_verdict_records" in row.keys() else "[]")
-    decisions_raw = str(row["decision_records"] if "decision_records" in row.keys() else "[]")
-    remediation_raw = str(row["remediation_attempts"] if "remediation_attempts" in row.keys() else "[]")
-    raw_evidence_refs = str(row["raw_evidence_refs"] if "raw_evidence_refs" in row.keys() else "[]")
+    observations_raw = str(_column(row, "observations", "[]"))
+    hits_raw = str(_column(row, "invariant_hit_records", "[]"))
+    permits_raw = str(_column(row, "manual_permits", "[]"))
+    verdict_records_raw = str(_column(row, "formal_verdict_records", "[]"))
+    decisions_raw = str(_column(row, "decision_records", "[]"))
+    remediation_raw = str(_column(row, "remediation_attempts", "[]"))
+    raw_evidence_refs = str(_column(row, "raw_evidence_refs", "[]"))
     correlation_evidence_raw = json.loads(
-        row["correlation_evidence"] if "correlation_evidence" in row.keys() else "[]"
+        _column(row, "correlation_evidence", "[]")
     )
-    artifacts_raw = json.loads(row["artifacts"] if "artifacts" in row.keys() else "[]")
-    findings_raw = json.loads(row["findings"] if "findings" in row.keys() else "[]")
+    artifacts_raw = json.loads(_column(row, "artifacts", "[]"))
+    findings_raw = json.loads(_column(row, "findings", "[]"))
     artifacts = [
         CaseArtifact(
             type=str(item.get("type", "")), value=str(item.get("value", "")),
@@ -379,7 +393,7 @@ def _row_to_case(row: sqlite3.Row) -> Case:
         audit_log=list(json.loads(row["audit_log"] or "[]")),
         burst_fingerprint=str(row["burst_fingerprint"] or ""),
         correlation_fingerprints=list(
-            json.loads(row["correlation_fingerprints"] if "correlation_fingerprints" in row.keys() else "[]")
+            json.loads(_column(row, "correlation_fingerprints", "[]"))
         ),
         correlation_evidence=[
             CorrelationEvidence(
@@ -394,7 +408,7 @@ def _row_to_case(row: sqlite3.Row) -> Case:
             for item in correlation_evidence_raw
             if isinstance(item, dict)
         ],
-        related_cases=list(json.loads(row["related_cases"] if "related_cases" in row.keys() else "[]")),
+        related_cases=list(json.loads(_column(row, "related_cases", "[]"))),
         artifacts=artifacts,
         findings=[
             Finding(
@@ -414,7 +428,7 @@ def _row_to_case(row: sqlite3.Row) -> Case:
         ],
         primary_asset_id=str(row["primary_asset_id"] or ""),
         trigger_operation=str(row["trigger_operation"] or ""),
-        operator_id=str(row["operator_id"] if "operator_id" in row.keys() else ""),
+        operator_id=str(_column(row, "operator_id", "")),
         invariant_hits=list(json.loads(row["invariant_hits"] or "[]")),
         invariant_hit_records=_deserialize_hit_records(hits_raw),
         observations=_deserialize_observations(observations_raw),
@@ -428,8 +442,8 @@ def _row_to_case(row: sqlite3.Row) -> Case:
         dq_reasons=list(json.loads(row["dq_reasons"] or "[]")),
         # Колонка появилась позже: у дел, записанных до неё, векторов нет — это не ошибка,
         # сборка в таком случае работает как раньше.
-        risk_vectors=dict(json.loads(row["risk_vectors"] or "{}")) if "risk_vectors" in row.keys() else {},
+        risk_vectors=dict(json.loads(_column(row, "risk_vectors", "") or "{}")),
         last_event_source=str(row["last_event_source"] or ""),
-        pdf_last_sha256=str(row["pdf_last_sha256"] if "pdf_last_sha256" in row.keys() else ""),
-        pdf_last_generated_at=str(row["pdf_last_generated_at"] if "pdf_last_generated_at" in row.keys() else ""),
+        pdf_last_sha256=str(_column(row, "pdf_last_sha256", "")),
+        pdf_last_generated_at=str(_column(row, "pdf_last_generated_at", "")),
     )

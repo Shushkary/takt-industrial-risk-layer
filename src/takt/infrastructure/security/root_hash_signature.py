@@ -7,7 +7,6 @@ from dataclasses import dataclass
 
 import httpx
 
-
 _HMAC_ENV = "TAKT_FORENSIC_HMAC_SECRET"
 _SIGN_URL_ENV = "TAKT_FORENSIC_SIGN_URL"
 _VERIFY_URL_ENV = "TAKT_FORENSIC_VERIFY_URL"

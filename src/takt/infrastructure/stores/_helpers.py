@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.domain.entities.case import Case
 
@@ -13,8 +13,8 @@ def clone_case(case: Case) -> Case:
 def case_created_at_utc(case: Case) -> datetime:
     dt = case.created_at
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def normalize_expected_pair(asset_id: str, operation: str) -> tuple[str, str] | None:

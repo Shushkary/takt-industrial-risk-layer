@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -25,7 +25,7 @@ class _AuditEngagementUseCase:
 def test_forensic_export_facade_builds_audit_engagement_supplemental_files() -> None:
     engagement = AuditEngagement(
         engagement_id="eng-1",
-        created_at=datetime(2026, 5, 26, 12, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 5, 26, 12, 0, tzinfo=UTC),
         status="completed",
         customer="Plant A",
         scope="Forensic audit",
@@ -38,14 +38,14 @@ def test_forensic_export_facade_builds_audit_engagement_supplemental_files() -> 
                 title="Kickoff",
                 day_range="D0",
                 status="completed",
-                started_at=datetime(2026, 5, 26, 12, 5, tzinfo=timezone.utc),
+                started_at=datetime(2026, 5, 26, 12, 5, tzinfo=UTC),
             )
         ],
         final_report=AuditFinalReport(
             title="Final",
             uri="report://final",
             summary="done",
-            generated_at=datetime(2026, 5, 26, 13, 0, tzinfo=timezone.utc),
+            generated_at=datetime(2026, 5, 26, 13, 0, tzinfo=UTC),
         ),
     )
     facade = ForensicExportFacade(
@@ -66,7 +66,7 @@ def test_forensic_export_facade_builds_audit_engagement_supplemental_files() -> 
 def test_forensic_export_facade_rejects_unlinked_audit_engagement() -> None:
     engagement = AuditEngagement(
         engagement_id="eng-1",
-        created_at=datetime(2026, 5, 26, 12, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 5, 26, 12, 0, tzinfo=UTC),
         status="active",
         customer="Plant A",
         scope="Forensic audit",

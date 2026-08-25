@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from takt.domain.entities.event import NormalizedEvent
-from takt.domain.entities.maintenance import ServiceTicket
 from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.engines.risk_engine import RiskBreakdown
+from takt.domain.entities.event import NormalizedEvent
+from takt.domain.entities.maintenance import ServiceTicket
 from takt.domain.invariants.catalog import InvariantId
 from takt.domain.invariants.rule_predicates import PREDICATE_REGISTRY
 from takt.domain.invariants.rule_spec import InvariantRuleSpec, default_extended_rule_specs

@@ -1,15 +1,14 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
-import json
+from datetime import UTC, datetime
 
 from takt.domain.entities.case import Case, CaseStatus
 from takt.domain.entities.event import EventSource
 from takt.domain.ports.case_repository import CaseRepositoryPort
 from takt.domain.ports.system_ports import SystemClockPort
-
 
 CASE_LIST_SORT_KEYS = frozenset(
     {
@@ -117,7 +116,7 @@ class CasesQueryService:
         return VALID_RISK_CLASSES
 
     def list_cases(self, query: CasesListQuery) -> CasesListResult:
-        items = list(self._repo.list_all())
+        items = list(self._require_repo().list_all())
         items = self._apply_filters(items, query)
         items = self.sort_cases(items, query.sort)
         total = len(items)
@@ -127,7 +126,7 @@ class CasesQueryService:
         return CasesListResult(items=sliced, total_before_slice=total)
 
     def stats(self) -> CasesStats:
-        all_c = list(self._repo.list_all())
+        all_c = list(self._require_repo().list_all())
         n = len(all_c)
         by_status = Counter(c.status.value for c in all_c)
         by_rc = Counter(c.risk_class.upper() for c in all_c)
@@ -157,8 +156,7 @@ class CasesQueryService:
         )
 
     def sorted_for_full_export(self) -> list[Case]:
-        self._require_repo()
-        return self.sort_cases(list(self._repo.list_all()), "created_at_desc")
+        return self.sort_cases(list(self._require_repo().list_all()), "created_at_desc")
 
     def full_export(self, *, offset: int, limit: int | None) -> CasesFullExportResult:
         all_sorted = self.sorted_for_full_export()
@@ -175,22 +173,21 @@ class CasesQueryService:
         )
 
     def get_case_or_none(self, case_id: str) -> Case | None:
-        self._require_repo()
-        return self._repo.get(case_id)
+        return self._require_repo().get(case_id)
 
     def import_cases(self, cases: list[Case], *, mode: str, actor: str = "import_api") -> CasesImportResult:
-        self._require_repo()
+        repo = self._require_repo()
         imported = 0
         skipped = 0
 
         def apply() -> None:
             nonlocal imported, skipped
-            op_rec = getattr(self._repo, "record_operation_event", None)
+            op_rec = getattr(repo, "record_operation_event", None)
             for case in cases:
-                if mode == "skip_existing" and self._repo.get(case.case_id) is not None:
+                if mode == "skip_existing" and repo.get(case.case_id) is not None:
                     skipped += 1
                     continue
-                self._repo.save(case)
+                repo.save(case)
                 imported += 1
                 if callable(op_rec):
                     op_rec(
@@ -218,14 +215,20 @@ class CasesQueryService:
             apply()
         return CasesImportResult(imported=imported, skipped=skipped, mode=mode)
 
-    def _require_repo(self) -> None:
+    def _require_repo(self) -> CaseRepositoryPort:
+        """Хранилище кейсов или отказ, если сервис собран без него.
+
+        Возвращает порт, а не проверяет молча: вызывающий работает с уже сужённым типом, и
+        обращение к `None` становится невозможным по построению, а не по договорённости.
+        """
         if self._repo is None:
             raise RuntimeError("case repository is required")
+        return self._repo
 
     def _now_utc(self) -> datetime:
         if self._clock is not None:
             return self._clock.now_utc()
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
     def sort_cases(self, items: list[Case], sort_key: str) -> list[Case]:
         sk = sort_key.strip().lower()
@@ -284,8 +287,8 @@ class CasesQueryService:
     @staticmethod
     def as_utc_boundary(value: datetime) -> datetime:
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
     def _apply_filters(self, items: list[Case], query: CasesListQuery) -> list[Case]:
         if query.status is not None and query.status.strip() != "":

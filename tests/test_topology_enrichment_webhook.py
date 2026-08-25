@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import httpx
 import pytest
 
+from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.entities.case import Case, CaseStatus
 from takt.domain.entities.event import EventSource, NormalizedEvent
-from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.invariants.catalog import InvariantId
 from takt.domain.invariants.evaluator import InvariantContext, collect_extended_invariants
 from takt.domain.services.event_enrichment import apply_enrichment_rules
@@ -74,7 +74,7 @@ def test_enrichment_sets_new_node_flag():
     rules = {"enabled": True, "air_gap_segments": ["AIR_GAP_L2"]}
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.NETWORK,
         protocol="TCP",
         operation="HELLO",
@@ -108,7 +108,7 @@ def test_iec104_disallowed_type():
     ctx = InvariantContext(iec104_disallowed_type_ids=frozenset({9, 13}))
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="IEC104",
         operation="DATA",
@@ -126,7 +126,7 @@ def test_webhook_sync_retries(monkeypatch):
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     n = {"i": 0}
 
@@ -163,7 +163,7 @@ def test_webhook_sync_retries_exhausted_raises(monkeypatch):
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     n = {"i": 0}
 

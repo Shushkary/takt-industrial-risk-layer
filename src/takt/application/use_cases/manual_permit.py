@@ -3,13 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import NamedTuple
 
 from takt.domain.entities.case import FormalVerdictRecord, ManualPermit, VerdictCounterfactual
 from takt.domain.ports.case_repository import CaseRepositoryPort
-from takt.domain.services.forensic_verdict import case_forensic_verdict
 from takt.domain.ports.system_ports import IdProviderPort, SystemClockPort
+from takt.domain.services.forensic_verdict import case_forensic_verdict
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,8 +347,8 @@ def _parse_dt(raw: str) -> datetime | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _window_contains(case_created_at: datetime, valid_from: str, valid_to: str) -> tuple[bool, str]:
@@ -358,8 +358,8 @@ def _window_contains(case_created_at: datetime, valid_from: str, valid_to: str) 
         return False, "окно работ не распознано"
     case_ts = case_created_at
     if case_ts.tzinfo is None:
-        case_ts = case_ts.replace(tzinfo=timezone.utc)
-    case_ts = case_ts.astimezone(timezone.utc)
+        case_ts = case_ts.replace(tzinfo=UTC)
+    case_ts = case_ts.astimezone(UTC)
     if start > end:
         return False, "начало окна работ позже окончания"
     if not (start <= case_ts <= end):

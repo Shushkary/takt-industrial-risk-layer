@@ -1,8 +1,8 @@
 ﻿from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
-import hashlib
 import shutil
 import warnings
 from pathlib import Path
@@ -94,7 +94,7 @@ def test_verify_release_package_ok_and_detects_tamper(tmp_path: Path) -> None:
         strict_generate_sbom=False,
     )
     assert rc == 0
-    package_dir = [p for p in package_root.iterdir() if p.is_dir() and p.name.startswith("release-package-")][0]
+    package_dir = next(p for p in package_root.iterdir() if p.is_dir() and p.name.startswith("release-package-"))
     assert verify_run(package_dir) == 0
 
     evidence = package_dir / "operational_tails_evidence.md"
@@ -135,7 +135,7 @@ def test_verify_release_package_zip_ok_and_detects_tamper(tmp_path: Path) -> Non
         strict_generate_sbom=False,
     )
     assert rc == 0
-    package_dir = [p for p in package_root.iterdir() if p.is_dir() and p.name.startswith("release-package-")][0]
+    package_dir = next(p for p in package_root.iterdir() if p.is_dir() and p.name.startswith("release-package-"))
     package_zip = package_dir.with_suffix(".zip")
     assert verify_zip(package_zip) == 0
 
@@ -687,7 +687,7 @@ def test_verify_release_package_cli_accepts_positional_dir_and_zip(
         strict=False,
         strict_generate_sbom=False,
     ) == 0
-    package_dir = [p for p in package_root.iterdir() if p.is_dir() and p.name.startswith("release-package-")][0]
+    package_dir = next(p for p in package_root.iterdir() if p.is_dir() and p.name.startswith("release-package-"))
     package_zip = package_dir.with_suffix(".zip")
 
     monkeypatch.setattr("sys.argv", ["verify_release_package.py", str(package_dir)])

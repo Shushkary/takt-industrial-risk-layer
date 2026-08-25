@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import time
 from typing import Any
@@ -40,10 +41,8 @@ def clear_prometheus_build_info() -> None:
         return
     from prometheus_client import REGISTRY
 
-    try:
+    with contextlib.suppress(KeyError):
         REGISTRY.unregister(_BUILD_INFO)
-    except KeyError:
-        pass
     _BUILD_INFO = None
 
 

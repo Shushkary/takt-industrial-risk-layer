@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from takt.interface_adapters.api.dependencies import ApiContext
-from takt.interface_adapters.api.schemas.enrichment import DecodeBody, DecodeResponse, DecodedValueOut
+from takt.interface_adapters.api.schemas.enrichment import DecodeBody, DecodedValueOut, DecodeResponse
 
 
 def register_enrichment_routes(ctx: ApiContext) -> None:

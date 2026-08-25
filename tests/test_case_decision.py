@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -12,13 +12,13 @@ from takt.infrastructure.stores.memory import InMemoryCaseStore, InMemoryExpecte
 def test_submit_case_decision_unknown_case():
     uc = SubmitCaseDecisionUseCase(InMemoryCaseStore(), InMemoryExpectedBehavior())
     with pytest.raises(ValueError, match="unknown"):
-        uc.execute("nope", CaseStatus.TRIAGE, datetime.now(timezone.utc))
+        uc.execute("nope", CaseStatus.TRIAGE, datetime.now(UTC))
 
 
 def test_submit_case_decision_expected_behavior_marks_baseline():
     repo = InMemoryCaseStore()
     baseline = InMemoryExpectedBehavior()
-    ts = datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 1, 10, 0, tzinfo=UTC)
     c = Case(
         case_id="c-1",
         status=CaseStatus.NEW,
@@ -43,7 +43,7 @@ def test_submit_case_decision_expected_behavior_marks_baseline():
 def test_submit_case_decision_expected_behavior_skips_baseline_without_asset():
     repo = InMemoryCaseStore()
     baseline = InMemoryExpectedBehavior()
-    ts = datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 1, 10, 0, tzinfo=UTC)
     c = Case(
         case_id="c-2",
         status=CaseStatus.NEW,
@@ -64,7 +64,7 @@ def test_submit_case_decision_expected_behavior_skips_baseline_without_asset():
 def test_submit_case_decision_invalid_transition():
     repo = InMemoryCaseStore()
     baseline = InMemoryExpectedBehavior()
-    ts = datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 1, 10, 0, tzinfo=UTC)
     c = Case(
         case_id="c-term",
         status=CaseStatus.CONFIRMED,
@@ -82,7 +82,7 @@ def test_submit_case_decision_invalid_transition():
 def test_submit_case_decision_confirmed_does_not_mark_baseline():
     repo = InMemoryCaseStore()
     baseline = InMemoryExpectedBehavior()
-    ts = datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 1, 10, 0, tzinfo=UTC)
     c = Case(
         case_id="c-3",
         status=CaseStatus.NEW,
@@ -104,7 +104,7 @@ def test_submit_case_decision_confirmed_does_not_mark_baseline():
 def test_submit_case_decision_false_positive_audit_and_no_baseline():
     repo = InMemoryCaseStore()
     baseline = InMemoryExpectedBehavior()
-    ts = datetime(2026, 6, 2, 11, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 2, 11, 0, tzinfo=UTC)
     c = Case(
         case_id="c-fp",
         status=CaseStatus.NEW,
@@ -132,7 +132,7 @@ def test_submit_case_decision_false_positive_audit_and_no_baseline():
 def test_submit_case_decision_new_to_triage():
     repo = InMemoryCaseStore()
     baseline = InMemoryExpectedBehavior()
-    ts = datetime(2026, 6, 2, 12, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 2, 12, 0, tzinfo=UTC)
     c = Case(
         case_id="c-tr",
         status=CaseStatus.NEW,
@@ -155,7 +155,7 @@ def test_submit_case_decision_new_to_triage():
 def test_submit_case_decision_expected_behavior_from_triage_marks_baseline():
     repo = InMemoryCaseStore()
     baseline = InMemoryExpectedBehavior()
-    ts = datetime(2026, 6, 3, 8, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 3, 8, 0, tzinfo=UTC)
     c = Case(
         case_id="c-tb",
         status=CaseStatus.TRIAGE,
@@ -178,8 +178,8 @@ def test_submit_case_decision_expected_behavior_from_triage_marks_baseline():
 def test_submit_case_decision_expected_then_triage_keeps_baseline():
     repo = InMemoryCaseStore()
     baseline = InMemoryExpectedBehavior()
-    t1 = datetime(2026, 6, 4, 9, 0, tzinfo=timezone.utc)
-    t2 = datetime(2026, 6, 4, 10, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 6, 4, 9, 0, tzinfo=UTC)
+    t2 = datetime(2026, 6, 4, 10, 0, tzinfo=UTC)
     c = Case(
         case_id="c-reopen",
         status=CaseStatus.NEW,

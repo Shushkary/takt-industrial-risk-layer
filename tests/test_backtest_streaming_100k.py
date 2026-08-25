@@ -13,8 +13,8 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Iterator
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 from takt.application.use_cases.assess_risk import AssessRiskUseCase
 from takt.application.use_cases.backtest import RunBacktestUseCase
@@ -50,7 +50,7 @@ def _generate_events(n: int) -> Iterator[NormalizedEvent]:
     приближение к реальному потоку телеметрии (много активов, разнесённых во
     времени), а не к патологическому сценарию «один кейс на 100k событий».
     """
-    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    base = datetime(2026, 6, 1, tzinfo=UTC)
     for i in range(n):
         asset_idx = i % _ASSET_COUNT
         cycle = i // _ASSET_COUNT

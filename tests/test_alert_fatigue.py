@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.application.use_cases.assess_risk import AssessRiskUseCase
 from takt.application.use_cases.process_event import ProcessEventUseCase
@@ -24,7 +24,7 @@ def test_alert_fatigue_merges_open_case():
     repo = InMemoryCaseStore()
     assess = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-x"}))
     proc = ProcessEventUseCase(assess, repo)
-    t0 = datetime(2026, 5, 1, 10, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 10, 0, tzinfo=UTC)
 
     def ev(eid: str, op: str = "POLL"):
         return NormalizedEvent(
@@ -83,7 +83,7 @@ def test_alert_fatigue_merge_title_shows_third_event_count():
     repo = InMemoryCaseStore()
     assess = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-x"}))
     proc = ProcessEventUseCase(assess, repo)
-    t0 = datetime(2026, 5, 1, 10, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 10, 0, tzinfo=UTC)
 
     def ev(eid: str, op: str = "POLL"):
         return NormalizedEvent(
@@ -132,7 +132,7 @@ def test_alert_fatigue_merges_invariant_hits_union():
     repo = InMemoryCaseStore()
     assess = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-x"}))
     proc = ProcessEventUseCase(assess, repo)
-    t0 = datetime(2026, 5, 1, 11, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 11, 0, tzinfo=UTC)
 
     def ev(eid: str, **payload):
         base = {"asset_id": "plc-x"}
@@ -174,7 +174,7 @@ def test_alert_fatigue_merge_takes_max_risk_score():
     repo = InMemoryCaseStore()
     assess = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-x"}))
     proc = ProcessEventUseCase(assess, repo)
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
 
     def ev(eid: str):
         return NormalizedEvent(
@@ -228,7 +228,7 @@ def test_alert_fatigue_merges_different_sources_same_bucket():
     repo = InMemoryCaseStore()
     assess = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-x"}))
     proc = ProcessEventUseCase(assess, repo)
-    t0 = datetime(2026, 5, 1, 13, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 13, 0, tzinfo=UTC)
     edges: list[GraphEdge] = []
     tickets: list[ServiceTicket] = []
     intervals = [1000.0, 1000.0, 1000.0, 1000.0]
@@ -294,8 +294,8 @@ def test_alert_fatigue_bucketed_does_not_merge_different_time_buckets():
     repo = InMemoryCaseStore()
     assess = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-x"}))
     proc = ProcessEventUseCase(assess, repo)
-    t0 = datetime(2026, 5, 1, 14, 0, tzinfo=timezone.utc)
-    t_late = datetime(2026, 5, 1, 14, 11, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 14, 0, tzinfo=UTC)
+    t_late = datetime(2026, 5, 1, 14, 11, tzinfo=UTC)
     edges: list[GraphEdge] = []
     tickets: list[ServiceTicket] = []
     intervals = [1000.0, 1000.0, 1000.0, 1000.0]
@@ -338,7 +338,7 @@ def test_process_event_applies_enrichment_before_assess():
     assess = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-x"}))
     enrichment = {"enabled": True, "air_gap_segments": ["AIR_GAP_L2"]}
     proc = ProcessEventUseCase(assess, repo, enrichment=enrichment)
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e-enr",
         observed_at=t0,
@@ -372,7 +372,7 @@ def test_process_merge_backfills_empty_primary_asset_id():
     repo = InMemoryCaseStore()
     assess = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-x"}))
     proc = ProcessEventUseCase(assess, repo)
-    t0 = datetime(2026, 5, 12, 11, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 12, 11, 0, tzinfo=UTC)
     edges: list[GraphEdge] = []
     intervals = [1000.0, 1000.0, 1000.0, 1000.0]
 

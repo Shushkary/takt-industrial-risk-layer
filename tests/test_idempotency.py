@@ -1,8 +1,7 @@
 """Идемпотентный POST /events и /events/batch (Спринт 4 / план v0.7.0)."""
 
-from pathlib import Path
-
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient

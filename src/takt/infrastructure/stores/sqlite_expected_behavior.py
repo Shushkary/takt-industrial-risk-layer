@@ -7,6 +7,8 @@ from pathlib import Path
 from takt.domain.ports.baseline import ExpectedBehaviorPort
 from takt.infrastructure.stores.sqlite_connection import (
     checkpoint_wal_best_effort as _checkpoint_wal_best_effort,
+)
+from takt.infrastructure.stores.sqlite_connection import (
     configure_sqlite_connection as _configure_sqlite_connection,
 )
 from takt.infrastructure.stores.sqlite_schema import ensure_expected_behavior_schema

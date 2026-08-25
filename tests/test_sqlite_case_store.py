@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-import sqlite3
 
 from takt.domain.entities.case import (
     Case,
@@ -28,7 +28,7 @@ from takt.infrastructure.stores.sqlite_store import (
 def test_sqlite_case_store_roundtrip(tmp_path: Path) -> None:
     db = tmp_path / "cases.db"
     store = SqliteCaseStore(db)
-    t0 = datetime(2026, 5, 2, 9, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
     c = Case(
         case_id="abc12345",
         status=CaseStatus.NEW,
@@ -90,7 +90,7 @@ def test_sqlite_case_store_roundtrip(tmp_path: Path) -> None:
 def test_sqlite_find_open_by_fingerprint_status(tmp_path: Path) -> None:
     db = tmp_path / "t.db"
     store = SqliteCaseStore(db)
-    t0 = datetime(2026, 5, 2, 10, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
     fp = "plc_polling|x|POLL"
 
     open_case = Case(
@@ -152,7 +152,7 @@ def test_sqlite_save_after_close_raises(tmp_path: Path) -> None:
     import sqlite3
 
     store = SqliteCaseStore(tmp_path / "closed-save.db")
-    t0 = datetime(2026, 7, 1, 9, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 7, 1, 9, 0, tzinfo=UTC)
     c = Case(
         case_id="x",
         status=CaseStatus.NEW,
@@ -171,7 +171,7 @@ def test_sqlite_get_and_list_after_close_raises(tmp_path: Path) -> None:
     import sqlite3
 
     store = SqliteCaseStore(tmp_path / "closed-read.db")
-    t0 = datetime(2026, 7, 2, 9, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 7, 2, 9, 0, tzinfo=UTC)
     store.save(
         Case(
             case_id="y",
@@ -193,7 +193,7 @@ def test_sqlite_find_open_after_close_raises(tmp_path: Path) -> None:
     import sqlite3
 
     store = SqliteCaseStore(tmp_path / "closed-find.db")
-    t0 = datetime(2026, 7, 3, 9, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 7, 3, 9, 0, tzinfo=UTC)
     store.save(
         Case(
             case_id="z",
@@ -221,8 +221,8 @@ def test_sqlite_db_schema_version_after_close_raises(tmp_path: Path) -> None:
 
 def test_sqlite_list_all_orders_by_created_at_desc(tmp_path: Path) -> None:
     store = SqliteCaseStore(tmp_path / "order.db")
-    t_old = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
-    t_new = datetime(2026, 4, 1, 10, 0, tzinfo=timezone.utc)
+    t_old = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    t_new = datetime(2026, 4, 1, 10, 0, tzinfo=UTC)
     store.save(
         Case(
             case_id="older",
@@ -250,7 +250,7 @@ def test_sqlite_list_all_orders_by_created_at_desc(tmp_path: Path) -> None:
 
 def test_sqlite_loads_created_at_with_z_suffix(tmp_path: Path) -> None:
     store = SqliteCaseStore(tmp_path / "ztime.db")
-    t0 = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 9, 1, 8, 0, tzinfo=UTC)
     try:
         store.save(
             Case(
@@ -313,7 +313,7 @@ def test_checkpoint_wal_best_effort_swallows_sqlite_errors() -> None:
 def test_sqlite_audit_ledger_verification_ok_and_detects_tamper(tmp_path: Path) -> None:
     store = SqliteCaseStore(tmp_path / "ledger.db")
     try:
-        t0 = datetime(2026, 9, 2, 9, 0, tzinfo=timezone.utc)
+        t0 = datetime(2026, 9, 2, 9, 0, tzinfo=UTC)
         c = Case(
             case_id="ledger-1",
             status=CaseStatus.NEW,
@@ -362,7 +362,7 @@ def test_sqlite_roundtrip_persists_manual_decision_remediation_and_pdf_fields(tm
     db = tmp_path / "cases-full-roundtrip.db"
     store = SqliteCaseStore(db)
     try:
-        t0 = datetime(2026, 9, 3, 9, 0, tzinfo=timezone.utc)
+        t0 = datetime(2026, 9, 3, 9, 0, tzinfo=UTC)
         case = Case(
             case_id="case-full-1",
             status=CaseStatus.TRIAGE,

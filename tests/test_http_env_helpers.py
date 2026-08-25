@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import httpx
@@ -78,7 +78,7 @@ def test_webhook_async_retries(monkeypatch: pytest.MonkeyPatch) -> None:
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     n = {"i": 0}
 
@@ -132,7 +132,7 @@ def test_webhook_async_retries_exhausted(monkeypatch: pytest.MonkeyPatch) -> Non
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     n = {"i": 0}
 

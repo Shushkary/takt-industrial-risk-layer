@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from takt.domain.entities.event import EventSource, NormalizedEvent
 from takt.domain.engines.data_quality import (
     compose_dq,
     evaluate_full_pipeline,
@@ -12,6 +11,7 @@ from takt.domain.engines.data_quality import (
     evaluate_source_reputation,
     evaluate_stale_telemetry,
 )
+from takt.domain.entities.event import EventSource, NormalizedEvent
 
 
 def _ev(
@@ -34,7 +34,7 @@ def _ev(
 
 
 def test_sequence_gaps_insufficient_events():
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     s = evaluate_sequence_gaps([_ev("1", t0)], max_gap_seconds=60.0)
     assert s.dq_score == 1.0
     assert s.partial_observability is False
@@ -42,7 +42,7 @@ def test_sequence_gaps_insufficient_events():
 
 
 def test_sequence_gaps_no_penalty_under_threshold():
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     seq = [_ev("1", t0), _ev("2", t0 + timedelta(seconds=30))]
     s = evaluate_sequence_gaps(seq, max_gap_seconds=60.0)
     assert s.dq_score == 1.0
@@ -50,7 +50,7 @@ def test_sequence_gaps_no_penalty_under_threshold():
 
 
 def test_sequence_gaps_detects_gap():
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     seq = [_ev("1", t0), _ev("2", t0 + timedelta(seconds=200))]
     s = evaluate_sequence_gaps(seq, max_gap_seconds=60.0)
     assert "telemetry_gap" in s.reasons
@@ -58,7 +58,7 @@ def test_sequence_gaps_detects_gap():
 
 
 def test_sequence_gaps_accumulates_multiple_gap_reasons():
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     seq = [
         _ev("1", t0),
         _ev("2", t0 + timedelta(seconds=200)),
@@ -70,7 +70,7 @@ def test_sequence_gaps_accumulates_multiple_gap_reasons():
 
 
 def test_stale_telemetry_requires_same_signature():
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     a = _ev("1", t0, payload={"telemetry_value": 7, "asset_id": "a1"})
     b = _ev(
         "2",
@@ -82,7 +82,7 @@ def test_stale_telemetry_requires_same_signature():
 
 
 def test_stale_telemetry_same_sig_over_window():
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     p = {"telemetry_value": 7, "asset_id": "a1"}
     a = _ev("1", t0, payload=p)
     b = _ev("2", t0 + timedelta(seconds=120), payload=p)
@@ -92,7 +92,7 @@ def test_stale_telemetry_same_sig_over_window():
 
 
 def test_stale_telemetry_accumulates_multiple_stale_edges():
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     p = {"telemetry_value": 7, "asset_id": "a1"}
     a = _ev("1", t0, payload=p)
     b = _ev("2", t0 + timedelta(seconds=100), payload=p)
@@ -103,7 +103,7 @@ def test_stale_telemetry_accumulates_multiple_stale_edges():
 
 
 def test_stale_telemetry_uses_value_field_in_signature():
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     p = {"value": 42, "asset_id": "z"}
     a = _ev("1", t0, operation="POLL", payload_size=2, payload=p)
     b = _ev(
@@ -185,7 +185,7 @@ def test_compose_dq_empty():
 
 
 def test_compose_dq_min_score_and_dedupes_reasons():
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     a = evaluate_sequence_gaps(
         [_ev("1", t0), _ev("2", t0 + timedelta(seconds=200))],
         max_gap_seconds=60.0,
@@ -198,7 +198,7 @@ def test_compose_dq_min_score_and_dedupes_reasons():
 
 
 def test_full_pipeline_aggregates_sub_snapshots():
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
     p = {"telemetry_value": 1, "asset_id": "x"}
     events = [
         _ev("1", t0, payload=p),

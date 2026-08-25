@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from takt.application.use_cases.compliance_facade import ComplianceFacade
@@ -10,7 +10,7 @@ from takt.domain.entities.audit_engagement import AuditEngagement, AuditFinalRep
 class _ComplianceReportUseCase:
     def execute(self):
         return SimpleNamespace(
-            generated_at=datetime(2026, 5, 26, 12, 0, tzinfo=timezone.utc),
+            generated_at=datetime(2026, 5, 26, 12, 0, tzinfo=UTC),
             total_cases=0,
             open_cases=0,
             by_status={},
@@ -33,7 +33,7 @@ class _ComplianceReportUseCase:
 class _ForensicReadinessUseCase:
     def execute(self, **_kwargs):
         return SimpleNamespace(
-            generated_at=datetime(2026, 5, 26, 12, 0, tzinfo=timezone.utc),
+            generated_at=datetime(2026, 5, 26, 12, 0, tzinfo=UTC),
             total_cases=0,
             ready_cases=0,
             not_ready_cases=0,
@@ -47,14 +47,14 @@ class _AuditEngagementUseCase:
         return [
             AuditEngagement(
                 engagement_id="active-1",
-                created_at=datetime(2026, 5, 26, 12, 0, tzinfo=timezone.utc),
+                created_at=datetime(2026, 5, 26, 12, 0, tzinfo=UTC),
                 status="active",
                 customer="Plant A",
                 scope="Audit",
             ),
             AuditEngagement(
                 engagement_id="done-1",
-                created_at=datetime(2026, 5, 26, 12, 0, tzinfo=timezone.utc),
+                created_at=datetime(2026, 5, 26, 12, 0, tzinfo=UTC),
                 status="completed",
                 customer="Plant A",
                 scope="Audit",
@@ -62,7 +62,7 @@ class _AuditEngagementUseCase:
                     title="Final",
                     uri="report://final",
                     summary="done",
-                    generated_at=datetime(2026, 5, 26, 13, 0, tzinfo=timezone.utc),
+                    generated_at=datetime(2026, 5, 26, 13, 0, tzinfo=UTC),
                 ),
             ),
         ]

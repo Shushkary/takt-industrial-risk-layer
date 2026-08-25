@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timezone
+from datetime import UTC
 from typing import Any
 
 from takt.application.use_cases.compliance_report import (
@@ -57,7 +57,7 @@ class ComplianceFacade:
     def data_quality_report(self) -> dict[str, Any]:
         report = self._compliance_report_uc.execute()
         return {
-            "generated_at": report.generated_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            "generated_at": report.generated_at.astimezone(UTC).isoformat(timespec="seconds"),
             "total_cases": report.total_cases,
             "open_cases": report.open_cases,
             "by_status": report.by_status,
@@ -86,7 +86,7 @@ class ComplianceFacade:
             missing_code=missing_code,
         )
         return {
-            "generated_at": report.generated_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            "generated_at": report.generated_at.astimezone(UTC).isoformat(timespec="seconds"),
             "total_cases": report.total_cases,
             "ready_cases": report.ready_cases,
             "not_ready_cases": report.not_ready_cases,
@@ -125,7 +125,7 @@ class ComplianceFacade:
         return {
             "mode": "compliance" if compliance_enabled else "standard",
             "compliance_enabled": compliance_enabled,
-            "generated_at": dq_report.generated_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            "generated_at": dq_report.generated_at.astimezone(UTC).isoformat(timespec="seconds"),
             "product_boundary": {
                 "is_crypto_tool": False,
                 "has_active_control": False,
@@ -165,7 +165,7 @@ class ComplianceFacade:
     def evidence_checklist(self, case_id: str) -> dict[str, Any]:
         checklist = self._evidence_checklist_uc.execute(case_id)
         return {
-            "generated_at": checklist.generated_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            "generated_at": checklist.generated_at.astimezone(UTC).isoformat(timespec="seconds"),
             "case_id": checklist.case_id,
             "ready": checklist.ready,
             "remediation_summary": checklist.remediation_summary,
@@ -292,7 +292,7 @@ class ComplianceFacade:
             "kind": a.kind,
             "status": a.status,
             "actor": a.actor,
-            "created_at": a.created_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            "created_at": a.created_at.astimezone(UTC).isoformat(timespec="seconds"),
             "action": a.action,
             "result": a.result,
             "readiness_before": a.readiness_before,

@@ -11,7 +11,6 @@ import zipfile
 from json import JSONDecodeError
 from pathlib import Path
 
-
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _UNIX_FILE_TYPE_MASK = 0o170000
 _UNIX_SYMLINK_TYPE = 0o120000

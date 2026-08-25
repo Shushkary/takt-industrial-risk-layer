@@ -34,7 +34,7 @@ def verify(db_path: Path, case_id: str) -> dict[str, object]:
         if str(prev_chain_sha256) != prev_chain:
             return {"ok": False, "checked_entries": checked, "issue": "prev_chain_mismatch"}
         expected_chain = hashlib.sha256(
-            f"{prev_chain}:{case_id}:{expected_line}:{len(line)}".encode("utf-8")
+            f"{prev_chain}:{case_id}:{expected_line}:{len(line)}".encode()
         ).hexdigest()
         if expected_chain != str(chain_sha256):
             return {"ok": False, "checked_entries": checked, "issue": "chain_mismatch"}

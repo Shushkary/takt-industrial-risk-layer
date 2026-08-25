@@ -112,6 +112,4 @@ def _readiness_ok(case) -> bool:
         return False
     if not case.manual_permits:
         return False
-    if not any("forensic bundle generated root_hash=" in line for line in case.audit_log):
-        return False
-    return True
+    return any("forensic bundle generated root_hash=" in line for line in case.audit_log)

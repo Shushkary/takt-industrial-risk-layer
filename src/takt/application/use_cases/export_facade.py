@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from takt.domain.ports.case_repository import CaseRepositoryPort
 from takt.domain.ports.system_ports import SystemClockPort

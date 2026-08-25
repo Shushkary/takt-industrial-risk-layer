@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from takt.domain.engines.causal_mesh import GraphEdge
 from takt.domain.ports.baseline import ExpectedBehaviorPort

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import sqlite3
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 
 def sqlite_busy_timeout_ms_from_env() -> int:
@@ -21,7 +22,7 @@ def sqlite_busy_timeout_ms_from_env() -> int:
 
 def configure_sqlite_connection(conn: sqlite3.Connection) -> None:
     ms = sqlite_busy_timeout_ms_from_env()
-    conn.execute("PRAGMA busy_timeout=%d" % int(ms))
+    conn.execute(f"PRAGMA busy_timeout={int(ms)}")
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
 
@@ -30,10 +31,8 @@ def checkpoint_wal_best_effort(conn: sqlite3.Connection) -> None:
     try:
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except sqlite3.Error:
-        try:
+        with contextlib.suppress(sqlite3.Error):
             conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
-        except sqlite3.Error:
-            pass
 
 
 def dt_to_sql(dt: datetime) -> str:
@@ -67,5 +66,5 @@ def dt_from_sql(raw: str) -> datetime:
 
 
 def table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    cur = conn.execute("PRAGMA table_info(%s)" % table)
+    cur = conn.execute(f"PRAGMA table_info({table})")
     return {str(row[1]) for row in cur.fetchall()}

@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from takt.application.use_cases.investigation_effort import (
-    AnalystSession,
     ManualProcessModel,
     analyst_session_from_audit,
     evaluate_effort,

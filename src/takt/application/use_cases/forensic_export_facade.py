@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import timezone
+from datetime import UTC
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -137,7 +137,7 @@ class ForensicExportFacade:
     def _audit_engagement_payload(item: Any) -> dict[str, Any]:
         return {
             "engagement_id": item.engagement_id,
-            "created_at": item.created_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            "created_at": item.created_at.astimezone(UTC).isoformat(timespec="seconds"),
             "status": item.status,
             "customer": item.customer,
             "scope": item.scope,
@@ -151,12 +151,12 @@ class ForensicExportFacade:
                     "day_range": stage.day_range,
                     "status": stage.status,
                     "started_at": (
-                        stage.started_at.astimezone(timezone.utc).isoformat(timespec="seconds")
+                        stage.started_at.astimezone(UTC).isoformat(timespec="seconds")
                         if stage.started_at
                         else None
                     ),
                     "completed_at": (
-                        stage.completed_at.astimezone(timezone.utc).isoformat(timespec="seconds")
+                        stage.completed_at.astimezone(UTC).isoformat(timespec="seconds")
                         if stage.completed_at
                         else None
                     ),
@@ -170,7 +170,7 @@ class ForensicExportFacade:
                     "title": item.final_report.title,
                     "uri": item.final_report.uri,
                     "summary": item.final_report.summary,
-                    "generated_at": item.final_report.generated_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+                    "generated_at": item.final_report.generated_at.astimezone(UTC).isoformat(timespec="seconds"),
                 }
                 if item.final_report is not None
                 else None
@@ -186,7 +186,7 @@ class ForensicExportFacade:
         return {
             "package_id": bundle.package_id,
             "case_id": bundle.case_id,
-            "generated_at": bundle.generated_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            "generated_at": bundle.generated_at.astimezone(UTC).isoformat(timespec="seconds"),
             "root_hash_sha256": bundle.root_hash_sha256,
             "signature_status": bundle.signature_status,
             "signature_ref": bundle.signature_ref,
@@ -204,7 +204,7 @@ class ForensicExportFacade:
                     "checksum_algorithm": item.checksum_algorithm,
                     "chain_sha256": item.chain_sha256,
                     "size_bytes": item.size_bytes,
-                    "included_at": item.included_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+                    "included_at": item.included_at.astimezone(UTC).isoformat(timespec="seconds"),
                 }
                 for item in bundle.items
             ],

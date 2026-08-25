@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import os
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -13,8 +13,8 @@ from takt.domain.services.forensic_verdict import case_forensic_verdict
 
 def _utc_iso(dt: datetime) -> str:
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).isoformat(timespec="seconds")
 
 
 def _incident_category(case: Case) -> str:
@@ -154,7 +154,7 @@ def _signature_status_default() -> str:
     return "unsigned_mvp"
 
 
-def _organizational_document_payload(permit) -> dict[str, object]:  # noqa: ANN001
+def _organizational_document_payload(permit) -> dict[str, object]:
     doc = permit.organizational_document()
     return {
         "document_id": doc.document_id,
@@ -173,7 +173,7 @@ def _organizational_document_payload(permit) -> dict[str, object]:  # noqa: ANN0
     }
 
 
-def _manual_permit_payload(permit) -> dict[str, object]:  # noqa: ANN001
+def _manual_permit_payload(permit) -> dict[str, object]:
     return {
         "work_order_number": permit.work_order_number,
         "actor": permit.actor,

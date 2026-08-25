@@ -112,10 +112,7 @@ def _netloc_for_pinned_ip(ip: str, port: int, scheme: str) -> str:
         addr = ipaddress.ip_address(ip)
     except ValueError:
         return f"{ip}:{port}" if port != def_p else ip
-    if isinstance(addr, ipaddress.IPv6Address):
-        h = f"[{addr.compressed}]"
-    else:
-        h = str(addr)
+    h = f"[{addr.compressed}]" if isinstance(addr, ipaddress.IPv6Address) else str(addr)
     if port == def_p:
         return h
     return f"{h}:{port}"

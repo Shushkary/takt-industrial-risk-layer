@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,9 +48,7 @@ def detect_lateral_movement(
     for e in edges:
         if e.src in admin_hosts or e.dst in admin_hosts:
             continue
-        if e.src in plc_hosts and e.dst in plc_hosts:
-            result.append(e)
-        elif e.src not in plc_hosts and e.dst not in plc_hosts and e.src != e.dst:
+        if (e.src in plc_hosts and e.dst in plc_hosts) or (e.src not in plc_hosts and e.dst not in plc_hosts and e.src != e.dst):
             result.append(e)
     return result
 

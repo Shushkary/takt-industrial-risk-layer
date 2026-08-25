@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from takt.domain.entities.event import NormalizedEvent
 from takt.domain.engines.causal_mesh import detect_jump_server_bypass
 from takt.domain.engines.chaos_predictor import predict_polling_chaos
 from takt.domain.engines.context_matcher import match_event_to_ticket
@@ -13,6 +12,7 @@ from takt.domain.engines.data_quality import (
     evaluate_stale_telemetry,
 )
 from takt.domain.engines.phase_time_tagger import phase_dissonance_admin_activity, tag_phase
+from takt.domain.entities.event import NormalizedEvent
 from takt.domain.invariants.catalog import InvariantId
 from takt.domain.invariants.rule_spec import InvariantRuleSpec
 

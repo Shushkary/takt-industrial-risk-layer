@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+
 def _load_run():
     root = Path(__file__).resolve().parents[1]
     script_path = root / "scripts" / "release_finalize.py"
@@ -140,7 +141,7 @@ def test_release_finalize_fails_when_forensic_signing_unavailable_is_true(
         encoding="utf-8",
     )
 
-    def _fake_post(url, json, timeout):  # noqa: ANN001
+    def _fake_post(url, json, timeout):
         if str(url).endswith("/sign"):
             raise RuntimeError("signer unavailable")
         if str(url).endswith("/verify"):
@@ -183,7 +184,7 @@ def test_release_finalize_reports_forensic_signing_unavailable_reason(
         encoding="utf-8",
     )
 
-    def _fake_post(url, json, timeout):  # noqa: ANN001
+    def _fake_post(url, json, timeout):
         if str(url).endswith("/sign"):
             raise RuntimeError("signer unavailable")
         if str(url).endswith("/verify"):
@@ -228,7 +229,7 @@ def test_release_finalize_reports_forensic_verify_failure_when_signing_available
         encoding="utf-8",
     )
 
-    def _fake_post(url, json, timeout):  # noqa: ANN001
+    def _fake_post(url, json, timeout):
         if str(url).endswith("/sign"):
             return SimpleNamespace(
                 raise_for_status=lambda: None,

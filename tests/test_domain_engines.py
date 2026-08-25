@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import pytest
-
-from takt.domain.entities.event import EventSource, NormalizedEvent
 from takt.domain.engines.alert_fatigue import burst_fingerprint, burst_fingerprint_bucketed, compute_burst_fingerprint
-from takt.domain.engines.chaos_predictor import FEIGENBAUM_DELTA, predict_polling_chaos
 from takt.domain.engines.causal_mesh import GraphEdge, detect_jump_server_bypass
+from takt.domain.engines.chaos_predictor import FEIGENBAUM_DELTA, predict_polling_chaos
+from takt.domain.entities.event import EventSource, NormalizedEvent
 
 
 def _norm_ev(*, source: EventSource, op: str, payload: dict) -> NormalizedEvent:
     return NormalizedEvent(
         event_id="e1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=source,
         protocol="M",
         operation=op,

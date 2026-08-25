@@ -4,7 +4,9 @@ import json
 import sqlite3
 
 from takt.domain.entities.audit_engagement import AuditEngagement, AuditFinalReport, AuditStage
-from takt.infrastructure.stores.sqlite_connection import dt_from_sql as _dt_from_sql, dt_to_sql as _dt_to_sql
+from takt.infrastructure.stores.sqlite_connection import dt_from_sql as _dt_from_sql
+from takt.infrastructure.stores.sqlite_connection import dt_to_sql as _dt_to_sql
+
 
 def _serialize_audit_stages(stages: list[AuditStage]) -> str:
     return json.dumps(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -138,7 +138,6 @@ def test_egress_airgap_without_flag_still_blocks_in_prod(monkeypatch: pytest.Mon
 
 
 def test_webhook_resolve_once_across_retries(monkeypatch: pytest.MonkeyPatch) -> None:
-    from unittest.mock import MagicMock, patch
 
     monkeypatch.setenv("TAKT_SECURITY_PROFILE", "dev")
     hits: list[int] = []
@@ -153,7 +152,7 @@ def test_webhook_resolve_once_across_retries(monkeypatch: pytest.MonkeyPatch) ->
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     ok = MagicMock()
     ok.status_code = 200

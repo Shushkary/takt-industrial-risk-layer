@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
-
 OPENAPI_PUBLIC_PATHS: frozenset[str] = frozenset({"/health", "/live", "/ready", "/openapi.json", "/metrics"})
 OPENAPI_PUBLIC_PREFIXES: tuple[str, ...] = ("/docs", "/redoc")
 

@@ -48,7 +48,7 @@ def verify(db_path: Path, stream_key: str = "") -> dict[str, object]:
         if str(prev_chain_sha256) != prev_chain:
             return {"ok": False, "checked_entries": checked, "issue": "prev_chain_mismatch"}
         expected_chain = hashlib.sha256(
-            f"{prev_chain}:{row_stream}:{expected_payload}:{len(payload_json)}".encode("utf-8")
+            f"{prev_chain}:{row_stream}:{expected_payload}:{len(payload_json)}".encode()
         ).hexdigest()
         if expected_chain != str(chain_sha256):
             return {"ok": False, "checked_entries": checked, "issue": "chain_mismatch"}

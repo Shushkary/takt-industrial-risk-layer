@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, Query, Request, Response
 from pydantic import ValidationError
@@ -154,7 +154,7 @@ def register_case_routes(ctx: ApiContext) -> None:
                 last_event_source=c.last_event_source,
                 invariant_hits_count=len(c.invariant_hits),
                 event_count=len(c.normalized_event_ids),
-                created_at=c.created_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+                created_at=c.created_at.astimezone(UTC).isoformat(timespec="seconds"),
                 dq_score=c.dq_score,
                 dq_partial=c.dq_partial,
             )

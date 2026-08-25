@@ -6,7 +6,7 @@ import hashlib
 import importlib.util
 import json
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -22,7 +22,7 @@ def _load_script_function(script_name: str, function_name: str):
 
 
 def _utc_stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _sha256_file(path: Path) -> str:
@@ -111,7 +111,7 @@ def run(
         shutil.copy2(src, dst)
         copied.append(dst.name)
 
-    included = sorted(copied + [evidence_path.name, prod_out.name])
+    included = sorted([*copied, evidence_path.name, prod_out.name])
     checksums = {name: _sha256_file(out_dir / name) for name in included}
     manifest = {
         "generated_at_utc": stamp,
@@ -124,7 +124,7 @@ def run(
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     archive = shutil.make_archive(str(out_dir), "zip", root_dir=str(out_dir))
-    print(f"release_package_status=READY")
+    print("release_package_status=READY")
     print(f"release_package_dir={out_dir}")
     print(f"release_package_zip={archive}")
     return 0

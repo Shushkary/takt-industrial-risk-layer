@@ -5,7 +5,7 @@ import os
 import socket
 import sys
 import time
-from datetime import timezone
+from datetime import UTC
 from typing import Any
 
 from fastapi import HTTPException, Response
@@ -76,7 +76,7 @@ def register_system_routes(ctx: ApiContext) -> None:
             "python_implementation": sys.implementation.name,
             "api_log_level": logging.getLevelName(_LOGGER.getEffectiveLevel()),
             "uptime_seconds": round(time.monotonic() - float(app.state.boot_monotonic), 3),
-            "booted_at_utc": app.state.booted_at_utc.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            "booted_at_utc": app.state.booted_at_utc.astimezone(UTC).isoformat(timespec="seconds"),
             "process_id": os.getpid(),
             "hostname": socket.gethostname(),
             "platform": sys.platform,

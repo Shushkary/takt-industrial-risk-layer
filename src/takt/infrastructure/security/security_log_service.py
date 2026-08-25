@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import socket
@@ -9,10 +10,11 @@ import sqlite3
 import threading
 import time
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 
 def security_log_file_path_from_env() -> Path | None:
@@ -85,14 +87,12 @@ class SecurityLogService:
                     pass
                 self._file_handle = None
             if self._conn is not None:
-                try:
+                with contextlib.suppress(sqlite3.Error):
                     self._conn.close()
-                except sqlite3.Error:
-                    pass
                 self._conn = None
 
     def record(self, event_type: str, fields: Mapping[str, Any]) -> None:
-        ts = datetime.now(timezone.utc)
+        ts = datetime.now(UTC)
         base: dict[str, Any] = {
             "timestamp": ts.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
             "hostname": self._hostname,
@@ -107,13 +107,11 @@ class SecurityLogService:
         with self._lock:
             self._memory.append({"ts": ts, "type": event_type, "raw": base})
             if self._conn is not None:
-                try:
+                with contextlib.suppress(sqlite3.Error):
                     self._conn.execute(
                         "INSERT INTO security_log (ts_utc, event_type, payload_json) VALUES (?,?,?)",
                         (ts.replace(tzinfo=None).isoformat(timespec="milliseconds") + "Z", event_type, payload_compact),
                     )
-                except sqlite3.Error:
-                    pass
             if self._file_handle is not None:
                 try:
                     self._file_handle.write(line + "\n")
@@ -122,7 +120,7 @@ class SecurityLogService:
                     pass
 
     def entries_last_hour(self) -> int:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+        cutoff = datetime.now(UTC) - timedelta(hours=1)
         with self._lock:
             if self._conn is not None:
                 try:

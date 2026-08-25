@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
-import base64
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
-from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile, ZipInfo
+from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile, ZipInfo
 
-from takt.domain.entities.case import Case, RawEvidenceRef
+from takt.domain.entities.case import Case
 from takt.domain.entities.compliance import CaseEvidenceChecklist, ComplianceDataQualityReport, ForensicReadinessReport
 from takt.domain.entities.forensic import (
     ForensicBundle,
@@ -19,7 +19,6 @@ from takt.domain.services.forensic_verdict import case_forensic_verdict
 from takt.infrastructure.export.gossopka import case_to_gossopka_card
 from takt.infrastructure.export.siem_webhook import case_to_siem_payload
 from takt.infrastructure.security.root_hash_signature import RootHashSignatureAdapter
-
 
 _ZIP_TS = (1980, 1, 1, 0, 0, 0)
 _VERIFY_MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
@@ -38,8 +37,8 @@ def _json_bytes(payload: object) -> bytes:
 
 def _utc_iso(dt: datetime) -> str:
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).isoformat(timespec="seconds")
 
 
 def _zip_write(zf: ZipFile, path: str, data: bytes) -> None:
@@ -152,7 +151,7 @@ def _case_payload(case: Case) -> dict[str, object]:
     }
 
 
-def _organizational_document_payload(permit) -> dict[str, object]:  # noqa: ANN001
+def _organizational_document_payload(permit) -> dict[str, object]:
     doc = permit.organizational_document()
     return {
         "document_id": doc.document_id,
@@ -171,7 +170,7 @@ def _organizational_document_payload(permit) -> dict[str, object]:  # noqa: ANN0
     }
 
 
-def _manual_permit_payload(permit) -> dict[str, object]:  # noqa: ANN001
+def _manual_permit_payload(permit) -> dict[str, object]:
     return {
         "permit_id": permit.permit_id,
         "case_id": permit.case_id,
@@ -349,7 +348,7 @@ def _chain_hashes(files: list[tuple[str, str, bytes]]) -> list[str]:
     prev = ""
     for path, _media_type, data in files:
         item_hash = _sha256_hex(data)
-        chained = _sha256_hex(f"{prev}:{path}:{item_hash}:{len(data)}".encode("utf-8"))
+        chained = _sha256_hex(f"{prev}:{path}:{item_hash}:{len(data)}".encode())
         out.append(chained)
         prev = chained
     return out
@@ -604,7 +603,7 @@ class ZipForensicBundleBuilder:
         )
         evidence_files.insert(2, ("gossopka-card.json", "application/json", gossopka_payload))
         chain_hashes = _chain_hashes(evidence_files)
-        included_at = generated_at if generated_at.tzinfo else generated_at.replace(tzinfo=timezone.utc)
+        included_at = generated_at if generated_at.tzinfo else generated_at.replace(tzinfo=UTC)
         item_rows: list[ForensicEvidenceItem] = []
         for (path, media_type, data), chain_hash in zip(evidence_files, chain_hashes, strict=True):
             element_type, source, role = _manifest_item_classification(path)
@@ -630,7 +629,7 @@ class ZipForensicBundleBuilder:
         meta = ForensicBundle(
             case_id=case.case_id,
             package_id=f"takt-{case.case_id}-{root_hash[:16]}",
-            generated_at=generated_at if generated_at.tzinfo else generated_at.replace(tzinfo=timezone.utc),
+            generated_at=generated_at if generated_at.tzinfo else generated_at.replace(tzinfo=UTC),
             root_hash_sha256=root_hash,
             signature_status=signature_status,
             process_suitability=_process_suitability(signature_status),
@@ -766,7 +765,7 @@ class ZipForensicBundleVerifier:
                         issues.append(_issue("sha256_mismatch", f"{path}: expected {expected_sha}, got {actual_sha}"))
                     if isinstance(expected_size, int) and len(data) != expected_size:
                         issues.append(_issue("size_mismatch", f"{path}: expected {expected_size}, got {len(data)}"))
-                    actual_chain = _sha256_hex(f"{prev_chain}:{path}:{actual_sha}:{len(data)}".encode("utf-8"))
+                    actual_chain = _sha256_hex(f"{prev_chain}:{path}:{actual_sha}:{len(data)}".encode())
                     if actual_chain != expected_chain:
                         issues.append(_issue("chain_mismatch", f"{path}: expected {expected_chain}, got {actual_chain}"))
                     prev_chain = actual_chain

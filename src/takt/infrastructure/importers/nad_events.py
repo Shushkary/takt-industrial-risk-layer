@@ -232,4 +232,4 @@ class NadEventSourceReader:
                     )
 
 
-__all__ = ["NadEventSourceReader", "map_nad", "redact", "REDACTED_FIELDS"]
+__all__ = ["REDACTED_FIELDS", "NadEventSourceReader", "map_nad", "redact"]

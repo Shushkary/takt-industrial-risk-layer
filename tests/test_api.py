@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 import socket
 import sys
+from datetime import UTC, datetime
 from importlib.metadata import version
-from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -378,7 +378,7 @@ def test_ready_endpoint_fails_when_gost_strict_missing_signer(monkeypatch: pytes
 
 
 def test_forensic_exports_return_503_when_strict_signer_unavailable(monkeypatch: pytest.MonkeyPatch):
-    def _fake_post(url, json, timeout):  # noqa: ANN001
+    def _fake_post(url, json, timeout):
         if str(url).endswith("/sign"):
             raise RuntimeError("signer unavailable")
         raise AssertionError("unexpected URL")
@@ -760,12 +760,12 @@ def test_list_cases_min_invariant_hits_and_xai_contains():
     title = invariant_titles_by_id()["trust_index_drop"]
     xai_rows = client.get("/cases", params={"xai_contains": title}).json()
     assert len(xai_rows) >= 1
-    assert all("plc-inv-xai" == c["primary_asset_id"] for c in xai_rows)
+    assert all(c["primary_asset_id"] == "plc-inv-xai" for c in xai_rows)
     assert client.get("/cases", params={"xai_contains": "trust_index_drop"}).json() == []
 
     by_id = client.get("/cases", params={"has_invariant": "trust_index_drop"}).json()
     assert len(by_id) >= 1
-    assert all("plc-inv-xai" == c["primary_asset_id"] for c in by_id)
+    assert all(c["primary_asset_id"] == "plc-inv-xai" for c in by_id)
 
 
 def test_list_cases_max_invariant_hits_and_sort_invariant_hits():
@@ -1254,7 +1254,7 @@ def test_run_backtest_forwards_trust_by_source():
     uc = RunBacktestUseCase(process)
     ev = NormalizedEvent(
         event_id="t",
-        observed_at=datetime(2026, 4, 30, tzinfo=timezone.utc),
+        observed_at=datetime(2026, 4, 30, tzinfo=UTC),
         source=EventSource.PLC_POLLING,
         protocol="demo",
         operation="PING",

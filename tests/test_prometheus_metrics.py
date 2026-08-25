@@ -287,8 +287,9 @@ def test_register_build_info_only_once(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_clear_prometheus_build_info_swallows_registry_keyerror(monkeypatch: pytest.MonkeyPatch) -> None:
     from unittest.mock import MagicMock
 
-    import takt.infrastructure.http.prometheus_metrics as pm
     from prometheus_client import REGISTRY
+
+    import takt.infrastructure.http.prometheus_metrics as pm
 
     clear_prometheus_build_info()
     pm._BUILD_INFO = MagicMock()
@@ -340,10 +341,11 @@ def test_record_rate_limit_rejection_noop_when_counter_import_fails(monkeypatch:
 
 
 def test_prometheus_metrics_middleware_bypasses_when_gauges_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    import takt.infrastructure.http.prometheus_metrics as pm
     from starlette.applications import Starlette
     from starlette.responses import PlainTextResponse
     from starlette.routing import Route
+
+    import takt.infrastructure.http.prometheus_metrics as pm
 
     monkeypatch.setattr(pm, "_in_progress_gauge", lambda: (_ for _ in ()).throw(ImportError("no prom")))
 

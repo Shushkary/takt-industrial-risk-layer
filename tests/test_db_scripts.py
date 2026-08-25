@@ -159,7 +159,7 @@ def test_verify_audit_ledger_script_function(tmp_path) -> None:
         )
         line = "2026-05-01T00:00:00+00:00 | created"
         line_sha = hashlib.sha256(line.encode("utf-8")).hexdigest()
-        chain_sha = hashlib.sha256(f":c-1:{line_sha}:{len(line)}".encode("utf-8")).hexdigest()
+        chain_sha = hashlib.sha256(f":c-1:{line_sha}:{len(line)}".encode()).hexdigest()
         conn.execute(
             """
             INSERT INTO case_audit_ledger (
@@ -241,7 +241,7 @@ def test_verify_operation_ledger_script_function(tmp_path) -> None:
         )
         payload = '{"case_id":"c-1","next_status":"TRIAGE"}'
         payload_sha = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-        chain_sha = hashlib.sha256(f":decision:c-1:{payload_sha}:{len(payload)}".encode("utf-8")).hexdigest()
+        chain_sha = hashlib.sha256(f":decision:c-1:{payload_sha}:{len(payload)}".encode()).hexdigest()
         conn.execute(
             """
             INSERT INTO operation_audit_ledger (

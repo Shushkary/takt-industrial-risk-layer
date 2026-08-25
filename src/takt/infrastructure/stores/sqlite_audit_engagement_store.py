@@ -15,7 +15,11 @@ from takt.infrastructure.stores.sqlite_audit_engagement_mapper import (
 )
 from takt.infrastructure.stores.sqlite_connection import (
     checkpoint_wal_best_effort as _checkpoint_wal_best_effort,
+)
+from takt.infrastructure.stores.sqlite_connection import (
     configure_sqlite_connection as _configure_sqlite_connection,
+)
+from takt.infrastructure.stores.sqlite_connection import (
     dt_to_sql as _dt_to_sql,
 )
 from takt.infrastructure.stores.sqlite_schema import ensure_audit_engagement_schema

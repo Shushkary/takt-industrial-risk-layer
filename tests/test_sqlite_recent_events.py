@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -16,7 +16,7 @@ from takt.interface_adapters.api.main import create_app
 def _event(event_id: str, *, asset_id: str = "shared") -> NormalizedEvent:
     return NormalizedEvent(
         event_id=event_id,
-        observed_at=datetime(2026, 5, 20, 10, 0, tzinfo=timezone.utc),
+        observed_at=datetime(2026, 5, 20, 10, 0, tzinfo=UTC),
         source=EventSource.NETWORK,
         protocol="MODBUS",
         operation="POLL",

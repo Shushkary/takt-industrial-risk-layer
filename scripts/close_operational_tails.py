@@ -5,14 +5,14 @@ import argparse
 import importlib.util
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 
 def _utc_now_tag() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _ensure_db_file(path: Path) -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from itertools import permutations
 
 from takt.domain.entities.case import Case, CaseStatus, InvariantHitRecord, Observation
@@ -10,7 +10,7 @@ from takt.domain.services.case_merge import merge_open_cases_group_v070
 
 
 def _mk(cid: str, *, score: float, eid: str, inv: str) -> Case:
-    t0 = datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 6, 1, 10, 0, tzinfo=UTC)
     return Case(
         case_id=cid,
         status=CaseStatus.NEW,

@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -26,7 +26,7 @@ def test_raw_row_z_suffix_timestamp_utc():
         "payload_size": "8",
     }
     ev = raw_row_to_normalized(row, source=EventSource.PLC_POLLING)
-    assert ev.observed_at.tzinfo == timezone.utc
+    assert ev.observed_at.tzinfo == UTC
     assert ev.observed_at.hour == 10
     assert ev.operation == "READ"
 
@@ -41,7 +41,7 @@ def test_raw_row_time_column_and_naive_local_becomes_utc():
     ev = raw_row_to_normalized(row, source=EventSource.NETWORK)
     assert ev.protocol == "UDP"
     assert ev.operation == "PING"
-    assert ev.observed_at.tzinfo == timezone.utc
+    assert ev.observed_at.tzinfo == UTC
 
 
 def test_raw_row_missing_timestamp_raises():
@@ -84,6 +84,6 @@ def test_iter_raw_events_skips_rows_without_timestamp(tmp_path: Path) -> None:
     assert len(rows) == 2
     assert isinstance(rows[0], RawEvent)
     assert rows[0].source == EventSource.PLC_POLLING
-    assert rows[0].received_at.tzinfo == timezone.utc
+    assert rows[0].received_at.tzinfo == UTC
     assert rows[0].payload["note"] == "ok"
     assert rows[1].payload["note"] == "ok2"

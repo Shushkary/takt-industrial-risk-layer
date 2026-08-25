@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -28,7 +28,7 @@ def test_assess_end_to_end():
         "eps_soft_cap": 100_000,
     }
     uc = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-99"}))
-    t0 = datetime(2026, 4, 30, 22, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 22, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e1",
         observed_at=t0,
@@ -75,7 +75,7 @@ def test_assess_polling_jitter_with_jump_bypass_without_feigenbaum_chaos():
         "eps_soft_cap": 100_000,
     }
     uc = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-99"}))
-    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e1",
         observed_at=t0,
@@ -110,7 +110,7 @@ def test_assess_out_of_shift_admin():
         "eps_soft_cap": 100_000,
     }
     uc = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-99"}))
-    t0 = datetime(2026, 4, 30, 23, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 23, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e1",
         observed_at=t0,
@@ -142,7 +142,7 @@ def test_assess_context_dissonance_without_ticket():
         "eps_soft_cap": 100_000,
     }
     uc = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-99"}))
-    t0 = datetime(2026, 4, 30, 14, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 14, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e1",
         observed_at=t0,
@@ -174,7 +174,7 @@ def test_assess_no_context_dissonance_when_ticket_covers():
         "eps_soft_cap": 100_000,
     }
     uc = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-99"}))
-    t0 = datetime(2026, 4, 30, 14, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 14, 0, tzinfo=UTC)
     win_start = t0 - timedelta(hours=1)
     win_end = t0 + timedelta(hours=2)
     tickets = [demo_ticket_for_asset("plc-99", start=win_start, end=win_end)]
@@ -209,7 +209,7 @@ def test_assess_telemetry_gap_reason_maps_to_invariant():
         "eps_soft_cap": 100_000,
     }
     uc = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-99"}))
-    t0 = datetime(2026, 4, 30, 15, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 15, 0, tzinfo=UTC)
     prev = NormalizedEvent(
         event_id="e0",
         observed_at=t0 - timedelta(seconds=500),
@@ -250,7 +250,7 @@ def test_assess_stale_data_reason_maps_to_invariant():
         "eps_soft_cap": 100_000,
     }
     uc = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-99"}))
-    t0 = datetime(2026, 4, 30, 15, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 15, 0, tzinfo=UTC)
     prev = NormalizedEvent(
         event_id="e0",
         observed_at=t0 - timedelta(seconds=120),
@@ -291,7 +291,7 @@ def test_assess_source_reputation_drift():
         "eps_soft_cap": 100_000,
     }
     uc = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-99"}))
-    t0 = datetime(2026, 4, 30, 15, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 15, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e1",
         observed_at=t0,
@@ -324,7 +324,7 @@ def test_assess_polling_period_doubling_suspect():
         "eps_soft_cap": 100_000,
     }
     uc = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-99"}))
-    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e1",
         observed_at=t0,
@@ -371,7 +371,7 @@ def test_assess_suppresses_period_doubling_when_marked_experimental_in_catalog(m
         plc_hosts=frozenset({"plc-99"}),
         experimental_invariant_ids=frozenset({InvariantId.POLLING_PERIOD_DOUBLING_SUSPECT.value}),
     )
-    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e1",
         observed_at=t0,
@@ -417,7 +417,7 @@ def test_assess_includes_period_doubling_when_include_experimental_in_profile(mo
         experimental_invariant_ids=frozenset({InvariantId.POLLING_PERIOD_DOUBLING_SUSPECT.value}),
         invariant_profile=InvariantContext(include_experimental_invariants=True),
     )
-    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e1",
         observed_at=t0,
@@ -449,7 +449,7 @@ def test_assess_polling_jitter_without_period_doubling_cluster():
         "eps_soft_cap": 100_000,
     }
     uc = AssessRiskUseCase(weights, plc_hosts=frozenset({"plc-99"}))
-    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 12, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e1",
         observed_at=t0,
@@ -473,8 +473,8 @@ def test_assess_polling_jitter_without_period_doubling_cluster():
 
 
 def test_demo_ticket_for_asset_builds_window_for_asset():
-    start = datetime(2026, 6, 10, 8, 0, tzinfo=timezone.utc)
-    end = datetime(2026, 6, 10, 18, 0, tzinfo=timezone.utc)
+    start = datetime(2026, 6, 10, 8, 0, tzinfo=UTC)
+    end = datetime(2026, 6, 10, 18, 0, tzinfo=UTC)
     t = demo_ticket_for_asset("PLC-DEMO", start=start, end=end)
     assert t.ticket_id == "SD-1"
     assert t.maintenance_window.asset_ids == frozenset({"PLC-DEMO"})
@@ -492,7 +492,7 @@ def test_assess_expected_behavior_dampens_risk():
         "mandelbrot_entropy_cap": 2.5,
         "eps_soft_cap": 100_000,
     }
-    t0 = datetime(2026, 4, 30, 23, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 23, 0, tzinfo=UTC)
     edges = [GraphEdge("jump-01", "plc-99", "ssh")]
     intervals = [1000.0, 1020.0, 1060.0, 1120.0]
     ev = NormalizedEvent(
@@ -540,7 +540,7 @@ def test_assess_expected_behavior_skips_dampening_without_asset():
         "mandelbrot_entropy_cap": 2.5,
         "eps_soft_cap": 100_000,
     }
-    t0 = datetime(2026, 4, 30, 23, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 23, 0, tzinfo=UTC)
     edges = [GraphEdge("jump-01", "plc-99", "ssh")]
     intervals = [1000.0, 1020.0, 1060.0, 1120.0]
     ev = NormalizedEvent(
@@ -593,7 +593,7 @@ def test_assess_invariant_ctx_execute_overrides_constructor_profile():
     uc = AssessRiskUseCase(
         weights, plc_hosts=frozenset({"plc-99"}), invariant_profile=ctor_ctx
     )
-    t0 = datetime(2026, 4, 30, 14, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 4, 30, 14, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="e1",
         observed_at=t0,

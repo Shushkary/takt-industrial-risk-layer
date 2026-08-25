@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-from takt.domain.ports.hasher import HasherPort
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from takt.domain.entities.event import ArtifactType, NormalizedEvent
+from takt.domain.ports.hasher import HasherPort
 
 _ENTITY_FIELDS = frozenset(
     {"host_id", "user_id", "process_id", "parent_process_id", "src_address", "dst_address"}

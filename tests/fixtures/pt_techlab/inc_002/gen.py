@@ -1,24 +1,36 @@
 
-import csv, random, hashlib
+import csv
+import hashlib
+import random
 from datetime import datetime, timedelta
+
 random.seed(42)
 BASE = datetime(2026,8,17,6,0,0)
 def T(m,s=0): return (BASE+timedelta(minutes=m,seconds=s)).strftime('%Y-%m-%dT%H:%M:%SZ')
 def H(x): return hashlib.sha256(x.encode()).hexdigest()
-hosts=["ws-%02d"%i for i in range(1,41)]+["dc-01","dc-02","build-srv-01","git-srv-01","file-srv-01","backup-01","scan-01"]
-ip={h:"10.10.1.%d"%(i+10) for i,h in enumerate(hosts)}
+hosts=[f"ws-{i:02d}" for i in range(1,41)]+["dc-01","dc-02","build-srv-01","git-srv-01","file-srv-01","backup-01","scan-01"]
+ip={h:f"10.10.1.{i+10}" for i,h in enumerate(hosts)}
 ip.update({"build-srv-01":"10.10.3.5","git-srv-01":"10.10.3.6","dc-01":"10.10.1.10","scan-01":"10.10.9.9","file-srv-01":"10.10.3.7","backup-01":"10.10.3.8","dc-02":"10.10.1.11"})
 users=["ivanov","petrova","sidorov","kuznetsov","orlova","admin_ops","svc_backup","svc_scan","svc_build","volkova","fedorov"]
-edr=[];siem=[];ndr=[];ot=[]
+edr=[]
+siem=[]
+ndr=[]
+ot=[]
 c={"edr":0,"siem":0,"ndr":0,"ot":0}
 def nid(k):
     c[k]+=1
-    return "%s-%04d"%(k,c[k])
+    return f"{k}-{c[k]:04d}"
 
 # ===== Цепочка INC-002: компрометация через фишинг -> CI/build =====
-V=ip["ws-17"];U="smirnov";INC="INC-002"
-C2="185.220.101.34";DOH="cdn-metrics.example-analytics.com"
-BS="build-srv-01";BSIP=ip[BS];GS="git-srv-01";GSIP=ip[GS]
+V=ip["ws-17"]
+U="smirnov"
+INC="INC-002"
+C2="185.220.101.34"
+DOH="cdn-metrics.example-analytics.com"
+BS="build-srv-01"
+BSIP=ip[BS]
+GS="git-srv-01"
+GSIP=ip[GS]
 # Ф1 фишинг->запуск
 edr.append([T(0),nid("edr"),"ws-17",U,"p-1000","p-0010","",H("outlook"),r"C:\Program Files\Microsoft Office\OUTLOOK.EXE","PROCESS_START",INC])
 edr.append([T(1),nid("edr"),"ws-17",U,"p-1001","p-1000","",H("hta"),r"C:\Windows\System32\mshta.exe","PROCESS_START",INC])
@@ -68,16 +80,22 @@ legit_rule=["LOGON_SUCCESS","GPO_UPDATE","VPN_CONNECT","FIREWALL_ALLOW","AV_SCAN
 legit_dns=["intranet.local","update.microsoft.com","crl.verisign.com","office365.com","ntp.corp.local","teams.microsoft.com"]
 wsh=hosts[:40]
 for _ in range(520):
-    h=random.choice(wsh);u=random.choice(users[:6]);m=random.randint(0,45)
-    edr.append([T(m,random.randint(0,59)),nid("edr"),h,u,"p-%d"%random.randint(4000,9000),"p-%d"%random.randint(10,99),"",H(random.choice(legit_img)+str(random.random())),random.choice(legit_img),"PROCESS_START","BACKGROUND"])
+    h=random.choice(wsh)
+    u=random.choice(users[:6])
+    m=random.randint(0,45)
+    edr.append([T(m,random.randint(0,59)),nid("edr"),h,u,f"p-{random.randint(4000,9000)}",f"p-{random.randint(10,99)}","",H(random.choice(legit_img)+str(random.random())),random.choice(legit_img),"PROCESS_START","BACKGROUND"])
 for _ in range(230):
-    h=random.choice(wsh);u=random.choice(users[:6]);m=random.randint(0,45)
+    h=random.choice(wsh)
+    u=random.choice(users[:6])
+    m=random.randint(0,45)
     siem.append([T(m,random.randint(0,59)),nid("siem"),h,u,ip[h],ip[random.choice(hosts)],random.choice(legit_rule),"host",h,"BACKGROUND"])
 for _ in range(210):
-    h=random.choice(wsh);m=random.randint(0,45)
+    h=random.choice(wsh)
+    m=random.randint(0,45)
     ndr.append([T(m,random.randint(0,59)),nid("ndr"),h,ip[h],ip[random.choice(hosts)],random.choice(["DNS","HTTPS","SMB","TCP"]),"ALLOWED",random.choice(legit_dns),random.randint(80,5000),"BACKGROUND"])
 for _ in range(30):
-    a=random.choice(["plc-01","plc-02","pipeline:nightly","artifact:agent.pkg"]);m=random.randint(0,45)
+    a=random.choice(["plc-01","plc-02","pipeline:nightly","artifact:agent.pkg"])
+    m=random.randint(0,45)
     ot.append([T(m,random.randint(0,59)),nid("ot"),a,ip["build-srv-01"],ip["git-srv-01"],"CI_PIPELINE",random.choice(["BUILD_OK","POLL","SIGN_OK"]),"build.ok",random.randint(40,120),"BACKGROUND"])
 print("chain+bg built")
 
@@ -129,12 +147,14 @@ def wr(fn,header,rows):
     # цепочки ниже по r[-1] продолжает читать incident_id.
     rows2=sorted(rows,key=lambda r:r[0])
     with open(fn,"w",newline="",encoding="utf-8") as f:
-        w=csv.writer(f);w.writerow([*header,"attack_phase","mitre_technique"])
-        for r in rows2: w.writerow([*r,*PHASES.get(r[1],("",""))])
+        w=csv.writer(f)
+        w.writerow([*header,"attack_phase","mitre_technique"])
+        for r in rows2:
+            w.writerow([*r,*PHASES.get(r[1],("",""))])
 wr("edr.csv",["timestamp","event_id","hostname","username","process_guid","parent_process_guid","remote_ip","sha256","image_path","event_type","incident_id"],edr)
 wr("siem.csv",["event_time","record_id","device_host","subject_user","src_ip","dst_ip","rule_name","indicator_type","indicator","incident_id"],siem)
 wr("ndr.csv",["start_time","flow_id","src_host","src_ip","dst_ip","app_protocol","verdict","dns_query","bytes","incident_id"],ndr)
 wr("ot.csv",["timestamp","event_id","asset_id","src_address","dst_address","protocol","operation","tag","payload_size","incident_id"],ot)
 tot=len(edr)+len(siem)+len(ndr)+len(ot)
 ch=sum(1 for L in (edr,siem,ndr,ot) for r in L if r[-1]=="INC-002")
-print("edr=%d siem=%d ndr=%d ot=%d total=%d chain=%d"%(len(edr),len(siem),len(ndr),len(ot),tot,ch))
+print(f"edr={len(edr)} siem={len(siem)} ndr={len(ndr)} ot={len(ot)} total={tot} chain={ch}")

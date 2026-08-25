@@ -67,7 +67,6 @@ def test_verdict_triad_is_complete() -> None:
 def test_every_work_phase_has_a_russian_name() -> None:
     """Фаза попадает в текст объяснения, который читает аналитик."""
     from takt.domain.engines.phase_time_tagger import WorkPhase
-
     from takt.domain.vocabulary import WORK_PHASE_RU
 
     assert set(WORK_PHASE_RU) == {phase.value for phase in WorkPhase}

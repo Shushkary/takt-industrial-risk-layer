@@ -11,8 +11,8 @@ __all__ = [
     "Asset",
     "Case",
     "CaseStatus",
+    "MaintenanceWindow",
     "NormalizedEvent",
     "RawEvent",
-    "MaintenanceWindow",
     "ServiceTicket",
 ]

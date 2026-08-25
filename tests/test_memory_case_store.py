@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from takt.domain.entities.case import Case, CaseStatus
 from takt.infrastructure.stores.memory import InMemoryCaseStore
@@ -8,7 +8,7 @@ from takt.infrastructure.stores.memory import InMemoryCaseStore
 
 def test_in_memory_find_open_by_fingerprint_skips_confirmed():
     repo = InMemoryCaseStore()
-    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
     fp = "plc_polling|asset-z|POLL"
     closed = Case(
         case_id="c-done",
@@ -27,7 +27,7 @@ def test_in_memory_find_open_by_fingerprint_skips_confirmed():
 
 def test_in_memory_find_open_by_fingerprint_returns_newest_open_case():
     repo = InMemoryCaseStore()
-    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
     fp = "plc_polling|asset-z|POLL"
     older = Case(
         case_id="older",
@@ -58,7 +58,7 @@ def test_in_memory_find_open_by_fingerprint_returns_newest_open_case():
 
 def test_in_memory_store_returns_snapshots_not_live_objects():
     repo = InMemoryCaseStore()
-    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
     case = Case(
         case_id="snapshot",
         status=CaseStatus.NEW,
@@ -85,7 +85,7 @@ def test_in_memory_find_open_by_fingerprint_index_ignores_out_of_order_older_sav
     """Индекс `_open_by_fingerprint` не должен откатываться на более старый кейс
     при сохранении в другом порядке, чем created_at."""
     repo = InMemoryCaseStore()
-    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
     fp = "plc_polling|asset-z|POLL"
     newer = Case(
         case_id="newer",
@@ -115,7 +115,7 @@ def test_in_memory_find_open_by_fingerprint_index_ignores_out_of_order_older_sav
 
 def test_in_memory_find_open_by_fingerprint_index_drops_entry_when_case_closes():
     repo = InMemoryCaseStore()
-    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
     fp = "plc_polling|asset-z|POLL"
     case = Case(
         case_id="c1",
@@ -152,7 +152,7 @@ def test_in_memory_find_open_by_fingerprint_scales_across_many_distinct_fingerpr
     """Регрессия по производительности O(1) поиска: не должно требовать
     сканирования всего хранилища при большом числе не связанных кейсов."""
     repo = InMemoryCaseStore()
-    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
     n = 5_000
     for i in range(n):
         repo.save(

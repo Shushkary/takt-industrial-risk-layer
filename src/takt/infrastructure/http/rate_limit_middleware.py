@@ -107,10 +107,7 @@ def client_ip_for_rate_limit(request: Request) -> str:
     direct = request.client.host if request.client else None
     trusted = trusted_proxy_networks_from_env()
     hdr = rate_limit_ip_header_from_env()
-    if hdr:
-        chain = request.headers.get(hdr, "")
-    else:
-        chain = request.headers.get("x-forwarded-for", "")
+    chain = request.headers.get(hdr, "") if hdr else request.headers.get("x-forwarded-for", "")
     return client_ip_for_trusted_proxy_chain(
         direct_peer=direct,
         forwarded_chain=chain or "",
@@ -153,7 +150,7 @@ class InMemoryRateLimitMiddleware(BaseHTTPMiddleware):
             else:
                 w, c = entry
                 if c >= limit:
-                    ra = max(1, min(60, int(math.ceil(60.0 - (now % 60.0)))))
+                    ra = max(1, min(60, math.ceil(60.0 - (now % 60.0))))
                     record_rate_limit_rejection()
                     prune_rate_limit_store(store, win, cap)
                     return JSONResponse(

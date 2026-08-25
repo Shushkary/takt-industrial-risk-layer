@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import UTC
 
 from fastapi import HTTPException
 
@@ -25,7 +25,7 @@ from takt.interface_adapters.api.schemas.audit_engagements import (
 def _audit_engagement_out(item: AuditEngagement) -> AuditEngagementOut:
     return AuditEngagementOut(
         engagement_id=item.engagement_id,
-        created_at=item.created_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        created_at=item.created_at.astimezone(UTC).isoformat(timespec="seconds"),
         status=item.status,
         customer=item.customer,
         scope=item.scope,
@@ -38,8 +38,8 @@ def _audit_engagement_out(item: AuditEngagement) -> AuditEngagementOut:
                 title=s.title,
                 day_range=s.day_range,
                 status=s.status,
-                started_at=(s.started_at.astimezone(timezone.utc).isoformat(timespec="seconds") if s.started_at else None),
-                completed_at=(s.completed_at.astimezone(timezone.utc).isoformat(timespec="seconds") if s.completed_at else None),
+                started_at=(s.started_at.astimezone(UTC).isoformat(timespec="seconds") if s.started_at else None),
+                completed_at=(s.completed_at.astimezone(UTC).isoformat(timespec="seconds") if s.completed_at else None),
                 note=s.note,
             )
             for s in item.stages
@@ -50,7 +50,7 @@ def _audit_engagement_out(item: AuditEngagement) -> AuditEngagementOut:
                 title=item.final_report.title,
                 uri=item.final_report.uri,
                 summary=item.final_report.summary,
-                generated_at=item.final_report.generated_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+                generated_at=item.final_report.generated_at.astimezone(UTC).isoformat(timespec="seconds"),
             )
             if item.final_report is not None
             else None

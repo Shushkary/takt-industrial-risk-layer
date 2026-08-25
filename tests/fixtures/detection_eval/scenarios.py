@@ -21,14 +21,14 @@ lateral_movement.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from takt.domain.entities.event import EventSource, NormalizedEvent
 from takt.domain.invariants.catalog import InvariantId
 from takt.domain.invariants.evaluator import InvariantContext
 
-_T0 = datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc)
+_T0 = datetime(2026, 6, 1, 8, 0, tzinfo=UTC)
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,7 +68,7 @@ def main() -> int:
 
     font_path = _find_unicode_font()
     ver = _version()
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     class TaktDocPDF(FPDF):
         def __init__(self, body_font: str) -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import builtins
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,7 +19,7 @@ def test_render_pdf_bytes():
         title="demo",
         risk_class="MEDIUM",
         risk_score=0.5,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         xai_summary="test summary",
     )
     raw = render_case_pdf(c)
@@ -33,7 +33,7 @@ def test_render_pdf_cyrillic_title_smoke():
         title="Инцидент — проверка PDF",
         risk_class="LOW",
         risk_score=0.15,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         xai_summary="Кратко: безопасность",
     )
     raw = render_case_pdf(c)
@@ -49,7 +49,7 @@ def test_render_case_pdf_missing_unicode_font_path_uses_helvetica(tmp_path) -> N
         title="OK",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     raw = render_case_pdf(c, unicode_font_path=str(missing))
     assert raw[:4] == b"%PDF"
@@ -87,7 +87,7 @@ def test_render_case_pdf_encodes_when_output_returns_str(monkeypatch: pytest.Mon
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     raw = render_case_pdf(c)
     assert raw == ("%PDF-1.3\nstub-line").encode("latin-1")
@@ -126,7 +126,7 @@ def test_render_case_pdf_triggers_add_font_when_unicode_file_exists(tmp_path, mo
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     raw = render_case_pdf(c, unicode_font_path=str(font))
     assert raw[:4] == b"%PDF"
@@ -152,7 +152,7 @@ def test_render_case_pdf_raises_when_fpdf_missing(monkeypatch: pytest.MonkeyPatc
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     with pytest.raises(RuntimeError, match="pip install"):
         render_case_pdf(c)

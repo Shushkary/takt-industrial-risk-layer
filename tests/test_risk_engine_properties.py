@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from takt.domain.engines.risk_engine import RiskBreakdown, combine_risk
 from takt.domain.engines.risk_engine import worst_risk_class as wc
-
 
 _WEIGHT_KEYS = ("rhythm", "graph", "context", "user", "data_quality")
 

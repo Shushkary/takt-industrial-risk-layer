@@ -18,7 +18,7 @@ def append_case_audit_ledger_line(
     prev_chain = str(row[0]) if row is not None else ""
     line_sha = hashlib.sha256(audit_line.encode("utf-8")).hexdigest()
     chain_sha = hashlib.sha256(
-        f"{prev_chain}:{case_id}:{line_sha}:{len(audit_line)}".encode("utf-8")
+        f"{prev_chain}:{case_id}:{line_sha}:{len(audit_line)}".encode()
     ).hexdigest()
     conn.execute(
         """
@@ -51,7 +51,7 @@ def verify_case_audit_ledger(conn: sqlite3.Connection, case_id: str) -> dict[str
         if str(prev_chain_sha256) != prev_chain:
             return {"ok": False, "checked_entries": checked, "issue": "prev_chain_mismatch"}
         expected_chain = hashlib.sha256(
-            f"{prev_chain}:{case_id}:{expected_line}:{len(audit_line)}".encode("utf-8")
+            f"{prev_chain}:{case_id}:{expected_line}:{len(audit_line)}".encode()
         ).hexdigest()
         if expected_chain != str(chain_sha256):
             return {"ok": False, "checked_entries": checked, "issue": "chain_mismatch"}
@@ -81,7 +81,7 @@ def record_operation_event(
     prev_chain = str(row[0]) if row is not None else ""
     payload_sha = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
     chain_sha = hashlib.sha256(
-        f"{prev_chain}:{stream_key}:{payload_sha}:{len(payload_json)}".encode("utf-8")
+        f"{prev_chain}:{stream_key}:{payload_sha}:{len(payload_json)}".encode()
     ).hexdigest()
     conn.execute(
         """
@@ -125,7 +125,7 @@ def verify_operation_ledger(conn: sqlite3.Connection, stream_key: str = "") -> d
         if str(prev_chain_sha256) != prev_chain:
             return {"ok": False, "checked_entries": checked, "issue": "prev_chain_mismatch"}
         expected_chain = hashlib.sha256(
-            f"{prev_chain}:{row_stream}:{expected_payload}:{len(payload_json)}".encode("utf-8")
+            f"{prev_chain}:{row_stream}:{expected_payload}:{len(payload_json)}".encode()
         ).hexdigest()
         if expected_chain != str(chain_sha256):
             return {"ok": False, "checked_entries": checked, "issue": "chain_mismatch"}

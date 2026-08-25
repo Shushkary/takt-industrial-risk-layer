@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.application.use_cases.export_facade import ExportFacade
 from takt.domain.entities.case import Case, CaseStatus
@@ -10,7 +10,7 @@ from takt.infrastructure.stores.memory import InMemoryCaseStore
 
 class _Clock:
     def now_utc(self) -> datetime:
-        return datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc)
+        return datetime(2026, 5, 22, 12, 0, tzinfo=UTC)
 
 
 def test_siem_async_forward_is_bounded_by_semaphore() -> None:
@@ -22,13 +22,13 @@ def test_siem_async_forward_is_bounded_by_semaphore() -> None:
             title="t",
             risk_class="LOW",
             risk_score=0.1,
-            created_at=datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 5, 22, 12, 0, tzinfo=UTC),
         )
     )
     active = 0
     max_active = 0
 
-    async def fake_post(*args, **kwargs) -> int:  # noqa: ANN002, ANN003
+    async def fake_post(*args, **kwargs) -> int:
         nonlocal active, max_active
         active += 1
         max_active = max(max_active, active)

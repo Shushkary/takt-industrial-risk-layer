@@ -8,7 +8,6 @@ from takt.domain.ports.case_repository import CaseRepositoryPort
 from takt.domain.ports.system_ports import SystemClockPort
 from takt.domain.services.forensic_verdict import case_forensic_verdict
 
-
 _ALLOWED_FORMAL_VERDICTS = {"легитимное", "нелегитимное", "неопределённое"}
 
 

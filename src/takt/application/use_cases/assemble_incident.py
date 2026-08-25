@@ -78,7 +78,7 @@ class IncidentSeed:
     value: str
 
     @staticmethod
-    def parse(raw: str) -> "IncidentSeed":
+    def parse(raw: str) -> IncidentSeed:
         """Разбирает запись вида `host:ws-17`, `user:smirnov`, `artifact:repo:release-prod`."""
         text = str(raw).strip()
         if ":" not in text:
@@ -144,7 +144,7 @@ class AssembleIncidentUseCase:
 
     events: IncidentEventSearchPort
     repo: CaseRepositoryPort
-    weights: Mapping[str, float] = field(default_factory=dict)
+    weights: Mapping[str, Any] = field(default_factory=dict)
     page_size: int = _PAGE
     max_pages: int = _MAX_PAGES
 
@@ -436,7 +436,7 @@ def _incident_risk(
     invariant_hits: Sequence[str],
     contributing: Sequence[Case],
     assembled: Sequence[NormalizedEvent],
-    weights: Mapping[str, float],
+    weights: Mapping[str, Any],
 ) -> tuple[float, str, dict[str, float]]:
     """Риск собранного инцидента — по той же модели F(R, G, C, U, DQ), что и у события.
 
@@ -452,7 +452,7 @@ def _incident_risk(
     """
     if not contributing and not invariant_hits:
         return 0.0, "UNKNOWN", {}
-    if not _RISK_VECTOR_WEIGHTS <= set(weights):
+    if not set(weights) >= _RISK_VECTOR_WEIGHTS:
         # Без весов из `config/risk_weights.yaml` модель F(R, G, C, U, DQ) неприменима.
         # Выдумывать веса нельзя, поэтому берётся худший из вошедших кейсов —
         # оценка заведомо не завышена.

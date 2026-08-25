@@ -34,8 +34,8 @@ from takt.application.use_cases.export_facade import ExportFacade
 from takt.application.use_cases.forensic_export_facade import ForensicExportFacade
 from takt.application.use_cases.formal_verdict_confirmation import ConfirmFormalVerdictUseCase
 from takt.application.use_cases.ingest_facade import IngestAssessmentFacade
-from takt.application.use_cases.manual_permit import AttachManualPermitUseCase
 from takt.application.use_cases.manual_correlation import ManualCorrelationUseCase
+from takt.application.use_cases.manual_permit import AttachManualPermitUseCase
 from takt.application.use_cases.remediation import (
     ListRemediationAttemptsUseCase,
     RecordRemediationAttemptUseCase,
@@ -43,6 +43,7 @@ from takt.application.use_cases.remediation import (
 from takt.application.use_cases.verify_forensic_bundle import VerifyForensicBundleUseCase
 from takt.domain.entities.case import Case
 from takt.domain.entities.event import EventSource, NormalizedEvent
+from takt.infrastructure.config.pipeline import build_assessment_pipeline
 from takt.infrastructure.config.settings_helpers import (
     apply_storage_env_overrides,
     case_repository_from_weights,
@@ -50,15 +51,25 @@ from takt.infrastructure.config.settings_helpers import (
     siem_webhook_retries,
 )
 from takt.infrastructure.config.weights_loader import load_risk_weights
+
+# Ниже — импорты ради позднего связывания, а не для прямого вызова. `_main_module_callable`
+# берёт эти имена с модуля в момент вызова (`getattr(sys.modules[__name__], name)`), а модуль
+# подменяет собой `api.main` — благодаря чему тесты и подменяют `api.main.render_case_pdf`
+# и `api.main.post_case_to_webhook*`. Уберёшь импорт — подмена перестанет находить атрибут,
+# а рабочий путь упадёт с AttributeError. Ruff видит их неиспользуемыми (F401) справедливо:
+# по тексту модуля обращений нет, связь возникает только во время выполнения.
+from takt.infrastructure.export.case_pdf import (  # noqa: F401
+    render_case_pdf,
+    render_decision_brief_pdf,
+)
 from takt.infrastructure.export.forensic_bundle import ZipForensicBundleBuilder, ZipForensicBundleVerifier
-from takt.infrastructure.export.case_pdf import render_case_pdf, render_decision_brief_pdf
 from takt.infrastructure.export.gossopka import (
     case_to_gossopka_card,
     case_to_gossopka_official_card,
     case_to_gossopka_official_transport_payload,
     case_to_gossopka_transport_payload,
 )
-from takt.infrastructure.export.siem_webhook import (
+from takt.infrastructure.export.siem_webhook import (  # noqa: F401
     case_to_siem_payload,
     post_case_to_webhook,
     post_case_to_webhook_sync,
@@ -102,7 +113,6 @@ from takt.interface_adapters.api.config_paths import (
     invariant_catalog_dir_for_config,
     resolve_config_path,
 )
-from takt.infrastructure.config.pipeline import build_assessment_pipeline
 from takt.interface_adapters.api.dependencies import ApiContext
 from takt.interface_adapters.api.event_sources import coerce_event_source
 from takt.interface_adapters.api.lifecycle import build_app_lifespan
@@ -128,18 +138,18 @@ from takt.interface_adapters.api.openapi import (
 )
 from takt.interface_adapters.api.pagination import offset_limit_link_header
 from takt.interface_adapters.api.routers.analytics import register_analytics_routes
+from takt.interface_adapters.api.routers.assemble import register_assemble_routes
 from takt.interface_adapters.api.routers.attack_chain import register_attack_chain_routes
 from takt.interface_adapters.api.routers.audit_engagements import register_audit_engagement_routes
 from takt.interface_adapters.api.routers.audit_ledger import register_audit_ledger_routes
 from takt.interface_adapters.api.routers.case_actions import register_case_action_routes
 from takt.interface_adapters.api.routers.cases import register_case_routes
 from takt.interface_adapters.api.routers.catalog import register_catalog_routes
-from takt.interface_adapters.api.routers.correlation import register_correlation_routes
 from takt.interface_adapters.api.routers.compliance import register_compliance_routes
-from takt.interface_adapters.api.routers.events import register_event_routes
-from takt.interface_adapters.api.routers.assemble import register_assemble_routes
-from takt.interface_adapters.api.routers.entities import register_entity_routes
+from takt.interface_adapters.api.routers.correlation import register_correlation_routes
 from takt.interface_adapters.api.routers.enrichment import register_enrichment_routes
+from takt.interface_adapters.api.routers.entities import register_entity_routes
+from takt.interface_adapters.api.routers.events import register_event_routes
 from takt.interface_adapters.api.routers.export import register_export_routes
 from takt.interface_adapters.api.routers.findings import register_finding_routes
 from takt.interface_adapters.api.routers.forensic import register_forensic_routes

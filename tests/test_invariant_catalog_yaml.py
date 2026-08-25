@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -60,7 +60,7 @@ def test_loader_rejects_params_on_non_brute(tmp_path: Path) -> None:
 
 
 def _fail_ev(eid: str, n: int) -> NormalizedEvent:
-    t0 = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
     return NormalizedEvent(
         event_id=eid,
         observed_at=t0,
@@ -74,7 +74,7 @@ def _fail_ev(eid: str, n: int) -> NormalizedEvent:
 
 def test_brute_force_context_window_slices_recent_for_predicate(tmp_path: Path) -> None:
     """`context_window_events` обрезает хвост `recent` до оценки brute_force."""
-    t0 = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 
     def _ev(eid: str, op: str) -> NormalizedEvent:
         return NormalizedEvent(
@@ -90,7 +90,7 @@ def test_brute_force_context_window_slices_recent_for_predicate(tmp_path: Path) 
     ev = _ev("cur", "LOGIN_FAIL")
     long_recent = [_ev(f"p{i}", "LOGIN_FAIL") for i in range(10)]
     # «Старые» фейлы + два нефейла у конца: в окне из 2 событий хвоста не хватает до порога 3
-    recent = long_recent[:8] + [_ev("ok1", "OK"), _ev("ok2", "OK")]
+    recent = [*long_recent[:8], _ev("ok1", "OK"), _ev("ok2", "OK")]
     spec = InvariantRuleSpec(
         id=InvariantId.BRUTE_FORCE.value,
         block_key="identity",
@@ -109,7 +109,7 @@ def test_brute_force_context_window_slices_recent_for_predicate(tmp_path: Path) 
         rule_specs=(spec,),
     )
     # То же окно, но последние два события снова фейлы — в срезе 2+текущее даёт 3 фейла
-    recent2 = long_recent[:8] + [_ev("f1", "LOGIN_FAIL"), _ev("f2", "LOGIN_FAIL")]
+    recent2 = [*long_recent[:8], _ev("f1", "LOGIN_FAIL"), _ev("f2", "LOGIN_FAIL")]
     assert InvariantId.BRUTE_FORCE.value in collect_extended_invariants(
         ev,
         recent2,

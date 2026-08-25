@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -13,7 +13,7 @@ def test_illegal_function_code():
     ctx = InvariantContext(allowed_function_codes=frozenset({"3", "4"}))
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="MODBUS",
         operation="READ",
@@ -27,7 +27,7 @@ def test_illegal_function_code():
 def test_log_wiping():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.AUTH_LOGS,
         protocol="SYS",
         operation="AUDIT_CLEAR",
@@ -38,7 +38,7 @@ def test_log_wiping():
 
 
 def test_brute_force_window():
-    t0 = datetime.now(timezone.utc)
+    t0 = datetime.now(UTC)
     fails = [
         NormalizedEvent(
             event_id=str(i),
@@ -58,7 +58,7 @@ def test_brute_force_window():
 
 
 def test_brute_force_not_triggered_one_below_threshold():
-    t0 = datetime.now(timezone.utc)
+    t0 = datetime.now(UTC)
     ctx = InvariantContext(auth_fail_threshold=5, auth_fail_window=20)
     prev_fails = [
         NormalizedEvent(
@@ -86,7 +86,7 @@ def test_brute_force_not_triggered_one_below_threshold():
 
 
 def test_brute_force_triggered_at_exact_threshold_five():
-    t0 = datetime.now(timezone.utc)
+    t0 = datetime.now(UTC)
     ctx = InvariantContext(auth_fail_threshold=5, auth_fail_window=20)
     prev_fails = [
         NormalizedEvent(
@@ -124,7 +124,7 @@ def test_case_to_siem_invariant_details():
         title="t",
         risk_class="LOW",
         risk_score=0.2,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         invariant_hits=[InvariantId.TRUST_INDEX_DROP.value],
     )
     d = case_to_siem_payload(c).model_dump(mode="json")
@@ -144,7 +144,7 @@ def test_case_to_siem_payload_keys():
         title="t",
         risk_class="LOW",
         risk_score=0.2,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     d = case_to_siem_payload(c).model_dump(mode="json")
     assert d["case_id"] == "abc"
@@ -169,7 +169,7 @@ def test_case_to_siem_known_invariant_uses_catalog_title_ru():
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         invariant_hits=[InvariantId.LOG_WIPING.value],
     )
     d = case_to_siem_payload(c).model_dump(mode="json")
@@ -188,7 +188,7 @@ def test_case_to_siem_unknown_invariant_id_uses_id_as_detail_title():
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         invariant_hits=["not_in_catalog_xyz"],
     )
     d = case_to_siem_payload(c).model_dump(mode="json")
@@ -208,7 +208,7 @@ def test_case_to_siem_audit_tail_keeps_last_twenty_lines():
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         audit_log=logs,
     )
     d = case_to_siem_payload(c).model_dump(mode="json")
@@ -220,7 +220,7 @@ def test_case_to_siem_audit_tail_keeps_last_twenty_lines():
 def test_payload_semantic_flags():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.NETWORK,
         protocol="TCP",
         operation="PING",
@@ -241,7 +241,7 @@ def test_payload_semantic_flags():
 def test_conflict_logic_operation_token():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="TCP",
         operation="STATE_MISMATCH_ALARM",
@@ -254,7 +254,7 @@ def test_conflict_logic_operation_token():
 def test_conflict_logic_interlock_trip_keyword():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="TCP",
         operation="INTERLOCK_TRIP_EVENT",
@@ -267,7 +267,7 @@ def test_conflict_logic_interlock_trip_keyword():
 def test_expert_dissonance_payload():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.SERVICE_DESK,
         protocol="HTTP",
         operation="REVIEW",
@@ -280,7 +280,7 @@ def test_expert_dissonance_payload():
 def test_expert_dissonance_hitl_alias_payload():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.SERVICE_DESK,
         protocol="HTTP",
         operation="NOTE",
@@ -293,7 +293,7 @@ def test_expert_dissonance_hitl_alias_payload():
 def test_conflict_logic_control_conflict_flag():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="TCP",
         operation="PERIODIC",
@@ -306,7 +306,7 @@ def test_conflict_logic_control_conflict_flag():
 def test_conflict_logic_control_conflict_numeric_string():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="TCP",
         operation="SCAN",
@@ -319,7 +319,7 @@ def test_conflict_logic_control_conflict_numeric_string():
 def test_conflict_logic_logic_fault_keyword():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="TCP",
         operation="LOGIC_FAULT_DETECTED",
@@ -332,7 +332,7 @@ def test_conflict_logic_logic_fault_keyword():
 def test_conflict_logic_payload_conflict_logic_true_string():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="TCP",
         operation="HEARTBEAT",
@@ -345,7 +345,7 @@ def test_conflict_logic_payload_conflict_logic_true_string():
 def test_polling_jitter_payload_flag():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="MODBUS",
         operation="POLL",
@@ -366,7 +366,7 @@ def test_payload_length_drift():
     ctx = InvariantContext(expected_payload_baseline=100, payload_drift_ratio=0.2)
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="MODBUS",
         operation="READ",
@@ -377,7 +377,7 @@ def test_payload_length_drift():
 
 
 def test_protocol_escalation_same_asset():
-    t0 = datetime.now(timezone.utc)
+    t0 = datetime.now(UTC)
     prev = NormalizedEvent(
         event_id="0",
         observed_at=t0,
@@ -400,7 +400,7 @@ def test_protocol_escalation_same_asset():
 
 
 def test_protocol_escalation_skips_adjacent_tier_step():
-    t0 = datetime.now(timezone.utc)
+    t0 = datetime.now(UTC)
     prev = NormalizedEvent(
         event_id="0",
         observed_at=t0,
@@ -423,7 +423,7 @@ def test_protocol_escalation_skips_adjacent_tier_step():
 
 
 def test_protocol_escalation_skips_different_asset():
-    t0 = datetime.now(timezone.utc)
+    t0 = datetime.now(UTC)
     prev = NormalizedEvent(
         event_id="0",
         observed_at=t0,
@@ -447,7 +447,7 @@ def test_protocol_escalation_skips_different_asset():
 
 def test_protocol_escalation_uses_custom_protocol_tier_from_context():
     ctx = InvariantContext(protocol_tier={"MODBUS": 1, "SSH": 5})
-    t0 = datetime.now(timezone.utc)
+    t0 = datetime.now(UTC)
     prev = NormalizedEvent(
         event_id="0",
         observed_at=t0,
@@ -472,7 +472,7 @@ def test_protocol_escalation_uses_custom_protocol_tier_from_context():
 def test_runtime_config_change():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="TCP",
         operation="WRITE_CONFIG",
@@ -485,7 +485,7 @@ def test_runtime_config_change():
 def test_c2_external_dns():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.NETWORK,
         protocol="UDP",
         operation="DNS_QUERY",
@@ -498,7 +498,7 @@ def test_c2_external_dns():
 def test_c2_external_dns_malware_substring_in_domain():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.NETWORK,
         protocol="UDP",
         operation="DNS_QUERY",
@@ -509,7 +509,7 @@ def test_c2_external_dns_malware_substring_in_domain():
 
 
 def test_blind_command_without_prior_read():
-    t0 = datetime.now(timezone.utc)
+    t0 = datetime.now(UTC)
     ev = NormalizedEvent(
         event_id="1",
         observed_at=t0,
@@ -523,7 +523,7 @@ def test_blind_command_without_prior_read():
 
 
 def test_blind_command_trip_without_prior_read():
-    t0 = datetime(2026, 6, 10, 8, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 6, 10, 8, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="t1",
         observed_at=t0,
@@ -537,7 +537,7 @@ def test_blind_command_trip_without_prior_read():
 
 
 def test_blind_command_coil_keyword_without_write_prefix():
-    t0 = datetime(2026, 6, 11, 9, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 6, 11, 9, 0, tzinfo=UTC)
     ev = NormalizedEvent(
         event_id="c1",
         observed_at=t0,
@@ -553,7 +553,7 @@ def test_blind_command_coil_keyword_without_write_prefix():
 def test_reconnaissance_operation():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.NETWORK,
         protocol="TCP",
         operation="PORT_SCAN",
@@ -566,7 +566,7 @@ def test_reconnaissance_operation():
 def test_physical_invariant_breach_flag():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="MODBUS",
         operation="READ",
@@ -579,7 +579,7 @@ def test_physical_invariant_breach_flag():
 def test_cyclic_service_crash_flag():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="IEC104",
         operation="POLL",
@@ -592,7 +592,7 @@ def test_cyclic_service_crash_flag():
 def test_untrusted_ip_admin_flag():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.AUTH_LOGS,
         protocol="SSH",
         operation="LOGIN",
@@ -605,7 +605,7 @@ def test_untrusted_ip_admin_flag():
 def test_lateral_movement_flag():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.NETWORK,
         protocol="TCP",
         operation="RPC",
@@ -619,7 +619,7 @@ def test_illegal_function_code_iec104_type_id():
     ctx = InvariantContext(iec104_disallowed_type_ids=frozenset({99}))
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="IEC104",
         operation="READ",
@@ -633,7 +633,7 @@ def test_illegal_function_code_iec104_not_hit_when_type_allowed():
     ctx = InvariantContext(iec104_disallowed_type_ids=frozenset({99}))
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="IEC104",
         operation="READ",
@@ -647,7 +647,7 @@ def test_illegal_function_code_iec104_type_id_numeric_string():
     ctx = InvariantContext(iec104_disallowed_type_ids=frozenset({13}))
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="IEC104",
         operation="READ",
@@ -661,7 +661,7 @@ def test_illegal_function_code_iec104_malformed_type_id_ignored():
     ctx = InvariantContext(iec104_disallowed_type_ids=frozenset({13}))
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.PLC_POLLING,
         protocol="IEC104",
         operation="READ",
@@ -673,7 +673,7 @@ def test_illegal_function_code_iec104_malformed_type_id_ignored():
 
 
 def test_blind_command_suppressed_when_prior_poll_same_plc_id():
-    t0 = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 7, 1, 12, 0, tzinfo=UTC)
     recent = [
         NormalizedEvent(
             event_id="r1",
@@ -699,7 +699,7 @@ def test_blind_command_suppressed_when_prior_poll_same_plc_id():
 
 def test_blind_command_only_immediate_prior_same_asset_matters():
     """Учитывается только последнее по тому же активу событие (не любой read в глубине окна)."""
-    t0 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 8, 1, 10, 0, tzinfo=UTC)
     recent = [
         NormalizedEvent(
             event_id="r1",
@@ -778,7 +778,7 @@ def test_boost_helpers_zero_without_markers():
 
 
 def test_blind_command_suppressed_when_prior_read_same_asset():
-    t0 = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
     recent = [
         NormalizedEvent(
             event_id="r1",
@@ -806,7 +806,7 @@ def test_blind_command_suppressed_when_prior_read_same_asset():
 def test_c2_external_dns_via_dns_query_tk_tld():
     ev = NormalizedEvent(
         event_id="1",
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source=EventSource.NETWORK,
         protocol="UDP",
         operation="DNS_LOOKUP",

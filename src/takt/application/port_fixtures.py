@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.domain.ports.system_ports import IdProviderPort, SystemClockPort
 
@@ -12,7 +12,7 @@ from takt.domain.ports.system_ports import IdProviderPort, SystemClockPort
 class FrozenClock(SystemClockPort):
     """Фиксированный момент UTC (удобно для детерминированных сценариев)."""
 
-    at: datetime = field(default_factory=lambda: datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc))
+    at: datetime = field(default_factory=lambda: datetime(2024, 1, 15, 12, 0, tzinfo=UTC))
 
     def now_utc(self) -> datetime:
         return self.at

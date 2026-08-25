@@ -88,9 +88,8 @@ class _FakeEventStore:
                 return False
         if (start := criteria.get("observed_from")) and event.observed_at < start:
             return False
-        if (end := criteria.get("observed_to")) and event.observed_at > end:
-            return False
-        return True
+        end = criteria.get("observed_to")
+        return not (end and event.observed_at > end)
 
 
 def _chain_and_background() -> list[NormalizedEvent]:

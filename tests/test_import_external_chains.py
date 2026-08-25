@@ -16,7 +16,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from scripts.import_external_chains import (
     ATTACK_TO_PHASE,
     DETECTOR_TO_SOURCE,

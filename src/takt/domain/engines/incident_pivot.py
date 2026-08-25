@@ -39,7 +39,7 @@ class PivotKey:
     value: str
 
     @staticmethod
-    def of(field: str, value: str) -> "PivotKey":
+    def of(field: str, value: str) -> PivotKey:
         return PivotKey(field, str(value).strip().lower())
 
 

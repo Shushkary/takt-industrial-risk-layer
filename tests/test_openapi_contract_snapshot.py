@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 
 from takt.interface_adapters.api.main import create_app
 
-
 EXPECTED_ROUTE_CONTRACTS = [
     ("GET", "/analytics/invariant-feedback", ("Analytics",), None),
     ("POST", "/assess", ("Ingest",), "AssessResponse"),

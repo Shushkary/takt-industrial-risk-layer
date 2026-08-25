@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from fastapi import HTTPException
@@ -33,7 +33,7 @@ def body_sha256_hex(body: bytes) -> str:
 
 
 def utc_expires_iso(ttl_sec: int) -> str:
-    dt = datetime.now(timezone.utc) + timedelta(seconds=ttl_sec)
+    dt = datetime.now(UTC) + timedelta(seconds=ttl_sec)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 

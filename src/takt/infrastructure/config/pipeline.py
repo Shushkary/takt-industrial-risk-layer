@@ -15,9 +15,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from takt.application.use_cases.assess_risk import AssessRiskUseCase
 from takt.application.use_cases.process_event import ProcessEventUseCase

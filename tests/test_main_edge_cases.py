@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import httpx
@@ -99,8 +99,8 @@ def test_event_window_trims_after_many_assess_calls() -> None:
 
 @pytest.mark.parametrize("sort_key", sorted(_CASE_LIST_SORT))
 def test_sort_cases_copy_accepts_each_catalog_key(sort_key: str) -> None:
-    t0 = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
-    t1 = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    t1 = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
     a = Case(
         case_id="zzz",
         status=CaseStatus.NEW,
@@ -136,7 +136,7 @@ def test_sort_cases_copy_unknown_raises() -> None:
         title="t",
         risk_class="LOW",
         risk_score=0.5,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     with pytest.raises(RuntimeError, match="unsupported sort"):
         _sort_cases_copy([c], "not-a-real-sort")
@@ -157,7 +157,7 @@ def test_sort_cases_copy_created_at_treats_naive_as_utc() -> None:
         title="t",
         risk_class="LOW",
         risk_score=0.1,
-        created_at=datetime(2026, 1, 1, 13, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 1, 1, 13, 0, tzinfo=UTC),
     )
 
     rows = _sort_cases_copy([naive, aware], "created_at_asc")
@@ -167,20 +167,20 @@ def test_sort_cases_copy_created_at_treats_naive_as_utc() -> None:
 
 def test_as_utc_boundary_naive_and_aware() -> None:
     naive = datetime(2026, 6, 1, 12, 0)
-    assert _as_utc_boundary(naive).tzinfo == timezone.utc
-    aware = datetime(2026, 6, 1, 15, 0, tzinfo=timezone.utc)
+    assert _as_utc_boundary(naive).tzinfo == UTC
+    aware = datetime(2026, 6, 1, 15, 0, tzinfo=UTC)
     assert _as_utc_boundary(aware).hour == 15
 
 
 def test_parse_import_created_at_z_suffix() -> None:
     dt = _parse_import_created_at("2026-03-01T08:00:00Z")
-    assert dt.tzinfo == timezone.utc
+    assert dt.tzinfo == UTC
     assert dt.isoformat(timespec="seconds") == "2026-03-01T08:00:00+00:00"
 
 
 def test_parse_import_created_at_naive_gets_utc() -> None:
     dt = _parse_import_created_at(" 2026-03-01T08:00:00 ")
-    assert dt.tzinfo == timezone.utc
+    assert dt.tzinfo == UTC
 
 
 def test_head_openapi_json_probe() -> None:

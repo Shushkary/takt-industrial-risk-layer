@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -7,10 +8,12 @@ from pathlib import Path
 from uuid import uuid4
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Каталог примеров Hypothesis задаётся до импорта библиотеки: путь читается при импорте, и
+# после него переменная уже не действует. Отсюда импорты ниже, а не в шапке файла (E402).
 os.environ.setdefault("HYPOTHESIS_STORAGE_DIRECTORY", str(_PROJECT_ROOT / ".pytest_tmp_path_local" / "hypothesis"))
 
-import pytest
-from hypothesis import settings
+import pytest  # noqa: E402
+from hypothesis import settings  # noqa: E402
 
 settings.register_profile("no_disk_examples", database=None)
 settings.load_profile("no_disk_examples")
@@ -34,7 +37,6 @@ def tmp_path(request: pytest.FixtureRequest) -> Path:
         yield path
     finally:
         shutil.rmtree(path, ignore_errors=True)
-        try:
+        # Корень удаляем только когда он опустел: параллельные тесты могут держать свои каталоги.
+        with contextlib.suppress(OSError):
             root.rmdir()
-        except OSError:
-            pass

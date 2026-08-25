@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-
 FIXTURES = Path(__file__).parent / "fixtures" / "pt_techlab"
 
 

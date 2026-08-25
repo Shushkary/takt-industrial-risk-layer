@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import csv
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -67,11 +68,9 @@ def _artifacts_from_row(row: dict[str, str]) -> tuple[EventArtifact, ...]:
     indicator = _first_value(row, ("indicator",))
     if indicator:
         raw_type = _first_value(row, ("indicator_type",)) or "address"
-        try:
+        # Неизвестный тип индикатора не повод терять событие: он остаётся в payload.
+        with contextlib.suppress(ValueError):
             found.append(EventArtifact(type=ArtifactType(raw_type.lower()), value=indicator))
-        except ValueError:
-            # Неизвестный тип индикатора не повод терять событие: он остаётся в payload.
-            pass
     return tuple(found)
 
 
@@ -81,8 +80,8 @@ def _parse_ts(value: str) -> datetime:
         val = val[:-1] + "+00:00"
     dt = datetime.fromisoformat(val)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def raw_row_to_normalized(

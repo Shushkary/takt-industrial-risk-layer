@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from takt.domain.engines.alert_fatigue import case_bucket_burst_fingerprint
 from takt.domain.engines.risk_engine import worst_risk_class
-from takt.domain.entities.case import Case, CaseStatus, InvariantHitRecord, Observation
+from takt.domain.entities.case import Case, InvariantHitRecord, Observation
 
 
 def _utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def migration_group_key(case: Case, bucket_sec: int) -> tuple[str, str, int]:
