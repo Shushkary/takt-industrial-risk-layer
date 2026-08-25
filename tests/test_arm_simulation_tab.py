@@ -529,3 +529,29 @@ def test_counters_agree_with_russian_numerals() -> None:
 
     assert "function plural(" in app
     assert "'дело', 'дела', 'дел'" in app
+
+# --- Выходные документы по делу (P3-4) --------------------------------------
+
+
+def test_documents_are_requested_with_the_access_key() -> None:
+    """Прямая ссылка ключ не несёт: при штатной конфигурации вкладка открывалась пустой с 401.
+
+    Выглядело это как «отчёт не формируется», хотя продукт отвечал ровно то, что должен.
+    """
+    app = _app()
+
+    assert "function openDocument(" in app
+    assert "window.open(`${API_BASE}" not in app
+    start = app.index("async function openDocument(")
+    block = app[start : app.index("\nfunction openDecisionBrief(", start)]
+    assert "authHeaders()" in block
+    assert "createObjectURL" in block
+    assert "revokeObjectURL" in block
+
+
+def test_case_report_is_reachable_from_the_case() -> None:
+    """ТЗ §5.10: паспорт инцидента — выходной документ, а не производная справка."""
+    app = _app()
+
+    assert "/export.pdf" in app
+    assert 'id="reportButton"' in _index()

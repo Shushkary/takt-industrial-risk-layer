@@ -208,6 +208,13 @@ const HELP = {
     source: 'Находка — решение человека, система её не проставляет. Автором записывается тот, чей ключ доступа предъявлен рабочим местом.',
     action: 'Фиксировать сущность сразу после подтверждения её участия, чтобы не собирать идентификаторы заново при передаче смены.',
   },
+  report: {
+    title: 'Выходные документы по делу',
+    what: '«Паспорт инцидента» — отчёт по делу целиком: состав событий, вердикт, обоснованность и приложенные документы. «Сводка для руководителя» — тот же разбор одним листом для решения.',
+    source: 'Оба документа собирает продукт. Паспорт записывается в аудиторский след дела как факт выгрузки, сводка — нет: она производная и состояние дела не меняет.',
+    action: 'Прикладывать паспорт к передаче инцидента, сводку — к докладу. Кириллица в PDF требует настроенного шрифта на стороне продукта; если он не задан, продукт откажет, а не подменит текст.',
+    doc: 'docs/api_reference.md',
+  },
   journal: {
     title: 'Журнал действий по кейсу',
     what: 'Все действия, изменившие состояние кейса: сборка, находки, подтверждение пакета, смена статуса. В записи — время, автор и суть действия.',
@@ -1113,11 +1120,48 @@ async function submitStatusForm() {
   }
 }
 
+// Документ продукта открывается запросом с заголовком доступа, а не ссылкой в новой вкладке.
+// Прямая ссылка ключ не несёт: при штатной конфигурации продукта вкладка открывалась пустой
+// с ответом 401, и выглядело это как «отчёт не формируется».
+async function openDocument(path, what) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, { cache: 'no-store', headers: authHeaders() });
+  } catch (error) {
+    toast(`${what} не открыт: нет связи с продуктом`);
+    return;
+  }
+  if (!response.ok) {
+    const reason =
+      response.status === 401
+        ? 'требуется ключ доступа'
+        : response.status === 403
+          ? 'роль не позволяет получить документ'
+          : response.status === 501
+            ? 'выгрузка в PDF не собрана в этой поставке'
+            : `HTTP ${response.status}`;
+    toast(`${what} не открыт: ${reason}`);
+    return;
+  }
+  // Документ отдаётся как вложение; чтобы показать его во вкладке, содержимое берётся в
+  // объектную ссылку. Она освобождается после открытия — иначе они копятся за смену.
+  const url = URL.createObjectURL(await response.blob());
+  window.open(url, '_blank', 'noopener');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 function openDecisionBrief() {
   if (!selectedCaseId) return;
   // Сводка открывается как отдельный документ: её адресат — руководитель, и он получает
-  // ссылку, а не пересказ из интерфейса аналитика.
-  window.open(`${API_BASE}/cases/${encodeURIComponent(selectedCaseId)}/decision-brief.pdf`, '_blank', 'noopener');
+  // документ, а не пересказ из интерфейса аналитика.
+  openDocument(`/cases/${encodeURIComponent(selectedCaseId)}/decision-brief.pdf`, 'Сводка для руководителя');
+}
+
+// Паспорт инцидента (ТЗ §5.10). В отличие от сводки, факт выгрузки записывается в
+// аудиторский след дела — это выходной документ по инциденту, а не производная справка.
+function openCaseReport() {
+  if (!selectedCaseId) return;
+  openDocument(`/cases/${encodeURIComponent(selectedCaseId)}/export.pdf`, 'Паспорт инцидента');
 }
 
 function renderSources(events) {
@@ -2373,6 +2417,7 @@ $('#accessKeyInput').addEventListener('keydown', (event) => {
 $('#modalClose').addEventListener('click', closeHelp);
 $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
+$('#reportButton').addEventListener('click', openCaseReport);
 $('#changeStatusButton').addEventListener('click', openStatusForm);
 $('#statusFormCancel').addEventListener('click', closeStatusForm);
 $('#statusFormSubmit').addEventListener('click', submitStatusForm);
