@@ -123,7 +123,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260824-04"}, versions
+    assert versions >= {"20260825-01"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -315,3 +315,49 @@ def test_switching_the_zone_does_not_touch_stored_time() -> None:
 
     # Переключатель перерисовывает карточку и не отправляет ничего в продукт.
     assert "api(" not in block
+
+# --- Мелочи, каждая из которых ломается молча (F-17) ------------------------
+
+
+def test_chain_is_ordered_by_moment_not_by_string() -> None:
+    """Строковое сравнение меток времени работает ровно до первого смещения, отличного от +00:00.
+
+    Событие со смещением `+03:00` при сравнении строк встаёт в цепочке не на своё место —
+    и ход инцидента, ради которого цепочку и читают, восстанавливается неверно.
+    """
+    app = _app()
+    start = app.index("function paintChain(")
+    block = app[start : app.index("\nfunction ", start + 10)]
+
+    assert "Date.parse" in block
+    assert "localeCompare" not in block
+
+
+def test_build_keeps_cyrillic_as_cyrillic() -> None:
+    """Без --charset=utf8 esbuild экранирует каждую букву в \\uXXXX, и сборка крупнее исходника."""
+    build = (_ARM / "build-production.mjs").read_text(encoding="utf-8")
+
+    assert "--charset=utf8" in build
+
+
+def test_nginx_does_not_route_to_a_contour_that_does_not_exist() -> None:
+    """Маршрут `/api/v1/stream/cases` — остаток прежней редакции: такого контура в продукте нет."""
+    conf = (_ARM / "nginx.takt-pt-arm.conf").read_text(encoding="utf-8")
+    directives = [line.strip() for line in conf.splitlines() if not line.strip().startswith("#")]
+
+    assert not [line for line in directives if "/api/v1" in line], "маршрут несуществующего контура"
+
+
+def test_nginx_strips_the_api_prefix_like_the_local_stand() -> None:
+    """Маршруты продукта зарегистрированы от корня: досланный префикс `/api` даёт 404 на каждом запросе.
+
+    Проверено запуском backend с `--root-path=/api`: uvicorn префикс не снимает, `/api/cases`
+    отвечает 404, `/cases` — 200. Локальный стенд снимает префикс, конфигурации не должны
+    расходиться.
+    """
+    conf = (_ARM / "nginx.takt-pt-arm.conf").read_text(encoding="utf-8")
+    directives = [line.strip() for line in conf.splitlines() if not line.strip().startswith("#")]
+    proxy_lines = [line for line in directives if line.startswith("proxy_pass")]
+
+    assert proxy_lines, "в конфигурации не осталось ни одного proxy_pass"
+    assert not [line for line in proxy_lines if line.endswith("/api/;")], proxy_lines

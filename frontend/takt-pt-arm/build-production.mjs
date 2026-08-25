@@ -24,9 +24,12 @@ function run(input, output) {
   // поэтому команда собирается строкой, а пути берутся в кавычки — в пути
   // есть пробел («TAKT PT»). Тип файла esbuild определяет по расширению.
   const quote = (value) => `"${value}"`;
+  // --charset=utf8: без него esbuild экранирует каждую кириллическую букву в \uXXXX, и
+  // сборка вырастает в полтора раза против исходника — на текстах пояснений это десятки
+  // килобайт, которые аналитик скачивает при каждом обновлении.
   const command = [
     'npx', '--yes', ESBUILD, quote(path(input)),
-    '--minify', `--outfile=${quote(path(output))}`,
+    '--minify', '--charset=utf8', `--outfile=${quote(path(output))}`,
   ].join(' ');
   execFileSync(command, { stdio: ['ignore', 'ignore', 'inherit'], shell: true });
   console.log(`минифицировано: ${input} → ${output}`);

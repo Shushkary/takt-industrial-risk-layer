@@ -1009,7 +1009,15 @@ function renderChain(events, correlationEvidence) {
 function paintChain() {
   const body = $('#chainBody');
   body.replaceChildren();
-  const ordered = [...lastChainEvents].sort((a, b) => String(a.observed_at).localeCompare(String(b.observed_at)));
+  // Сравниваются моменты времени, а не строки. Строковое сравнение работает, пока все метки
+  // приходят в UTC с одинаковым `+00:00`; событие со смещением `+03:00` встанет в цепочке не
+  // на своё место, и ход инцидента прочитается неверно — а именно ход инцидента здесь и
+  // восстанавливают. Неразобранная метка уходит в конец, а не наверх.
+  const moment = (event) => {
+    const parsed = Date.parse(event.observed_at);
+    return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+  };
+  const ordered = [...lastChainEvents].sort((a, b) => moment(a) - moment(b));
   // Три состояния, а не два: у кейса, собранного конвейером приёма, `correlation_evidence`
   // пустой — основания в ответе нет вовсе. Считать такие события ядром нельзя: ячейка
   // показывает «—», и счётчик обязан говорить то же самое.
