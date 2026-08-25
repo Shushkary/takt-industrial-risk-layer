@@ -55,7 +55,7 @@
 (источников) + (сущности × источники) + (сущности × (источники − 1)) + (события) + 1
 ```
 
-**Сокращение** = (ручные − ТАКТ) / ручные × 100%. На INC-002: (88 − 10) / 88 = **88.6%**.
+**Сокращение** = (ручные − ТАКТ) / ручные × 100%. На INC-002: (88 − 9) / 88 = **89.8%**.
 
 **Время — модельная оценка.** Коэффициент «секунд на действие» в
 [методике](baseline_methodology.md) не задан и никем не измерялся, поэтому у эндпоинта
@@ -182,8 +182,10 @@ python -m scripts.record_reference_session --case-id INC-002
 curl http://127.0.0.1:8090/cases/INC-002/simulation
 ```
 
-Ожидается: `chain_length` 27, семь фаз, `effort.takt_actions` 10 против
-`effort.current_actions` 88, `reduction_actions_percent` 88.6.
+Ожидается: `chain_length` 27, семь фаз, `effort.takt_actions` 9 против
+`effort.current_actions` 88, `reduction_actions_percent` 89.8. Ноль в `takt_actions` и 100%
+в сокращении означают пустой журнал дела: опорная сессия не воспроизведена, см.
+[`scripts/record_reference_session.py`](../../scripts/record_reference_session.py).
 
 Регрессии: [`tests/test_simulation.py`](../../tests/test_simulation.py),
 [`tests/test_arm_simulation_tab.py`](../../tests/test_arm_simulation_tab.py),
