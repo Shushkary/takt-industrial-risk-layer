@@ -204,3 +204,81 @@ def test_time_is_labelled_as_model_everywhere() -> None:
     assert "модель" in block
     index = _index()
     assert "допущение для оценки времени, не замер" in index
+
+# --- Форма подачи пояснений (F-15) -----------------------------------------
+
+_HELP_ENTRY = re.compile(r"^  ([a-z0-9_]+): \{\n(.*?)^  \},$", re.MULTILINE | re.DOTALL)
+_DOC_PATH = re.compile(r"^    doc: '([^']+)',$", re.MULTILINE)
+
+
+def _help_entries() -> dict[str, str]:
+    return {key: block for key, block in _HELP_ENTRY.findall(_app())}
+
+
+def test_every_entry_answers_all_three_questions() -> None:
+    """Запись отвечает на «что это», «откуда» и «что делать» — все три, а не сколько получилось.
+
+    Прецедент: пока запись была массивом абзацев, порядок вопросов держался договорённостью.
+    У десяти записей из сорока двух ответа «откуда» просто не было, и по коду это не читалось —
+    массив из двух строк выглядел так же законно, как из трёх.
+    """
+    incomplete: list[str] = []
+    for key, block in _help_entries().items():
+        missing = [field for field in ("title", "what", "source", "action") if f"    {field}: " not in block]
+        if missing:
+            incomplete.append(f"{key}: нет полей {missing}")
+    assert not incomplete, incomplete
+
+
+def test_documentation_links_point_at_files_that_exist() -> None:
+    """Мёртвая ссылка на документ хуже её отсутствия: аналитик идёт по ней в момент спора."""
+    repo_root = _ARM.parents[1]
+    broken = [doc for doc in _DOC_PATH.findall(_app()) if not (repo_root / doc).is_file()]
+    assert not broken, f"пояснения ссылаются на несуществующие документы: {broken}"
+
+
+def test_help_registry_has_no_leftover_paragraph_arrays() -> None:
+    """Старая форма записи рядом с новой означала бы два способа писать пояснение."""
+    assert "    body: [" not in _app()
+
+
+def test_modal_traps_focus_and_locks_the_background() -> None:
+    """Фон под окном прокручивался, а Tab уводил фокус за подложку — с клавиатуры окно не закрывалось."""
+    app = _app()
+
+    assert "function trapFocus(" in app
+    assert "modal-open" in app
+    assert "'Tab'" in app
+    assert "body.modal-open" in _STYLES.read_text(encoding="utf-8")
+
+
+def test_help_button_shows_a_short_hint_on_hover() -> None:
+    """Иначе всякий вопрос стоит двух действий: открыть окно и закрыть его."""
+    app = _app()
+
+    assert "function fillHelpHints(" in app
+    assert "function firstSentence(" in app
+
+
+def test_glossary_explains_the_private_language_of_the_product() -> None:
+    """Эти слова продукт использует везде и нигде не объясняет — спор о них дороже любого другого."""
+    entries = _help_entries()
+    assert "glossary" in entries, "записи словаря понятий нет"
+    glossary = entries["glossary"]
+    for term in (
+        "Инвариант",
+        "Отличительная сущность",
+        "Пивот",
+        "Расширение до уровня узла",
+        "Добор контекста",
+        "Триадный вердикт",
+        "Обоснованность",
+    ):
+        assert term in glossary, f"словарь понятий не объясняет «{term}»"
+
+
+def test_glossary_is_reachable_from_the_header() -> None:
+    """Словарь нужен в первые смены, а не после того, как аналитик найдёт нужный блок."""
+    index = _index()
+    header = index[index.index("<header") : index.index("</header>")]
+    assert 'data-help="glossary"' in header

@@ -1,6 +1,7 @@
 """Локальный стенд АРМ: раздача `frontend/takt-pt-arm` и прокси `/api/*` на backend.
 
-Заменяет nginx на машине разработчика. На боевом контуре статику раздаёт nginx по
+Заменяет nginx на машине разработчика. Дополнительно раздаёт `docs/` репозитория: пояснения
+в АРМ ссылаются на документы, и ссылку нужно уметь проверить. На боевом контуре статику раздаёт nginx по
 `frontend/takt-pt-arm/nginx.takt-pt-arm.conf`; там АРМ живёт на подпути `/takt_pt_arm/`, а
 `/takt_pt_arm/api/` проксируется на backend, поднятый с префиксом `/api`. Локальный backend
 поднимается без префикса, поэтому здесь префикс снимается — см. `backend_url`.
@@ -26,6 +27,11 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ARM_ROOT = _ROOT / "frontend" / "takt-pt-arm"
+# Пояснения в АРМ ссылаются на документы репозитория. Раздача включена на стенде, чтобы
+# ссылку можно было проверить, а не поверить в неё: на боевом контуре внутренняя
+# документация наружу не публикуется (см. nginx.takt-pt-arm.conf).
+DEFAULT_DOCS_ROOT = _ROOT / "docs"
+DOCS_PREFIX = "/docs"
 DEFAULT_PORT = 8091
 DEFAULT_API_BASE = "http://127.0.0.1:8090"
 API_PREFIX = "/api"
@@ -62,7 +68,31 @@ def backend_url(path: str, *, api_base: str, api_prefix: str = API_PREFIX) -> st
     return api_base.rstrip("/") + rest
 
 
-def build_server(*, root: Path, port: int, api_base: str) -> http.server.ThreadingHTTPServer:
+def docs_file(path: str, *, docs_root: Path) -> Path | None:
+    """Файл документации для запроса АРМ или None, если запрос не про документацию.
+
+    Выход за пределы каталога документации отсекается сравнением разрешённых путей: запрос
+    вида `/docs/../../secrets` иначе прочитал бы файл вне репозитория.
+    """
+    if path != DOCS_PREFIX and not path.startswith(DOCS_PREFIX + "/"):
+        return None
+    rest = path[len(DOCS_PREFIX) :].split("?", 1)[0].split("#", 1)[0].lstrip("/")
+    if not rest:
+        return None
+    candidate = (docs_root / rest).resolve()
+    root = docs_root.resolve()
+    if candidate != root and root not in candidate.parents:
+        return None
+    return candidate if candidate.is_file() else None
+
+
+def build_server(
+    *,
+    root: Path,
+    port: int,
+    api_base: str,
+    docs_root: Path = DEFAULT_DOCS_ROOT,
+) -> http.server.ThreadingHTTPServer:
     """HTTP-сервер стенда. `port=0` — свободный порт (используется тестами)."""
     directory = str(root)
 
@@ -124,7 +154,20 @@ def build_server(*, root: Path, port: int, api_base: str) -> http.server.Threadi
             self.end_headers()
             self.wfile.write(payload)
 
+        def _serve_docs(self) -> bool:
+            """Отдать документ репозитория. True — запрос обработан здесь."""
+            target = docs_file(self.path, docs_root=docs_root)
+            if target is None:
+                if self.path == DOCS_PREFIX or self.path.startswith(DOCS_PREFIX + "/"):
+                    self._relay(404, "application/json; charset=utf-8", b'{"error": "doc_not_found"}')
+                    return True
+                return False
+            self._relay(200, "text/markdown; charset=utf-8", target.read_bytes())
+            return True
+
         def do_GET(self) -> None:
+            if self._serve_docs():
+                return
             if backend_url(self.path, api_base=api_base) is None:
                 super().do_GET()
             else:
