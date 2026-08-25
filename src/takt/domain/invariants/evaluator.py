@@ -97,10 +97,7 @@ def _event_has_input_path(event: NormalizedEvent, path: str) -> bool:
 
 
 def rule_inputs_satisfied(spec: InvariantRuleSpec, event: NormalizedEvent) -> bool:
-    for p in spec.inputs:
-        if not _event_has_input_path(event, p):
-            return False
-    return True
+    return all(_event_has_input_path(event, p) for p in spec.inputs)
 
 
 def evaluate_declared_rules(

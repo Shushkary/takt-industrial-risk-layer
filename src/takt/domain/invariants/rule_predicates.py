@@ -80,9 +80,12 @@ def pred_illegal_function_code(
 ) -> list[str]:
     pl = event.payload
     fc = pl.get("function_code")
-    if ctx.allowed_function_codes is not None and fc is not None:
-        if str(fc).strip() not in ctx.allowed_function_codes:
-            return [spec.id]
+    if (
+        ctx.allowed_function_codes is not None
+        and fc is not None
+        and str(fc).strip() not in ctx.allowed_function_codes
+    ):
+        return [spec.id]
     if ctx.iec104_disallowed_type_ids:
         tid = pl.get("iec104_type_id")
         if tid is not None:
@@ -114,7 +117,7 @@ def pred_brute_force(
     ctx: Any,
     spec: InvariantRuleSpec,
 ) -> list[str]:
-    window = list(recent[-ctx.auth_fail_window :]) + [event]
+    window = [*recent[-ctx.auth_fail_window :], event]
     fails = sum(1 for e in window if "FAIL" in e.operation.upper() or "DENIED" in e.operation.upper())
     return [spec.id] if fails >= ctx.auth_fail_threshold else []
 
@@ -236,7 +239,7 @@ def pred_new_node_airgap(
     # Флаг-чекер (внешний SIEM уже определил)
     if event.payload.get("new_node_airgap") in (True, "true", "1", 1):
         return [spec.id]
-    known = getattr(ctx, "airgap_known_addresses", frozenset()) or frozenset()
+    known: frozenset[str] = getattr(ctx, "airgap_known_addresses", frozenset()) or frozenset()
     if not known:
         return []
     src_ip = str(event.payload.get("src_ip") or "")
@@ -440,7 +443,7 @@ def pred_stale_data(
     spec: InvariantRuleSpec,
 ) -> list[str]:
     """Inv_DQ_01: замерзший датчик — одинаковые payload при долгом интервале."""
-    seq = list(recent) + [event]
+    seq = [*recent, event]
     if len(seq) < 2:
         return []
     snap = evaluate_stale_telemetry(seq, stale_window_seconds=ctx.stale_window_seconds)
@@ -456,7 +459,7 @@ def pred_telemetry_gap(
     spec: InvariantRuleSpec,
 ) -> list[str]:
     """Inv_DQ_02: потеря пакетов — большие разрывы между событиями источника."""
-    seq = list(recent) + [event]
+    seq = [*recent, event]
     if len(seq) < 2:
         return []
     snap = evaluate_sequence_gaps(seq, max_gap_seconds=ctx.max_gap_seconds)

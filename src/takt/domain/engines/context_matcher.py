@@ -25,10 +25,9 @@ def match_event_to_ticket(
     in_win = False
     for t in tickets:
         mw = t.maintenance_window
-        if asset and asset in mw.asset_ids:
-            if mw.starts_at <= now <= mw.ends_at:
-                in_win = True
-                break
+        if asset and asset in mw.asset_ids and mw.starts_at <= now <= mw.ends_at:
+            in_win = True
+            break
     critical = ev.operation.upper() in {"ADMIN_LOGIN", "WRITE_COIL", "REMOTE_SESSION"}
     dissonance = critical and not in_win
     score = 0.85 if in_win else (0.35 if dissonance else 0.55)
