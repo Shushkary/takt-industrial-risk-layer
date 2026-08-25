@@ -122,10 +122,24 @@ const HELP = {
   },
   queue_filters: {
     title: 'Фильтры очереди',
-    what: 'Отбор по классу риска, статусу и подстроке заголовка. Поиск идёт по заголовку инцидента; идентификатор дела и адрес актива он не ищет.',
+    what: 'Отбор по классу риска, статусу и подстроке. Что именно ищет подстрока — заголовок, идентификатор дела или актив — выбирается списком рядом с полем.',
     source: 'Отбор выполняет продукт, а не браузер: параметры уходят в запрос списка кейсов, счётчик показывает, сколько кейсов подошло под фильтр из общего числа. По умолчанию показываются первые 100 кейсов по убыванию балла риска.',
     action: 'Начинать смену с фильтра по классу риска и статусу «новое». Поток однотипных одиночных срабатываний с одинаковым баллом — материал для правки правила, а не для разбора поштучно.',
     doc: 'docs/customer_value_map.md',
+  },
+  event_search: {
+    title: 'Поиск по событиям всех источников',
+    what: 'Отбор по всем принятым событиям, а не только по событиям открытого дела: источник, узел, учётная запись, процесс, адрес, артефакт, подстрока в содержимом и период.',
+    source: 'Отбор выполняет продукт: признаки уходят параметрами запроса, а не применяются к загруженной странице. Четыре класса источников приведены к одной модели события при приёме — поэтому поиск один, а не по консоли на каждый источник.',
+    action: 'Проверять, встречались ли узел, учётная запись или адрес вне дела. Найденное событие можно прицепить к открытому делу — причина берётся из панели состава дела на вкладке расследования.',
+    doc: 'docs/pt_techlab/data_contract.md',
+  },
+  decode: {
+    title: 'Разбор закодированного значения',
+    what: 'Раскрытие значения, спрятанного кодировкой: base64, процентное кодирование адреса, шестнадцатеричная строка.',
+    source: 'Разбор выполняет продукт, а не браузер: результат приводится как довод, и он обязан совпадать с тем, что видит сам продукт. Неудачные попытки показаны тоже — «не является base64» это ответ, а молчание выглядит как несработавшая кнопка.',
+    action: 'Скопировать значение из цепочки событий кликом и разобрать здесь. Раскрытый адрес или команда — довод, который проверяется по внутренним спискам, а не вывод продукта.',
+    doc: 'docs/api_reference.md',
   },
   queue_groups: {
     title: 'Сведение однотипных дел',
@@ -548,6 +562,7 @@ function fillFilterOptions() {
   };
   fill($('#queueRisk'), 'risk_class');
   fill($('#queueStatus'), 'case_status');
+  fill($('#searchSource'), 'event_source');
 }
 
 function invariantTitle(id) {
@@ -2307,7 +2322,14 @@ function queueQueryString() {
   const search = $('#queueSearch').value.trim();
   if (risk) params.set('risk_classes', risk);
   if (status) params.set('status', status);
-  if (search) params.set('title_contains', search);
+  // Поле поиска раньше умело только заголовок, и подпись об этом честно предупреждала.
+  // Идентификатор дела и актив продукт ищет сам — отдельными параметрами запроса.
+  if (search) {
+    const field = $('#queueSearchField').value;
+    if (field === 'case_id') params.set('case_id_prefix', search);
+    else if (field === 'asset') params.set('primary_asset_id', search);
+    else params.set('title_contains', search);
+  }
   // Отбор из сведённой строки: актива и операции в видимых фильтрах нет, и подменять ими
   // подпись поля поиска значило бы обещать поиск, которого там не происходит.
   if (queueDrill) {
@@ -2441,8 +2463,166 @@ $('#queueModeCases').addEventListener('click', () => setQueueMode('cases'));
 $('#queueModeAsset').addEventListener('click', () => setQueueMode('asset'));
 $('#queueModeRule').addEventListener('click', () => setQueueMode('operation'));
 $('#queueDrillClear').addEventListener('click', clearQueueDrill);
+$('#queueSearchField').addEventListener('change', refresh);
 $('#queueRisk').addEventListener('change', refresh);
 $('#queueStatus').addEventListener('change', refresh);
+
+// --- Единый поиск по событиям всех источников (ТЗ §5) ----------------------
+//
+// Продукт принимает четыре класса источников в одну модель события, и искать по ним можно
+// одним запросом (`GET /events/search`). До сих пор эта возможность существовала только в
+// API: аналитик, которому нужно проверить, встречался ли узел или адрес вне дела, уходил в
+// консоли источников — то есть ровно в ту работу, которую продукт и берётся сократить.
+//
+// Отбор выполняет продукт: фильтры уходят параметрами запроса, а не применяются к
+// загруженной странице.
+
+let searchResults = [];
+
+function searchQueryString() {
+  const params = new URLSearchParams({ limit: '200' });
+  const put = (name, selector) => {
+    const value = $(selector).value.trim();
+    if (value) params.set(name, value);
+  };
+  const source = $('#searchSource').value;
+  if (source) params.set('source', source);
+  put('host_id', '#searchHost');
+  put('user_id', '#searchUser');
+  put('process_id', '#searchProcess');
+  put('address', '#searchAddress');
+  put('artifact_value', '#searchArtifact');
+  put('text', '#searchText');
+  put('observed_from', '#searchFrom');
+  put('observed_to', '#searchTo');
+  return params;
+}
+
+async function runEventSearch() {
+  const params = searchQueryString();
+  // limit стоит всегда, поэтому отбором считается всё остальное. Запрос без отбора вернул бы
+  // весь принятый поток — тысячу событий, из которых аналитик не узнает ничего.
+  if ([...params.keys()].length <= 1) {
+    showSearchError('Задайте хотя бы один признак: запрос без отбора вернёт весь принятый поток.');
+    return;
+  }
+  $('#searchError').hidden = true;
+  try {
+    const { data, headers } = await apiWithHeaders(`/events/search?${params.toString()}`);
+    searchResults = Array.isArray(data) ? data : [];
+    renderSearchResults();
+    const total = headers.get('X-Total-Count');
+    $('#searchCount').textContent =
+      total !== null
+        ? `Найдено ${searchResults.length} из ${total} ${plural(Number(total), 'события', 'событий', 'событий')}`
+        : `Найдено ${searchResults.length}`;
+  } catch (error) {
+    showSearchError(`Поиск не выполнен: ${error.message}`);
+  }
+}
+
+function showSearchError(message) {
+  $('#searchError').textContent = message;
+  $('#searchError').hidden = false;
+}
+
+function resetEventSearch() {
+  for (const id of ['searchHost', 'searchUser', 'searchProcess', 'searchAddress', 'searchArtifact', 'searchText', 'searchFrom', 'searchTo']) {
+    $(`#${id}`).value = '';
+  }
+  $('#searchSource').value = '';
+  searchResults = [];
+  $('#searchBody').replaceChildren();
+  $('#searchCount').textContent = '—';
+  $('#searchError').hidden = true;
+}
+
+function renderSearchResults() {
+  const body = $('#searchBody');
+  body.replaceChildren();
+  $('#searchTimeZone').textContent = zoneLabel();
+  const inCase = new Set(lastWorkspaceEvents.map((event) => event.event_id));
+  for (const event of searchResults) {
+    const entities = event.entities || {};
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td class="mono">${escapeHtml(utc(event.observed_at))}</td>
+      <td><span class="chip sm" title="${escapeHtml(String(event.source))}">${escapeHtml(term('event_source', event.source))}</span></td>
+      <td class="mono">${escapeHtml(event.operation)}</td>
+      <td>${copyable(entities.host_id || '')}</td>
+      <td>${copyable(entities.user_id || '')}</td>
+      <td class="mono small">${addressOf(entities)}</td>
+      <td class="small">${artifactCell(event)}</td>
+      <td class="relink-cell"></td>`;
+    const cell = row.lastElementChild;
+    // Прицепить можно только к открытому делу и только роли второй линии: право приходит из
+    // ответа продукта, а не решается здесь.
+    if (!selectedCaseId || !relinkAllowed()) {
+      cell.innerHTML = '<span class="muted small">—</span>';
+    } else if (inCase.has(event.event_id)) {
+      cell.innerHTML = '<span class="muted small">уже в деле</span>';
+    } else {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'action inline';
+      button.textContent = 'Прицепить';
+      button.addEventListener('click', () => attachFoundEvent(event.event_id, button));
+      cell.replaceChildren(button);
+    }
+    body.appendChild(row);
+  }
+}
+
+// Причина обязательна и здесь: правка состава дела меняет доказательный материал независимо
+// от того, из какого места интерфейса её начали.
+async function attachFoundEvent(eventId, button) {
+  const reason = $('#relinkReason').value.trim();
+  if (!reason) {
+    showSearchError('Причина обязательна: заполните её на вкладке расследования, в панели состава дела.');
+    return;
+  }
+  button.disabled = true;
+  try {
+    await api(`/cases/${encodeURIComponent(selectedCaseId)}/events/attach`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, event_id: eventId }),
+    });
+    toast('Событие прицеплено к открытому делу');
+    await openCase(selectedCaseId);
+    renderSearchResults();
+  } catch (error) {
+    showSearchError(relinkErrorText(error, 'Событие не прицеплено'));
+    button.disabled = false;
+  }
+}
+
+// --- Разбор закодированного значения (ТЗ §5.4) -----------------------------
+//
+// Разбор выполняет продукт (`POST /enrichment/decode`), а не браузер: результат разбора
+// аналитик приводит как довод, и он обязан совпадать с тем, что видит продукт.
+
+async function runDecode() {
+  const list = $('#decodeResults');
+  list.replaceChildren();
+  const value = $('#decodeValue').value.trim();
+  if (!value) return;
+  try {
+    const result = await api('/enrichment/decode', { method: 'POST', body: JSON.stringify({ value }) });
+    for (const item of (result && result.decodings) || []) {
+      const row = document.createElement('li');
+      if (item.success) {
+        row.innerHTML = `<span class="chip sm">${escapeHtml(item.kind)}</span> <span class="mono">${escapeHtml(item.value)}</span>`;
+      } else {
+        // Неудачный разбор показывается тоже: «не является base64» — это ответ на вопрос,
+        // а молчание выглядит как несработавшая кнопка.
+        row.innerHTML = `<span class="chip sm muted">${escapeHtml(item.kind)}</span> <span class="muted">не разобрано: ${escapeHtml(item.error || '—')}</span>`;
+      }
+      list.appendChild(row);
+    }
+  } catch (error) {
+    list.innerHTML = `<li class="relink-error">Разбор не выполнен: ${escapeHtml(error.message)}</li>`;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Вкладка «Симуляция»: хронология цепочки, счётчики трудоёмкости, граф атаки
@@ -2764,20 +2944,38 @@ function togglePlayback() {
   }, PLAY_INTERVAL_MS);
 }
 
+const TABS = {
+  investigation: { button: '#tabInvestigation', view: '.layout' },
+  search: { button: '#tabSearch', view: '#searchView' },
+  simulation: { button: '#tabSimulation', view: '#simulationView' },
+};
+
 function showTab(name) {
-  const isSimulation = name === 'simulation';
-  $('#tabSimulation').classList.toggle('active', isSimulation);
-  $('#tabSimulation').setAttribute('aria-pressed', String(isSimulation));
-  $('#tabInvestigation').classList.toggle('active', !isSimulation);
-  $('#tabInvestigation').setAttribute('aria-pressed', String(!isSimulation));
-  document.querySelector('.layout').hidden = isSimulation;
-  $('#simulationView').hidden = !isSimulation;
-  if (isSimulation) openSimulation();
+  for (const [tab, refs] of Object.entries(TABS)) {
+    const active = tab === name;
+    $(refs.button).classList.toggle('active', active);
+    $(refs.button).setAttribute('aria-pressed', String(active));
+    document.querySelector(refs.view).hidden = !active;
+  }
+  if (name === 'simulation') openSimulation();
   else stopPlayback();
+  // Отметка «уже в деле» и доступность прицепления зависят от открытого дела: при возврате
+  // на поиск список обязан отражать состав дела на этот момент, а не на момент запроса.
+  if (name === 'search') renderSearchResults();
 }
 
 $('#tabSimulation').addEventListener('click', () => showTab('simulation'));
+$('#tabSearch').addEventListener('click', () => showTab('search'));
 $('#tabInvestigation').addEventListener('click', () => showTab('investigation'));
+$('#searchRun').addEventListener('click', runEventSearch);
+$('#searchReset').addEventListener('click', resetEventSearch);
+$('#searchText').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') runEventSearch();
+});
+$('#decodeRun').addEventListener('click', runDecode);
+$('#decodeValue').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') runDecode();
+});
 $('#playPause').addEventListener('click', togglePlayback);
 $('#stepForward').addEventListener('click', () => {
   stopPlayback();

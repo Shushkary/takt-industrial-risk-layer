@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260825-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260825-02" />
   </head>
   <body>
     <header class="top">
@@ -15,6 +15,7 @@
       </div>
       <nav class="tabs" aria-label="Режим работы">
         <button id="tabInvestigation" class="tab active" type="button" aria-pressed="true">Расследование</button>
+        <button id="tabSearch" class="tab" type="button" aria-pressed="false">Поиск событий</button>
         <button id="tabSimulation" class="tab" type="button" aria-pressed="false">Симуляция</button>
       </nav>
       <div class="top-state">
@@ -52,7 +53,12 @@
           <button id="queueDrillClear" class="link" type="button">снять отбор</button>
         </p>
         <div class="queue-filters">
-          <input id="queueSearch" type="search" placeholder="поиск по заголовку инцидента" />
+          <select id="queueSearchField" aria-label="Где искать">
+            <option value="title">по заголовку</option>
+            <option value="case_id">по идентификатору</option>
+            <option value="asset">по активу</option>
+          </select>
+          <input id="queueSearch" type="search" placeholder="подстрока" />
           <select id="queueRisk" aria-label="Класс риска"><option value="">любой класс</option></select>
           <select id="queueStatus" aria-label="Статус"><option value="">любой статус</option></select>
           <button class="help sm" type="button" data-help="queue_filters" aria-label="Пояснение: фильтры очереди">?</button>
@@ -365,6 +371,68 @@
       </section>
     </main>
 
+    <section id="searchView" class="panel search-view" hidden aria-labelledby="searchTitle">
+      <div class="panel-head">
+        <h2 id="searchTitle">Поиск по событиям всех источников</h2>
+        <button class="help" type="button" data-help="event_search" aria-label="Пояснение: поиск по событиям">?</button>
+      </div>
+
+      <div class="search-filters">
+        <label for="searchSource">Источник</label>
+        <select id="searchSource"><option value="">любой</option></select>
+        <label for="searchHost">Узел</label>
+        <input id="searchHost" type="search" />
+        <label for="searchUser">Учётная запись</label>
+        <input id="searchUser" type="search" />
+        <label for="searchProcess">Процесс</label>
+        <input id="searchProcess" type="search" />
+        <label for="searchAddress">Адрес</label>
+        <input id="searchAddress" type="search" />
+        <label for="searchArtifact">Артефакт</label>
+        <input id="searchArtifact" type="search" />
+        <label for="searchText">Подстрока в событии</label>
+        <input id="searchText" type="search" />
+        <label for="searchFrom">С момента</label>
+        <input id="searchFrom" type="search" placeholder="2026-08-17T06:00:00Z" />
+        <label for="searchTo">По момент</label>
+        <input id="searchTo" type="search" placeholder="2026-08-17T07:00:00Z" />
+      </div>
+      <div class="search-actions">
+        <button id="searchRun" class="action inline" type="button">Найти</button>
+        <button id="searchReset" class="action inline" type="button">Очистить</button>
+        <span id="searchCount" class="muted small">—</span>
+      </div>
+      <p id="searchError" class="relink-error small" hidden></p>
+
+      <div class="table-scroll">
+        <table class="chain">
+          <thead>
+            <tr>
+              <th scope="col">Время, <span id="searchTimeZone">UTC</span></th>
+              <th scope="col">Источник</th>
+              <th scope="col">Операция</th>
+              <th scope="col">Узел</th>
+              <th scope="col">Учётная запись</th>
+              <th scope="col">Адрес</th>
+              <th scope="col">Артефакт</th>
+              <th scope="col">В открытое дело</th>
+            </tr>
+          </thead>
+          <tbody id="searchBody"></tbody>
+        </table>
+      </div>
+
+      <div class="panel-head">
+        <h2>Разбор значения</h2>
+        <button class="help" type="button" data-help="decode" aria-label="Пояснение: разбор закодированного значения">?</button>
+      </div>
+      <div class="search-actions">
+        <input id="decodeValue" type="search" placeholder="значение из события или артефакта" />
+        <button id="decodeRun" class="action inline" type="button">Разобрать</button>
+      </div>
+      <ul id="decodeResults" class="plain small pad"></ul>
+    </section>
+
     <section id="simulationView" class="panel simulation" hidden aria-labelledby="simTitle">
       <div class="panel-head">
         <h2 id="simTitle">Симуляция цепочки атаки</h2>
@@ -461,6 +529,6 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <script src="./app.min.js?v=20260825-01"></script>
+    <script src="./app.min.js?v=20260825-02"></script>
   </body>
 </html>

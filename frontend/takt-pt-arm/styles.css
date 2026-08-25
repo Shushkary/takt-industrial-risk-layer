@@ -1332,3 +1332,61 @@ ol.steps {
 .group-count {
   font-weight: 600;
 }
+
+/* Поиск по событиям всех источников. Раскладка та же сетка «подпись — поле», что у наряда:
+   два разных вида формы в одном интерфейсе читались бы как два разных продукта. */
+.search-view {
+  margin: 12px;
+}
+
+.search-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  align-items: center;
+  gap: 6px 10px;
+  padding: 0 12px 10px;
+}
+
+.search-filters label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.search-filters input,
+.search-filters select {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.search-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px 10px;
+}
+
+.search-actions input {
+  flex: 1 1 280px;
+  min-width: 200px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+#decodeResults li {
+  padding: 3px 0;
+}
+
+.chip.sm.muted {
+  color: var(--muted);
+}

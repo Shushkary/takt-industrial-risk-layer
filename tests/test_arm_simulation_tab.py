@@ -88,7 +88,11 @@ def test_method_modal_states_what_is_measured_and_what_is_modelled() -> None:
     [
         "tabSimulation",
         "tabInvestigation",
+        "tabSearch",
         "simulationView",
+        "searchView",
+        "searchBody",
+        "decodeResults",
         "simBody",
         "manualActions",
         "taktActions",
@@ -123,7 +127,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260825-01"}, versions
+    assert versions >= {"20260825-02"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -187,13 +191,24 @@ def test_hidden_attribute_is_enforced_over_author_display() -> None:
     assert "display: none !important" in rule.group(1), rule.group(1)
 
 
-def test_tab_switch_hides_the_other_view() -> None:
-    """Переключение вкладки скрывает противоположный раздел, а не только показывает свой."""
+def test_tab_switch_hides_every_other_view() -> None:
+    """Переключение вкладки скрывает все остальные разделы, а не только показывает свой.
+
+    Раньше разделов было два, и проверка называла их по именам. Вкладок стало три (появился
+    поиск по событиям), и перечисление имён пришлось бы дописывать при каждой следующей — то
+    есть о забытом разделе тест узнал бы последним. Проверяется то же свойство, но по реестру
+    вкладок: каждый объявленный раздел получает `hidden` из признака активности.
+    """
     app = _app()
+    start = app.index("const TABS = {")
+    registry = app[start : app.index("};", start)]
+    for view in (".layout", "#searchView", "#simulationView"):
+        assert view in registry, view
+
     start = app.index("function showTab(")
-    block = app[start : app.index("\n}", start)]
-    assert ".layout" in block and "hidden = isSimulation" in block
-    assert "$('#simulationView').hidden = !isSimulation" in block
+    block = app[start : app.index("\n}\n", start)]
+    assert "Object.entries(TABS)" in block
+    assert "hidden = !active" in block
 
 
 def test_time_is_labelled_as_model_everywhere() -> None:
@@ -555,3 +570,61 @@ def test_case_report_is_reachable_from_the_case() -> None:
 
     assert "/export.pdf" in app
     assert 'id="reportButton"' in _index()
+
+# --- Единый поиск, разбор значения, поиск в очереди (P3-4) ------------------
+
+
+def test_events_are_searchable_across_all_sources() -> None:
+    """ТЗ §5: четыре класса источников приведены к одной модели — поиск один, а не по консоли на каждый."""
+    app = _app()
+
+    assert "function runEventSearch(" in app
+    assert "/events/search" in app
+    assert 'id="searchView"' in _index()
+
+
+def test_search_without_any_filter_is_refused() -> None:
+    """Запрос без отбора вернул бы весь принятый поток — тысячу событий ни о чём."""
+    app = _app()
+    start = app.index("async function runEventSearch(")
+    block = app[start : app.index("function showSearchError(", start)]
+
+    assert "keys()" in block
+    assert "весь принятый поток" in block
+
+
+def test_attaching_from_search_still_demands_a_reason() -> None:
+    """Правка состава дела меняет доказательный материал, из какого бы места её ни начали."""
+    app = _app()
+    start = app.index("async function attachFoundEvent(")
+    block = app[start : app.index("// --- Разбор", start)]
+
+    assert "Причина обязательна" in block
+    assert block.index("Причина обязательна") < block.index("api(")
+
+
+def test_decoding_is_done_by_the_product() -> None:
+    """Результат разбора приводится как довод: он обязан совпадать с тем, что видит продукт."""
+    app = _app()
+
+    assert "/enrichment/decode" in app
+    start = app.index("async function runDecode(")
+    block = app[start : app.index('\n}', start)]
+    assert "atob" not in block and "decodeURIComponent" not in block
+
+
+def test_failed_decoding_is_shown_too() -> None:
+    """«Не является base64» — это ответ; молчание выглядит как несработавшая кнопка."""
+    app = _app()
+
+    assert "не разобрано" in app
+
+
+def test_queue_search_can_look_at_the_case_id_and_the_asset() -> None:
+    """Раньше поле искало только заголовок, хотя продукт умеет и то и другое."""
+    app = _app()
+    index = _index()
+
+    assert 'id="queueSearchField"' in index
+    assert "case_id_prefix" in app
+    assert "primary_asset_id" in app
