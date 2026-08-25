@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from takt.infrastructure.http.error_json import error_json_content
 
@@ -42,7 +42,7 @@ class RequestBodySizeLimitMiddleware(BaseHTTPMiddleware):
     без **`Content-Length`** и без chunked — пропуск (как раньше: лимит до чтения тела не применяется).
     """
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         max_b = max_request_body_bytes_from_env()
         if max_b is None or request.method not in _SIZE_METHODS:
             return await call_next(request)

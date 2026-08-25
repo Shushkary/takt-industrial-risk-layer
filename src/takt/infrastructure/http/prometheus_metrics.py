@@ -5,7 +5,7 @@ import os
 import time
 from typing import Any
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -364,7 +364,7 @@ def _route_template(request: Request) -> str:
 class PrometheusMetricsMiddleware(BaseHTTPMiddleware):
     """Счётчик, гистограмма латентности (labels: method, route, status_class) и gauge «в работе» без labels."""
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         try:
             prog = _in_progress_gauge()
             ctr = _http_requests_counter()

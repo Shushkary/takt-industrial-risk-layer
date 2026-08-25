@@ -43,6 +43,7 @@ from takt.application.use_cases.remediation import (
 from takt.application.use_cases.verify_forensic_bundle import VerifyForensicBundleUseCase
 from takt.domain.entities.case import Case
 from takt.domain.entities.event import EventSource, NormalizedEvent
+from takt.domain.ports.audit_engagement_repository import AuditEngagementRepositoryPort
 from takt.infrastructure.config.pipeline import build_assessment_pipeline
 from takt.infrastructure.config.settings_helpers import (
     apply_storage_env_overrides,
@@ -158,26 +159,12 @@ from takt.interface_adapters.api.routers.integrations import register_integratio
 from takt.interface_adapters.api.routers.simulation import register_simulation_routes
 from takt.interface_adapters.api.routers.system import register_system_routes
 from takt.interface_adapters.api.routers.workspace import register_workspace_routes
-from takt.interface_adapters.api.schemas.case_actions import (
-    CaseDecisionResponse,
-    DecisionBody,
-    FormalVerdictConfirmationBody,
-    ManualPermitBody,
-    OperatorActionBody,
-)
 from takt.interface_adapters.api.schemas.cases import (
     AssessResponse,
-    CaseDetail,
-    CasesFullExportResponse,
-    CasesImportBody,
-    CasesImportResponse,
-    CasesStatsResponse,
-    CaseSummary,
 )
 from takt.interface_adapters.api.schemas.errors import MIDDLEWARE_ERROR_OPENAPI
 from takt.interface_adapters.api.schemas.ingest import (
     AssessRequest,
-    BatchAssessResponse,
     EventBatchBody,
     EventIngestBody,
     IpfixIngestBody,
@@ -367,7 +354,8 @@ def create_app() -> FastAPI:
     _ensure_explicit_takt_config_under_project(cfg_path)
     weights = load_risk_weights(cfg_path)
     apply_storage_env_overrides(weights)
-    stor = weights.get("storage") if isinstance(weights.get("storage"), dict) else {}
+    raw_storage = weights.get("storage")
+    stor: dict[str, Any] = raw_storage if isinstance(raw_storage, dict) else {}
     case_backend = str(stor.get("backend", "memory")).strip().lower()
     app.state.case_storage_backend = "sqlite" if case_backend == "sqlite" else "memory"
     app.state.expected_behavior_backend = app.state.case_storage_backend
@@ -416,6 +404,7 @@ def create_app() -> FastAPI:
     remediation_uc = RecordRemediationAttemptUseCase(repo, default_clock, default_id_provider)
     remediation_list_uc = ListRemediationAttemptsUseCase(repo)
     cases_query_service = CasesQueryService(repo, default_clock)
+    audit_engagement_store: AuditEngagementRepositoryPort
     if isinstance(repo, SqliteCaseStore):
         audit_engagement_store = SqliteAuditEngagementStore(repo.database_path)
     else:
@@ -436,10 +425,12 @@ def create_app() -> FastAPI:
     app.state.baseline = baseline
     app.state.audit_engagement_store = audit_engagement_store
     app.state.last_dq = None
-    sw = weights.get("siem_webhook") if isinstance(weights.get("siem_webhook"), dict) else {}
+    raw_webhook = weights.get("siem_webhook")
+    sw: dict[str, Any] = raw_webhook if isinstance(raw_webhook, dict) else {}
     raw_prefixes = sw.get("allowed_url_prefixes")
     app.state.siem_webhook_prefixes = list(raw_prefixes) if isinstance(raw_prefixes, list) else []
-    exp = weights.get("export") if isinstance(weights.get("export"), dict) else {}
+    raw_export = weights.get("export")
+    exp: dict[str, Any] = raw_export if isinstance(raw_export, dict) else {}
     wh_retries, wh_backoff = siem_webhook_retries(weights)
     app.state.webhook_retries = wh_retries
     app.state.webhook_backoff_sec = wh_backoff
@@ -673,12 +664,6 @@ def create_app() -> FastAPI:
         compliance_facade=compliance_facade,
         cases_query_service=cases_query_service,
         offset_limit_link_header=offset_limit_link_header,
-        case_summary_model=CaseSummary,
-        case_detail_model=CaseDetail,
-        cases_stats_model=CasesStatsResponse,
-        cases_full_export_model=CasesFullExportResponse,
-        cases_import_body_model=CasesImportBody,
-        cases_import_response_model=CasesImportResponse,
         case_to_detail=case_to_detail,
         decision_brief_to_detail=decision_brief_to_detail,
         domain_case_from_detail=domain_case_from_detail,
@@ -687,22 +672,8 @@ def create_app() -> FastAPI:
         formal_verdict_confirmation_uc=formal_verdict_confirmation_uc,
         decision_uc=decision_uc,
         case_actions_facade=case_actions_facade,
-        manual_permit_body_model=ManualPermitBody,
-        operator_action_body_model=OperatorActionBody,
-        formal_verdict_confirmation_body_model=FormalVerdictConfirmationBody,
-        decision_body_model=DecisionBody,
-        case_decision_response_model=CaseDecisionResponse,
         manual_permit_to_detail=manual_permit_to_detail,
         formal_verdict_record_to_detail=formal_verdict_record_to_detail,
-        assess_request_model=AssessRequest,
-        assess_response_model=AssessResponse,
-        event_ingest_body_model=EventIngestBody,
-        syslog_rfc5424_ingest_body_model=SyslogRfc5424IngestBody,
-        snmp_trap_ingest_body_model=SnmpTrapIngestBody,
-        netflow_ingest_body_model=NetflowIngestBody,
-        ipfix_ingest_body_model=IpfixIngestBody,
-        event_batch_body_model=EventBatchBody,
-        batch_assess_response_model=BatchAssessResponse,
         manual_correlation_uc=manual_correlation_uc,
         case_findings_uc=case_findings_uc,
         decoder_service=decoder_service,

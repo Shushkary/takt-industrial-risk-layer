@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from takt.infrastructure.http.error_json import error_json_content
 from takt.infrastructure.security.api_keys import ApiKeyEntry, api_key_entries_from_env, resolve_api_key
@@ -53,7 +53,7 @@ class OptionalApiKeyMiddleware(BaseHTTPMiddleware):
     Ошибка аутентификации: **401 Unauthorized**. Ошибка авторизации (роль не подходит): **403 Forbidden**.
     """
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
         if _is_public_path(path):
             return await call_next(request)

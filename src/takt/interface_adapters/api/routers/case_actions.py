@@ -8,32 +8,25 @@ from takt.infrastructure.http.prometheus_metrics import (
     record_business_verdict_transition,
 )
 from takt.infrastructure.security.request_actor import security_actor_from_request
-from takt.interface_adapters.api.dependencies import ApiContext
+from takt.interface_adapters.api.dependencies import ApiContext, require
+from takt.interface_adapters.api.schemas.case_actions import (
+    CaseDecisionResponse,
+    DecisionBody,
+    FormalVerdictConfirmationBody,
+    ManualPermitBody,
+    OperatorActionBody,
+)
 
 
 def register_case_action_routes(ctx: ApiContext) -> None:
     app = ctx.app
-    if any(
-        item is None
-        for item in (
-            ctx.case_actions_facade,
-            ctx.manual_permit_body_model,
-            ctx.operator_action_body_model,
-            ctx.formal_verdict_confirmation_body_model,
-            ctx.decision_body_model,
-            ctx.case_decision_response_model,
-            ctx.manual_permit_to_detail,
-            ctx.formal_verdict_record_to_detail,
-        )
-    ):
-        raise RuntimeError("case action dependencies are required")
-
-    facade = ctx.case_actions_facade
-    ManualPermitBody = ctx.manual_permit_body_model
-    OperatorActionBody = ctx.operator_action_body_model
-    FormalVerdictConfirmationBody = ctx.formal_verdict_confirmation_body_model
-    DecisionBody = ctx.decision_body_model
-    CaseDecisionResponse = ctx.case_decision_response_model
+    # Схемы тел запросов — импортом: через переменную их нельзя поставить в аннотацию
+    # параметра, а именно из аннотации FastAPI строит разбор и OpenAPI.
+    facade = require(ctx.case_actions_facade, "case_actions_facade")
+    manual_permit_to_detail = require(ctx.manual_permit_to_detail, "manual_permit_to_detail")
+    formal_verdict_record_to_detail = require(
+        ctx.formal_verdict_record_to_detail, "formal_verdict_record_to_detail"
+    )
 
     @app.post("/cases/{case_id}/manual-permits", tags=["Cases"])
     def post_manual_permit(case_id: str, body: ManualPermitBody, request: Request):
@@ -60,7 +53,7 @@ def register_case_action_routes(ctx: ApiContext) -> None:
             code = 400 if "work_order_number" in detail else 404
             raise HTTPException(status_code=code, detail=detail) from e
         _record_verdict_transition(case_id)
-        return {"permit": ctx.manual_permit_to_detail(permit).model_dump()}
+        return {"permit": manual_permit_to_detail(permit).model_dump()}
 
     def _record_verdict_transition(case_id: str) -> None:
         """Снятая неопределённость после добора организационного документа.
@@ -116,7 +109,7 @@ def register_case_action_routes(ctx: ApiContext) -> None:
             code = 400 if "unknown case" not in detail else 404
             raise HTTPException(status_code=code, detail=detail) from e
         record_business_verdict_transition(prev=record.prev, next_value=record.next)
-        return {"case_id": case_id, "record": ctx.formal_verdict_record_to_detail(record).model_dump()}
+        return {"case_id": case_id, "record": formal_verdict_record_to_detail(record).model_dump()}
 
     @app.get("/cases/{case_id}/operator-actions/history", tags=["Cases"])
     def get_operator_action_history(case_id: str):
@@ -134,7 +127,7 @@ def register_case_action_routes(ctx: ApiContext) -> None:
         return {
             "case_id": case_id,
             "entries": [
-                ctx.formal_verdict_record_to_detail(entry).model_dump() if hasattr(entry, "ts") else entry
+                formal_verdict_record_to_detail(entry).model_dump() if hasattr(entry, "ts") else entry
                 for entry in entries
             ],
         }

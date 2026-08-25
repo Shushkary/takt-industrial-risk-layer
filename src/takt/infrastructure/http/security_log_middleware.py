@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -29,7 +29,7 @@ def _present_auth_headers(request: Request) -> dict[str, bool]:
 class SecurityLogMiddleware(BaseHTTPMiddleware):
     """Журнал безопасности: **auth_failure** и **http_mutating** (ФСТЭК 239/31)."""
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response: Response = await call_next(request)
         path = request.url.path
         method = request.method.upper()

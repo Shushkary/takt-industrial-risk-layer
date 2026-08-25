@@ -99,7 +99,7 @@ def default_resolve_tcp_addrs(hostname: str, port: int) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for _fam, _ty, _proto, _canon, sockaddr in infos:
-        ip = sockaddr[0]
+        ip = str(sockaddr[0])
         if ip not in seen:
             seen.add(ip)
             out.append(ip)
@@ -139,13 +139,15 @@ def _with_retries(
     retries: int,
     backoff_sec: float,
 ) -> T:
-    for attempt in range(max(1, retries)):
+    attempts = max(1, retries)
+    for attempt in range(attempts):
         try:
             return op()
         except httpx.HTTPError:
-            if attempt + 1 >= retries:
+            if attempt + 1 >= attempts:
                 raise
             time.sleep(backoff_sec)
+    raise RuntimeError("цикл повторов завершился без результата и без исключения")
 
 
 async def post_case_to_webhook(
@@ -183,7 +185,7 @@ async def post_case_to_webhook(
         pinned_ip=pinned,
     )
     host_header = host if port == (443 if scheme == "https" else 80) else f"{host}:{port}"
-    verify = True
+    verify: bool | ssl.SSLContext = True
     if scheme == "https" and pinned != host:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
@@ -242,7 +244,7 @@ def post_case_to_webhook_sync(
         pinned_ip=pinned,
     )
     host_header = host if port == (443 if scheme == "https" else 80) else f"{host}:{port}"
-    verify = True
+    verify: bool | ssl.SSLContext = True
     if scheme == "https" and pinned != host:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False

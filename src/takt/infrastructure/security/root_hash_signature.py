@@ -71,7 +71,7 @@ class RootHashSignatureAdapter:
                 )
                 response.raise_for_status()
                 body = response.json()
-                payload = {
+                payload: dict[str, object] = {
                     "algorithm": str(body.get("algorithm", "GOST-detached")),
                     "root_hash_sha256": root_hash_sha256,
                     "signature": str(body.get("signature", "")),

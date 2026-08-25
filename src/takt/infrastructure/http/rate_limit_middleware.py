@@ -7,9 +7,9 @@ import threading
 import time
 from typing import Literal
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from takt.infrastructure.http.error_json import error_json_content
 from takt.infrastructure.http.prometheus_metrics import record_rate_limit_rejection
@@ -124,7 +124,7 @@ class InMemoryRateLimitMiddleware(BaseHTTPMiddleware):
     Опционально **`TAKT_RATE_LIMIT_IP_HEADER`**: доверенный заголовок клиентского IP (перед **`X-Forwarded-For`**).
     """
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         limit = rate_limit_per_minute_from_env()
         if limit is None:
             return await call_next(request)
@@ -135,8 +135,8 @@ class InMemoryRateLimitMiddleware(BaseHTTPMiddleware):
         ip = client_ip_for_rate_limit(request)
         now = time.time()
         win = int(now // 60)
-        lock: threading.Lock = request.app.state.rate_limit_lock  # type: ignore[attr-defined]
-        store: dict[str, tuple[int, int]] = request.app.state.rate_limit_buckets  # type: ignore[attr-defined]
+        lock: threading.Lock = request.app.state.rate_limit_lock
+        store: dict[str, tuple[int, int]] = request.app.state.rate_limit_buckets
         cap = rate_limit_max_tracked_ips_from_env()
 
         reset_ts = str((win + 1) * 60)

@@ -64,7 +64,7 @@ def patch_openapi_with_takt_api_key(schema: dict[str, Any]) -> None:
     if not openapi_api_key_configured():
         return
     http_methods = frozenset({"get", "post", "put", "patch", "delete", "head", "options"})
-    req = {"TaktApiKey": []}
+    req: dict[str, list[str]] = {"TaktApiKey": []}
     for path_key, path_item in schema.get("paths", {}).items():
         if is_openapi_public_path(path_key):
             continue
@@ -92,4 +92,7 @@ def attach_custom_openapi(app: FastAPI, *, logger: logging.Logger | None = None)
         app.openapi_schema = openapi_schema
         return app.openapi_schema
 
-    app.openapi = custom_openapi
+    # Подмена метода — штатный приём FastAPI для собственной схемы (см. Custom OpenAPI в
+    # документации). Проверке типов присваивание метода экземпляру запрещено, здесь оно
+    # намеренное и единственное.
+    app.openapi = custom_openapi  # type: ignore[method-assign]

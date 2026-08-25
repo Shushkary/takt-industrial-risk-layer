@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
+from starlette.responses import Response
 
 
 def _strict_transport_security() -> str | None:
@@ -40,7 +41,7 @@ def hsts_preload_enabled_from_env() -> bool:
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Базовые заголовки безопасности для всех ответов API."""
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")

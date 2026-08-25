@@ -161,7 +161,9 @@ class SqliteRecentEventStore:
                 (entity_type, entity_id),
             ).fetchall()
         filter_name = {"host": "host_id", "user": "user_id", "process": "process_id"}[entity_type]
-        events, total = self.search_events(**{filter_name: entity_id}, limit=event_limit)
+        # Имя фильтра выбирается по типу сущности, поэтому аргумент собирается словарём.
+        entity_filter: dict[str, Any] = {filter_name: entity_id}
+        events, total = self.search_events(limit=event_limit, **entity_filter)
         count = int(row["event_count"])
         if count == 1:
             typicality, explanation = "first_seen", "entity has exactly one observed event"

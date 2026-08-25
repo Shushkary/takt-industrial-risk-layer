@@ -3,9 +3,24 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from fastapi import FastAPI
+
+_T = TypeVar("_T")
+
+
+def require(value: _T | None, name: str) -> _T:
+    """Обязательная зависимость роутера — или отказ с именем той, которой не хватило.
+
+    Возвращает значение, а не проверяет молча: дальше по коду тип уже сужен, и обращение к
+    `None` становится невозможным по построению. Прежняя сборная проверка
+    `any(item is None for item in (...))` давала тот же отказ на старте, но не сужала тип и
+    не называла недостающую зависимость.
+    """
+    if value is None:
+        raise RuntimeError(f"router dependency is required: {name}")
+    return value
 
 """FastAPI dependency boundary for the API layer.
 
@@ -50,13 +65,7 @@ class ApiContext:
     remediation_list_uc: Any | None = None
     compliance_facade: Any | None = None
     cases_query_service: Any | None = None
-    offset_limit_link_header: Callable[..., str] | None = None
-    case_summary_model: Any | None = None
-    case_detail_model: Any | None = None
-    cases_stats_model: Any | None = None
-    cases_full_export_model: Any | None = None
-    cases_import_body_model: Any | None = None
-    cases_import_response_model: Any | None = None
+    offset_limit_link_header: Callable[..., str | None] | None = None
     case_to_detail: Callable[[Any], Any] | None = None
     decision_brief_to_detail: Callable[[Any], Any] | None = None
     domain_case_from_detail: Callable[[Any], Any] | None = None
@@ -65,22 +74,8 @@ class ApiContext:
     formal_verdict_confirmation_uc: Any | None = None
     decision_uc: Any | None = None
     case_actions_facade: Any | None = None
-    manual_permit_body_model: Any | None = None
-    operator_action_body_model: Any | None = None
-    formal_verdict_confirmation_body_model: Any | None = None
-    decision_body_model: Any | None = None
-    case_decision_response_model: Any | None = None
     manual_permit_to_detail: Callable[[Any], Any] | None = None
     formal_verdict_record_to_detail: Callable[[Any], Any] | None = None
-    assess_request_model: Any | None = None
-    assess_response_model: Any | None = None
-    event_ingest_body_model: Any | None = None
-    syslog_rfc5424_ingest_body_model: Any | None = None
-    snmp_trap_ingest_body_model: Any | None = None
-    netflow_ingest_body_model: Any | None = None
-    ipfix_ingest_body_model: Any | None = None
-    event_batch_body_model: Any | None = None
-    batch_assess_response_model: Any | None = None
     manual_correlation_uc: Any | None = None
     case_findings_uc: Any | None = None
     decoder_service: Any | None = None

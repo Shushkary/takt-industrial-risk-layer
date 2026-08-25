@@ -4,8 +4,9 @@ import logging
 import os
 import time
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
+from starlette.responses import Response
 
 _LOG = logging.getLogger("takt.api")
 
@@ -25,7 +26,7 @@ def slow_log_threshold_seconds() -> float | None:
 class ProcessTimeMiddleware(BaseHTTPMiddleware):
     """Добавляет **X-Process-Time**: длительность обработки запроса в секундах (строка float)."""
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         t0 = time.perf_counter()
         response = await call_next(request)
         dt = time.perf_counter() - t0

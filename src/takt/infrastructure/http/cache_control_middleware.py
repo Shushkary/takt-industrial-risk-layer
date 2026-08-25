@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
+from starlette.responses import Response
 
 
 def catalog_cache_max_age_sec() -> int | None:
@@ -32,7 +33,7 @@ _CATALOG_GET_PATHS: frozenset[str] = frozenset(
 class CatalogCacheControlMiddleware(BaseHTTPMiddleware):
     """Короткий **Cache-Control** для каталожных **GET**, не зависящих от сессии (по умолчанию **60** с)."""
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
         if request.method != "GET":
             return response
@@ -48,7 +49,7 @@ class CatalogCacheControlMiddleware(BaseHTTPMiddleware):
 class CasesPrivateNoStoreMiddleware(BaseHTTPMiddleware):
     """**GET** по **`/cases…`** — данные кейсов; по умолчанию **`private, no-store`**, чтобы прокси не кэшировали."""
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
         if request.method != "GET":
             return response

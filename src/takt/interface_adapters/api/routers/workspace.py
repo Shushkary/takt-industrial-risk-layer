@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from takt.application.use_cases.reconstruct_chain import reconstruct_attack_chain
-from takt.interface_adapters.api.dependencies import ApiContext
+from takt.interface_adapters.api.dependencies import ApiContext, require
 
 
 def _workspace_event(event) -> dict:
@@ -56,7 +56,7 @@ def register_workspace_routes(ctx: ApiContext) -> None:
         events = store.events_by_ids(case.normalized_event_ids) if store is not None else []
         ordered = sorted(events, key=lambda item: (item.observed_at, item.event_id))
         return {
-            "case": ctx.case_to_detail(case).model_dump(),
+            "case": require(ctx.case_to_detail, "case_to_detail")(case).model_dump(),
             "events": [_workspace_event(event) for event in ordered],
             "timeline": [
                 {

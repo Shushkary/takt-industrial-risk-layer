@@ -4,8 +4,9 @@ import os
 import re
 import uuid
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
+from starlette.responses import Response
 
 _HEADER_DEFAULT = "x-request-id"
 _MAX_HEADER_NAME_LEN = 64
@@ -43,7 +44,7 @@ def request_id_alternate_header_from_env() -> str | None:
 class RequestIdMiddleware(BaseHTTPMiddleware):
     """Прокидывает или генерирует **X-Request-ID** (в ответе и `request.state`)."""
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         rid = ""
         for name in request_id_incoming_header_names():
             rid = request.headers.get(name, "").strip()

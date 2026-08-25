@@ -9,36 +9,28 @@ from fastapi import HTTPException, Query, Request, Response
 from pydantic import ValidationError
 
 from takt.application.use_cases.cases_query_service import CasesListQuery
-from takt.interface_adapters.api.dependencies import ApiContext
-from takt.interface_adapters.api.schemas.cases import DecisionBriefDetail
+from takt.interface_adapters.api.dependencies import ApiContext, require
+from takt.interface_adapters.api.schemas.cases import (
+    CaseDetail,
+    CasesFullExportResponse,
+    CasesImportBody,
+    CasesImportResponse,
+    CasesStatsResponse,
+    CaseSummary,
+    DecisionBriefDetail,
+)
 
 
 def register_case_routes(ctx: ApiContext) -> None:
     app = ctx.app
-    if any(
-        item is None
-        for item in (
-            ctx.case_summary_model,
-            ctx.case_detail_model,
-            ctx.cases_stats_model,
-            ctx.cases_full_export_model,
-            ctx.cases_import_body_model,
-            ctx.cases_import_response_model,
-            ctx.cases_query_service,
-            ctx.case_to_detail,
-            ctx.decision_brief_to_detail,
-            ctx.domain_case_from_detail,
-            ctx.offset_limit_link_header,
-        )
-    ):
-        raise RuntimeError("case router dependencies are required")
-
-    CaseSummary = ctx.case_summary_model
-    CaseDetail = ctx.case_detail_model
-    CasesStatsResponse = ctx.cases_stats_model
-    CasesFullExportResponse = ctx.cases_full_export_model
-    CasesImportBody = ctx.cases_import_body_model
-    CasesImportResponse = ctx.cases_import_response_model
+    # Схемы берутся импортом, а не из контекста: это те же самые классы (app.py импортирует
+    # их оттуда же и просто передаёт дальше), но через переменную их нельзя использовать
+    # как тип — `response_model=list[CaseSummary]` тогда не проверяется.
+    query_service = require(ctx.cases_query_service, "cases_query_service")
+    case_to_detail = require(ctx.case_to_detail, "case_to_detail")
+    decision_brief_to_detail = require(ctx.decision_brief_to_detail, "decision_brief_to_detail")
+    domain_case_from_detail = require(ctx.domain_case_from_detail, "domain_case_from_detail")
+    offset_limit_link_header = require(ctx.offset_limit_link_header, "offset_limit_link_header")
 
     @app.get(
         "/cases",
@@ -102,7 +94,7 @@ def register_case_routes(ctx: ApiContext) -> None:
         offset: int = Query(default=0, ge=0, description="Смещение после сортировки"),
     ):
         try:
-            result = ctx.cases_query_service.list_cases(
+            result = query_service.list_cases(
                 CasesListQuery(
                     status=status,
                     risk_class=risk_class,
@@ -137,7 +129,7 @@ def register_case_routes(ctx: ApiContext) -> None:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         response.headers["X-Total-Count"] = str(result.total_before_slice)
-        link = ctx.offset_limit_link_header(request, offset=offset, limit=limit, total_before_slice=result.total_before_slice)
+        link = offset_limit_link_header(request, offset=offset, limit=limit, total_before_slice=result.total_before_slice)
         if link:
             response.headers["Link"] = link
         return [
@@ -163,7 +155,7 @@ def register_case_routes(ctx: ApiContext) -> None:
 
     @app.get("/cases/stats", response_model=CasesStatsResponse, tags=["Cases"])
     def cases_stats():
-        stats = ctx.cases_query_service.stats()
+        stats = query_service.stats()
         return CasesStatsResponse(
             total=stats.total,
             open=stats.open,
@@ -207,10 +199,10 @@ def register_case_routes(ctx: ApiContext) -> None:
         offset: int = Query(default=0, ge=0, description="Смещение в отсортированном списке (created_at desc)"),
         limit: int | None = Query(default=None, ge=1, le=10_000, description="Макс. число кейсов в ответе (по умолчанию — все от offset; не больше 10000)"),
     ):
-        result = ctx.cases_query_service.full_export(offset=offset, limit=limit)
+        result = query_service.full_export(offset=offset, limit=limit)
         total = result.total
         response.headers["X-Total-Count"] = str(total)
-        exp_link = ctx.offset_limit_link_header(request, offset=offset, limit=limit, total_before_slice=total)
+        exp_link = offset_limit_link_header(request, offset=offset, limit=limit, total_before_slice=total)
         if exp_link:
             response.headers["Link"] = exp_link
         return CasesFullExportResponse(
@@ -219,7 +211,7 @@ def register_case_routes(ctx: ApiContext) -> None:
             total_in_repo=total,
             offset=result.offset,
             limit=result.limit,
-            cases=[ctx.case_to_detail(c) for c in result.items],
+            cases=[case_to_detail(c) for c in result.items],
         )
 
     @app.post("/cases/import/full.json", response_model=CasesImportResponse, tags=["Export"])
@@ -240,24 +232,24 @@ def register_case_routes(ctx: ApiContext) -> None:
         parsed = []
         for d in body.cases:
             try:
-                parsed.append(ctx.domain_case_from_detail(d))
+                parsed.append(domain_case_from_detail(d))
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
 
-        result = ctx.cases_query_service.import_cases(parsed, mode=body.mode)
+        result = query_service.import_cases(parsed, mode=body.mode)
         return CasesImportResponse(imported=result.imported, skipped=result.skipped, mode=result.mode)
 
     @app.get("/cases/{case_id}", response_model=CaseDetail, tags=["Cases"])
     def get_case(case_id: str):
-        c = ctx.cases_query_service.get_case_or_none(case_id)
+        c = query_service.get_case_or_none(case_id)
         if c is None:
             raise HTTPException(status_code=404, detail="case not found")
-        return ctx.case_to_detail(c)
+        return case_to_detail(c)
 
     @app.get("/cases/{case_id}/decision-brief", response_model=DecisionBriefDetail, tags=["Cases"])
     def get_case_decision_brief(case_id: str):
         """Сводка для лица, принимающего решение: без разбора карточки аналитика."""
-        c = ctx.cases_query_service.get_case_or_none(case_id)
+        c = query_service.get_case_or_none(case_id)
         if c is None:
             raise HTTPException(status_code=404, detail="case not found")
-        return ctx.decision_brief_to_detail(c)
+        return decision_brief_to_detail(c)
