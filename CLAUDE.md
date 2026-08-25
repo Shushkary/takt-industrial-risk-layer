@@ -102,7 +102,7 @@ uvicorn takt.interface_adapters.api.main:app --reload --port 8090
 
 Полезные скрипты: `export_case_scenario.py`, `eval_detection.py`, `eval_correlation.py`, `verify_audit_ledger.py`,
 `verify_operation_ledger.py`, `generate_sbom.py`, `release_finalize.py`, `build_release_package.py`,
-`close_operational_tails.py`.
+`close_operational_tails.py`, `serve_pt_arm.py` (локальный стенд АРМ: статика + прокси `/api/*`).
 
 ## Правила разработки
 

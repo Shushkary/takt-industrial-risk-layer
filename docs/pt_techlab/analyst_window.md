@@ -51,14 +51,30 @@ python -m takt.tools.assemble_incident --case-id INC-005 --seed host:backup-01 -
 
 ## 3. Backend и АРМ
 
+Две команды, по одной на окно терминала. Backend:
+
 ```powershell
 python -m uvicorn takt.interface_adapters.api.main:app --host 127.0.0.1 --port 8090
 ```
 
-АРМ — статические файлы `frontend/takt-pt-arm`, раздаются веб-сервером по пути, где
-`/<путь>/api/` проксируется на backend (см. `nginx.takt-pt-arm.conf`). Для локальной
-проверки без nginx достаточно любого статического сервера с тем же прокси; адрес API
+АРМ:
+
+```powershell
+python -m scripts.serve_pt_arm
+```
+
+`serve_pt_arm` раздаёт `frontend/takt-pt-arm` на `127.0.0.1:8091` и проксирует `/api/*` на
+backend, снимая префикс: локальный backend поднят без него. Каталог, порт и адрес backend
+меняются ключами `--root`, `--port`, `--api-base`. Если backend не поднят, АРМ получает
+`502 backend_unreachable`, а не зависает. Скрипт отказывается стартовать, когда в каталоге нет
+`app.min.js`: `index.html` подключает сборку, а не исходник.
+
+На боевом контуре статику раздаёт nginx (`nginx.takt-pt-arm.conf`): там АРМ живёт на подпути
+`/takt_pt_arm/`, а `/takt_pt_arm/api/` проксируется на backend с префиксом `/api`. Адрес API
 можно переопределить, задав `window.TAKT_API_BASE` до загрузки `app.min.js`.
+
+Оба процесса живут ровно столько, сколько открыт терминал: стенд поднимается из репозитория
+по этим двум командам, а не восстанавливается по памяти.
 
 После правки `app.js` или `styles.css` обязательна пересборка `node build-production.mjs`
 и подъём параметра `?v=` в `index.html` и `app.js`.
