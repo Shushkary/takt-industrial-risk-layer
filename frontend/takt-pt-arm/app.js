@@ -154,6 +154,13 @@ const HELP = {
     action: 'Идти сверху вниз и на каждом шаге отвечать, чем событие вызвано. Клик по узлу или учётной записи открывает карточку сущности. Для адресов карточки нет: история хранится по узлам, учётным записям и процессам.',
     doc: 'docs/pt_techlab/correlation_quality.md',
   },
+  relink: {
+    title: 'Корректировка состава дела',
+    what: 'Четыре действия над составом: отцепить событие от дела, прицепить событие со стороны, присоединить другое дело целиком, выделить отмеченные события в отдельное дело.',
+    source: 'Корреляция — предположение продукта, и продукт этого не скрывает: расширение до уровня узла намеренно добирает штатную активность тех же узлов. Прицепить можно только событие из списка, который вернул сам продукт: набранный вручную идентификатор проверить нечем, и в деле осталась бы ссылка в никуда.',
+    action: 'Отцеплять добранное расширением, если оно объяснено штатной работой, и присоединять дела, которые оказались одним инцидентом. Причина обязательна и уходит в журнал дела: состав дела — это доказательный материал, и по журналу должно быть видно, кто и почему его изменил. Действие не отменяется — журнал только дополняется.',
+    doc: 'docs/pt_techlab/correlation_quality.md',
+  },
   evidence: {
     title: 'Основание попадания события в кейс',
     what: '«Ядро» — событие совпало с отличительной сущностью инцидента: учётной записью, адресом или артефактом, по которым кейс собирался. «Расширение» — событие добрано по узлу за окно инцидента и собственного признака атаки не имеет.',
@@ -661,6 +668,7 @@ function renderCase(workspace) {
   currentCaseTransitions = item.allowed_status_transitions || [];
   lastWorkspaceEvents = workspace.events || [];
   currentCaseEventCount = lastWorkspaceEvents.length;
+  resetRelink();
   $('#staleCaseBanner').hidden = true;
   closeStatusForm();
   $('#caseId').textContent = item.case_id || '—';
@@ -1023,10 +1031,14 @@ function paintChain() {
   // показывает «—», и счётчик обязан говорить то же самое.
   let coreCount = 0;
   let expandedCount = 0;
+  let manualCount = 0;
   let unknownCount = 0;
   for (const event of ordered) {
     const evidence = lastChainEvidence.get(event.event_id);
     if (!evidence) unknownCount += 1;
+    // Признак ручной правки берётся из ответа продукта (`manual`), а не из кода основания:
+    // список ручных оснований принадлежит продукту и здесь не повторяется.
+    else if (evidence.manual) manualCount += 1;
     else if (isPivotRule(evidence.rule)) coreCount += 1;
     else expandedCount += 1;
   }
@@ -1037,6 +1049,12 @@ function paintChain() {
   if (!separable) toggle.checked = false;
   const coreOnly = toggle.checked;
 
+  // Отметки рисуются только тогда, когда роль вправе править состав: иначе колонка занимала
+  // бы место и предлагала действие, которое продукт отклонит.
+  const relink = relinkAllowed();
+  $('#relinkPanel').hidden = !relink;
+  $('#relinkHeadCell').hidden = !relink;
+
   let shown = 0;
   for (const event of ordered) {
     const evidence = lastChainEvidence.get(event.event_id);
@@ -1046,7 +1064,11 @@ function paintChain() {
     const entities = event.entities || {};
     const row = document.createElement('tr');
     if (evidence && !isCore) row.className = 'row-expanded';
+    const mark = relink
+      ? `<td class="relink-cell"><input type="checkbox" class="relink-mark" data-event-id="${escapeHtml(event.event_id)}"${selectedChainEvents.has(event.event_id) ? ' checked' : ''} aria-label="Отметить событие для корректировки состава дела" /></td>`
+      : '';
     row.innerHTML = `
+      ${mark}
       <td class="mono">${escapeHtml(utc(event.observed_at))}</td>
       <td>${evidenceCell(evidence)}</td>
       <td><span class="chip sm" title="${escapeHtml(`${term('event_source', event.source)} (${event.source})`)}">${escapeHtml(term('event_source', event.source))}</span></td>
@@ -1059,11 +1081,271 @@ function paintChain() {
   }
   const parts = [`Показано ${shown} из ${ordered.length}`];
   if (coreCount || expandedCount) parts.push(`ядро ${coreCount}`, `расширение ${expandedCount}`);
+  // Правка аналитика считается отдельно: назвать её расширением значило бы приписать
+  // решение человека механизму сборки.
+  if (manualCount) parts.push(`правки аналитика ${manualCount}`);
   if (unknownCount) parts.push(`без основания ${unknownCount}`);
   $('#chainCount').textContent = parts.join(' · ');
   body.querySelectorAll('.entity-link').forEach((button) => {
     button.addEventListener('click', () => openEntity(button.dataset.entityType, button.dataset.entityId));
   });
+  body.querySelectorAll('.relink-mark').forEach((box) => {
+    box.addEventListener('change', () => {
+      if (box.checked) selectedChainEvents.add(box.dataset.eventId);
+      else selectedChainEvents.delete(box.dataset.eventId);
+      updateRelinkState();
+    });
+  });
+  // Отмеченное событие могло уйти из дела предыдущим действием: держать его в отметках
+  // значило бы отправить продукту идентификатор, которого в деле уже нет.
+  const present = new Set(ordered.map((event) => event.event_id));
+  for (const id of [...selectedChainEvents]) {
+    if (!present.has(id)) selectedChainEvents.delete(id);
+  }
+  updateRelinkState();
+}
+
+// --- Ручная корректировка состава дела (ТЗ §5.2) ---------------------------
+//
+// Корреляция — машинное предположение, и продукт этого не скрывает: расширение до уровня
+// узла намеренно добирает штатную активность. Без возможности поправить состав аналитик мог
+// только согласиться с автоматикой или отказаться от дела целиком.
+//
+// Четыре действия продукта: отцепить событие, прицепить событие, присоединить дело, выделить
+// часть событий в отдельное дело. Все требуют причину и все записываются в append-only журнал
+// дела: корректировка состава меняет доказательный материал, и по журналу должно быть видно,
+// кто и почему его изменил.
+//
+// Доступно роли второй линии. Право приходит из `GET /session`, а не решается здесь.
+
+let selectedChainEvents = new Set();
+
+function relinkAllowed() {
+  return permissions().case_relink;
+}
+
+function resetRelink() {
+  selectedChainEvents = new Set();
+  $('#relinkReason').value = '';
+  $('#relinkError').hidden = true;
+  $('#attachPanel').hidden = true;
+  $('#mergePanel').hidden = true;
+  $('#attachResults').replaceChildren();
+  updateRelinkState();
+}
+
+function updateRelinkState() {
+  const count = selectedChainEvents.size;
+  $('#relinkSelected').textContent = `Событий отмечено: ${count}`;
+  $('#detachButton').disabled = count === 0;
+  // Выделить в отдельное дело можно часть событий, но не все: дело без событий продукт
+  // не примет, а «выделение» всего состава — это переименование, а не разделение.
+  $('#splitButton').disabled = count === 0 || count >= lastChainEvents.length;
+}
+
+function relinkReasonOrWarn() {
+  const reason = $('#relinkReason').value.trim();
+  if (!reason) {
+    showRelinkError('Причина обязательна: она уходит в журнал дела и объясняет правку состава.');
+    $('#relinkReason').focus();
+    return '';
+  }
+  return reason;
+}
+
+function showRelinkError(message) {
+  $('#relinkError').textContent = message;
+  $('#relinkError').hidden = false;
+}
+
+// Отказ продукта по роли читается отдельно: 403 здесь означает не сбой, а то, что действие
+// доступно второй линии.
+function relinkErrorText(error, what) {
+  if (error.status === 403) return 'Недостаточно прав: корректировка состава дела доступна второй линии.';
+  return `${what}: ${error.message}`;
+}
+
+async function afterRelink(message) {
+  toast(message);
+  await openCase(selectedCaseId);
+  await refresh();
+}
+
+async function detachSelected() {
+  const reason = relinkReasonOrWarn();
+  if (!reason || !selectedCaseId) return;
+  const ids = [...selectedChainEvents];
+  const button = $('#detachButton');
+  button.disabled = true;
+  try {
+    // Продукт отцепляет по одному событию за запрос. Порядок сохраняется, чтобы записи в
+    // журнале читались в том же порядке, в каком аналитик отмечал события.
+    for (const eventId of ids) {
+      await api(`/cases/${encodeURIComponent(selectedCaseId)}/events/${encodeURIComponent(eventId)}/detach`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      });
+    }
+    await afterRelink(`Отцеплено событий: ${ids.length}`);
+  } catch (error) {
+    showRelinkError(relinkErrorText(error, 'Событие не отцеплено'));
+    button.disabled = false;
+  }
+}
+
+async function splitSelected() {
+  const reason = relinkReasonOrWarn();
+  if (!reason || !selectedCaseId) return;
+  const ids = [...selectedChainEvents];
+  const button = $('#splitButton');
+  button.disabled = true;
+  try {
+    const result = await api(`/cases/${encodeURIComponent(selectedCaseId)}/split`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, event_ids: ids }),
+    });
+    await afterRelink(`Выделено новое дело ${result && result.case_id ? result.case_id : ''}`.trim());
+  } catch (error) {
+    showRelinkError(relinkErrorText(error, 'Дело не выделено'));
+    button.disabled = false;
+  }
+}
+
+// --- Прицепить событие -----------------------------------------------------
+//
+// Идентификатор события набрать нельзя намеренно. Продукт принимает любой идентификатор, в
+// том числе несуществующий, и такое событие останется в деле как ссылка в никуда. Поэтому
+// прицепить можно только то, что продукт сам вернул в ответе на поиск.
+
+function caseEntityOptions() {
+  const options = new Map();
+  for (const event of lastWorkspaceEvents) {
+    const entities = event.entities || {};
+    if (entities.host_id) options.set(`host_id:${entities.host_id}`, `${term('entity_type', 'host')}: ${entities.host_id}`);
+    if (entities.user_id) options.set(`user_id:${entities.user_id}`, `${term('entity_type', 'user')}: ${entities.user_id}`);
+    const address = entities.dst_address || entities.src_address;
+    if (address) options.set(`address:${address}`, `${term('entity_type', 'address')}: ${address}`);
+  }
+  return options;
+}
+
+function openAttachPanel() {
+  $('#mergePanel').hidden = true;
+  $('#attachPanel').hidden = false;
+  const select = $('#attachEntity');
+  select.replaceChildren();
+  const any = document.createElement('option');
+  any.value = '';
+  any.textContent = 'любая сущность дела';
+  select.appendChild(any);
+  for (const [value, title] of caseEntityOptions()) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = title;
+    select.appendChild(option);
+  }
+  $('#attachQuery').focus();
+}
+
+async function runAttachSearch() {
+  const list = $('#attachResults');
+  list.replaceChildren();
+  const params = new URLSearchParams({ limit: '50' });
+  const [field, value] = $('#attachEntity').value.split(/:(.*)/s);
+  if (field && value) params.set(field, value);
+  const text = $('#attachQuery').value.trim();
+  if (text) params.set('text', text);
+  if (!params.has('host_id') && !params.has('user_id') && !params.has('address') && !text) {
+    showRelinkError('Задайте сущность дела или подстроку: без отбора список вернёт весь поток событий.');
+    return;
+  }
+  $('#relinkError').hidden = true;
+  try {
+    const found = (await api(`/events/search?${params.toString()}`)) || [];
+    const inCase = new Set(lastWorkspaceEvents.map((event) => event.event_id));
+    const candidates = found.filter((event) => !inCase.has(event.event_id));
+    if (!candidates.length) {
+      list.innerHTML = '<li class="muted">Событий вне этого дела не нашлось.</li>';
+      return;
+    }
+    for (const event of candidates) {
+      const row = document.createElement('li');
+      row.className = 'attach-row';
+      const entities = event.entities || {};
+      const where = [entities.host_id, entities.user_id].filter(Boolean).join(' · ');
+      row.innerHTML = `<span class="mono small">${escapeHtml(stamp(event.observed_at))}</span> <span class="chip sm">${escapeHtml(term('event_source', event.source))}</span> <span class="mono small">${escapeHtml(event.operation)}</span> <span class="muted small">${escapeHtml(where)}</span>`;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'action inline';
+      button.textContent = 'Прицепить';
+      button.addEventListener('click', () => attachEvent(event.event_id, button));
+      row.appendChild(button);
+      list.appendChild(row);
+    }
+  } catch (error) {
+    showRelinkError(`Поиск событий не выполнен: ${error.message}`);
+  }
+}
+
+async function attachEvent(eventId, button) {
+  const reason = relinkReasonOrWarn();
+  if (!reason || !selectedCaseId) return;
+  button.disabled = true;
+  try {
+    await api(`/cases/${encodeURIComponent(selectedCaseId)}/events/attach`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, event_id: eventId }),
+    });
+    await afterRelink('Событие прицеплено к делу');
+  } catch (error) {
+    showRelinkError(relinkErrorText(error, 'Событие не прицеплено'));
+    button.disabled = false;
+  }
+}
+
+// --- Присоединить дело -----------------------------------------------------
+
+function openMergePanel() {
+  $('#attachPanel').hidden = true;
+  $('#mergePanel').hidden = false;
+  const select = $('#mergeSource');
+  select.replaceChildren();
+  // Список берётся из уже загруженной очереди: набирать идентификатор дела вручную значит
+  // рисковать опечаткой в действии, которое не отменяется.
+  const candidates = cases.filter((item) => item.case_id !== selectedCaseId);
+  if (!candidates.length) {
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'в очереди нет других дел';
+    select.appendChild(empty);
+    $('#mergeSubmit').disabled = true;
+    return;
+  }
+  $('#mergeSubmit').disabled = false;
+  for (const item of candidates) {
+    const option = document.createElement('option');
+    option.value = item.case_id;
+    option.textContent = `${item.case_id} · ${term('risk_class', item.risk_class)} · ${item.title || ''}`.slice(0, 90);
+    select.appendChild(option);
+  }
+}
+
+async function mergeSelectedCase() {
+  const reason = relinkReasonOrWarn();
+  const sourceCaseId = $('#mergeSource').value;
+  if (!reason || !sourceCaseId || !selectedCaseId) return;
+  const button = $('#mergeSubmit');
+  button.disabled = true;
+  try {
+    await api(`/cases/${encodeURIComponent(selectedCaseId)}/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, source_case_id: sourceCaseId }),
+    });
+    await afterRelink(`Дело ${sourceCaseId} присоединено`);
+  } catch (error) {
+    showRelinkError(relinkErrorText(error, 'Дело не присоединено'));
+    button.disabled = false;
+  }
 }
 
 function renderGraph(graph) {
@@ -1578,6 +1860,13 @@ function applyPermissions() {
   $('#findingRoleNote').hidden = canWrite;
   $('#confirmResponseButton').hidden = !canWrite;
   $('#responseRoleNote').hidden = canWrite;
+  const canRelink = permissions().case_relink;
+  $('#relinkPanel').hidden = !canRelink;
+  $('#relinkHeadCell').hidden = !canRelink;
+  if (!canRelink) {
+    $('#attachPanel').hidden = true;
+    $('#mergePanel').hidden = true;
+  }
   if (!canWrite) {
     $('#changeStatusButton').hidden = true;
     $('#statusForm').hidden = true;
@@ -1725,6 +2014,21 @@ document.addEventListener('keydown', (event) => {
   else if (event.key === 'Tab') trapFocus(event);
 });
 
+$('#detachButton').addEventListener('click', detachSelected);
+$('#splitButton').addEventListener('click', splitSelected);
+$('#attachOpen').addEventListener('click', openAttachPanel);
+$('#attachClose').addEventListener('click', () => {
+  $('#attachPanel').hidden = true;
+});
+$('#attachSearch').addEventListener('click', runAttachSearch);
+$('#attachQuery').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') runAttachSearch();
+});
+$('#mergeOpen').addEventListener('click', openMergePanel);
+$('#mergeClose').addEventListener('click', () => {
+  $('#mergePanel').hidden = true;
+});
+$('#mergeSubmit').addEventListener('click', mergeSelectedCase);
 $('#timeZoneToggle').addEventListener('click', toggleTimeZone);
 $('#accessKeyToggle').addEventListener('click', toggleAccessKeyForm);
 $('#accessKeySave').addEventListener('click', saveAccessKey);

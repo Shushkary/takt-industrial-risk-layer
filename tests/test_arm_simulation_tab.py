@@ -361,3 +361,76 @@ def test_nginx_strips_the_api_prefix_like_the_local_stand() -> None:
 
     assert proxy_lines, "в конфигурации не осталось ни одного proxy_pass"
     assert not [line for line in proxy_lines if line.endswith("/api/;")], proxy_lines
+
+# --- Ручная корректировка состава дела, ТЗ §5.2 (P3-1) ----------------------
+
+
+def test_every_correction_of_the_case_is_available_from_the_workstation() -> None:
+    """Четыре действия продукта: отцепить, прицепить, присоединить дело, выделить в отдельное."""
+    app = _app()
+
+    assert "/detach" in app
+    assert "/events/attach" in app
+    assert "/merge" in app
+    assert "/split" in app
+
+
+def test_correction_is_gated_by_the_role_from_the_product() -> None:
+    """Право второй линии приходит из `GET /session`, а не решается в интерфейсе."""
+    app = _app()
+
+    assert "permissions().case_relink" in app
+    assert "function relinkAllowed(" in app
+
+
+def test_no_correction_is_sent_without_a_reason() -> None:
+    """Причина уходит в журнал дела: правка состава меняет доказательный материал.
+
+    Проверяется не наличие поля, а то, что **каждое** действие спрашивает причину перед
+    запросом: забытая проверка в одном из четырёх обработчиков — это запись в append-only
+    журнал без объяснения, и отменить её нельзя.
+    """
+    app = _app()
+
+    assert "function relinkReasonOrWarn(" in app
+    for handler in ("detachSelected", "splitSelected", "attachEvent", "mergeSelectedCase"):
+        start = app.index(f"async function {handler}(")
+        block = app[start : app.index("\n}", start)]
+        assert "relinkReasonOrWarn()" in block, handler
+        # Причина проверяется до запроса, а не после.
+        assert block.index("relinkReasonOrWarn()") < block.index("api("), handler
+
+
+def test_event_to_attach_is_chosen_from_what_the_product_returned() -> None:
+    """Продукт принимает любой идентификатор, включая несуществующий.
+
+    Набранный вручную идентификатор проверить нечем: `GET /events/search` ищет по содержимому
+    события, а не по его идентификатору. Поэтому прицепить можно только событие из ответа
+    продукта — иначе в деле останется ссылка в никуда.
+    """
+    app = _app()
+    index = _index()
+
+    assert "/events/search" in app
+    assert "function runAttachSearch(" in app
+    # Поля для ручного ввода идентификатора события в разметке нет.
+    assert 'id="attachEventId"' not in index
+
+
+def test_case_to_merge_is_chosen_from_the_queue() -> None:
+    """Опечатка в идентификаторе дела — это необратимое действие не над тем делом."""
+    index = _index()
+    app = _app()
+
+    assert '<select id="mergeSource"' in index
+    assert "function openMergePanel(" in app
+    assert "item.case_id !== selectedCaseId" in app
+
+
+def test_manual_correction_is_counted_apart_from_machine_assembly() -> None:
+    """Назвать правку аналитика расширением значило бы приписать решение человека механизму."""
+    app = _app()
+
+    assert "правки аналитика" in app
+    # Признак ручной правки берётся из ответа продукта, а не из списка кодов в интерфейсе.
+    assert "evidence.manual" in app

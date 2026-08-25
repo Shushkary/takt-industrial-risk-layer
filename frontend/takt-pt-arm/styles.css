@@ -1142,3 +1142,84 @@ ol.steps {
   color: var(--text);
   font-family: var(--mono);
 }
+
+/* Корректировка состава дела (ТЗ §5.2). Панель живёт над таблицей цепочки: правка состава
+   и есть работа с этой таблицей, и разносить их по разным местам экрана незачем. */
+.relink,
+.relink-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 12px 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.relink-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.relink-row label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.relink-row input[type='text'],
+.relink-row input[type='search'] {
+  flex: 1 1 220px;
+  min-width: 160px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.relink-row select {
+  max-width: 320px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* Отказ продукта и незаполненная причина видны там же, где нажимали, — не тостом,
+   который исчезнет раньше, чем аналитик поймёт, что произошло. */
+.relink-error {
+  margin: 0;
+  color: var(--crit);
+}
+
+.relink-cell {
+  width: 28px;
+  text-align: center;
+}
+
+.attach-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

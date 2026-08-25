@@ -156,10 +156,50 @@
               </div>
             </div>
             <p id="chainCount" class="muted small pad">—</p>
+
+            <div id="relinkPanel" class="relink" hidden>
+              <div class="relink-row">
+                <span id="relinkSelected" class="muted small">Событий отмечено: 0</span>
+                <button id="detachButton" class="action inline" type="button" disabled>Отцепить от дела</button>
+                <button id="splitButton" class="action inline" type="button" disabled>Выделить в отдельное дело</button>
+                <button id="attachOpen" class="action inline" type="button">Добавить событие</button>
+                <button id="mergeOpen" class="action inline" type="button">Присоединить дело</button>
+                <button class="help sm" type="button" data-help="relink" aria-label="Пояснение: корректировка состава дела">?</button>
+              </div>
+              <div class="relink-row">
+                <label for="relinkReason">Причина</label>
+                <input id="relinkReason" type="text" placeholder="обязательна: она уходит в журнал дела" maxlength="2000" />
+              </div>
+              <p id="relinkError" class="relink-error small" hidden></p>
+            </div>
+
+            <div id="attachPanel" class="relink-form" hidden>
+              <div class="relink-row">
+                <label for="attachQuery">Событие вне дела</label>
+                <select id="attachEntity" aria-label="Отбор по сущности дела"></select>
+                <input id="attachQuery" type="search" placeholder="подстрока в содержимом события" />
+                <button id="attachSearch" class="action inline" type="button">Найти</button>
+                <button id="attachClose" class="action inline" type="button">Закрыть</button>
+              </div>
+              <p id="attachHint" class="muted small">Список строится продуктом по принятым событиям. Прицепить можно только событие из этого списка: набранный вручную идентификатор проверить нечем.</p>
+              <ul id="attachResults" class="plain small"></ul>
+            </div>
+
+            <div id="mergePanel" class="relink-form" hidden>
+              <div class="relink-row">
+                <label for="mergeSource">Присоединяемое дело</label>
+                <select id="mergeSource" aria-label="Дело, которое вливается в открытое"></select>
+                <button id="mergeSubmit" class="action inline" type="button">Присоединить</button>
+                <button id="mergeClose" class="action inline" type="button">Закрыть</button>
+              </div>
+              <p class="muted small">События выбранного дела переходят в открытое, а само оно получает статус «объединено». Действие записывается в журнал обоих дел и не отменяется — журнал только дополняется.</p>
+            </div>
+
             <div class="table-scroll">
               <table class="chain">
                 <thead>
                   <tr>
+                    <th id="relinkHeadCell" scope="col" class="relink-cell" hidden><span class="visually-hidden">Отметка события</span></th>
                     <th scope="col">Время, <span id="chainTimeZone">UTC</span> <button class="help sm" type="button" data-help="time_utc" aria-label="Пояснение: время события">?</button></th>
                     <th scope="col">Основание <button class="help sm" type="button" data-help="evidence" aria-label="Пояснение: основание попадания события в кейс">?</button></th>
                     <th scope="col">Источник <button class="help sm" type="button" data-help="source" aria-label="Пояснение: источник события">?</button></th>
