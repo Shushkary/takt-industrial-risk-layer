@@ -1223,3 +1223,50 @@ ol.steps {
   white-space: nowrap;
   border: 0;
 }
+
+/* Организационный документ (ТЗ §6.3). Форма живёт рядом с блоком «Чего не хватает»:
+   там продукт называет, какого документа не хватает, там же его и прикладывают. */
+.permit-form .permit-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 10px;
+  padding: 0 12px 10px;
+}
+
+.permit-grid label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.permit-grid input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.permit-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px 10px;
+}
+
+#permitList li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+#permitList li:last-child {
+  border-bottom: 0;
+}
+
+.verdict.sm {
+  padding: 1px 6px;
+  font-size: 11px;
+}

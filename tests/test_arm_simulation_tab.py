@@ -434,3 +434,58 @@ def test_manual_correction_is_counted_apart_from_machine_assembly() -> None:
     assert "правки аналитика" in app
     # Признак ручной правки берётся из ответа продукта, а не из списка кодов в интерфейсе.
     assert "evidence.manual" in app
+
+# --- Организационный документ, ТЗ §6.3 (P3-2) -------------------------------
+
+
+def test_the_document_the_case_asks_for_can_be_attached_from_the_same_place() -> None:
+    """Блок «Чего не хватает» называл документ, а приложить его было нечем — тупик на демонстрации."""
+    app = _app()
+    index = _index()
+
+    assert "/manual-permits" in app
+    missing_block = index[index.index('id="missingBlock"') : index.index('id="permitForm"')]
+    assert 'id="permitOpen"' in missing_block
+
+
+def test_permit_form_is_prefilled_from_the_case_it_belongs_to() -> None:
+    """Продукт сверяет документ с активом и операцией дела: набирать их заново — приглашение к опечатке."""
+    app = _app()
+    start = app.index("function openPermitForm(")
+    block = app[start : app.index("\nfunction closePermitForm(", start)]
+
+    assert "primary_asset_id" in block
+    assert "trigger_operation" in block
+    assert "sanctioning_party" in block
+
+
+def test_workstation_does_not_judge_the_document_itself() -> None:
+    """Вердикт обязан быть воспроизводимым: второй расчёт в браузере разошёлся бы с пакетом."""
+    app = _app()
+    start = app.index("async function submitPermitForm(")
+    block = app[start : app.index("\n// Итог сверки", start)]
+
+    for word in ("legitimate", "illegitimate", "undetermined"):
+        assert word not in block, f"интерфейс делает собственный вывод по документу: {word}"
+    assert "term('permit_verdict'" in _app()
+
+
+def test_result_of_the_check_is_shown_right_away() -> None:
+    """Приложить документ и не узнать, снял ли он неопределённость, — работа вслепую."""
+    app = _app()
+
+    assert "function showPermitResult(" in app
+    start = app.index("function showPermitResult(")
+    block = app[start : app.index("\nfunction renderPermits(", start)]
+    assert "rationale" in block
+    assert "counterfactual" in block
+
+
+def test_attached_documents_stay_visible_with_their_checksum() -> None:
+    """По контрольной сумме организационного контекста проверяется, что документ не подменили."""
+    app = _app()
+    index = _index()
+
+    assert "function renderPermits(" in app
+    assert "organizational_context_sha256" in app
+    assert 'id="permitList"' in index

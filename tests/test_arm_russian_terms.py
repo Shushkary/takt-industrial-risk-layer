@@ -60,6 +60,7 @@ def test_vocabulary_is_loaded_before_the_first_render() -> None:
         "dq_reason",
         "ledger_issue",
         "role",
+        "permit_verdict",
     ],
 )
 def test_each_vocabulary_table_is_actually_used(table: str) -> None:

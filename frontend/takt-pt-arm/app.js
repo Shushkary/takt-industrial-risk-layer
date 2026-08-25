@@ -307,6 +307,20 @@ const HELP = {
     action: 'Запросить перечисленное. Документ прикладывается вне этого окна; после этого вердикт пересчитывается, а оба состояния остаются в журнале.',
     doc: 'docs/product_boundary.md',
   },
+  permit: {
+    title: 'Приложение организационного документа',
+    what: 'Наряд, заявка или окно работ, которые объясняют действие: номер документа, актив, операция, исполнитель, утверждающий, срок действия и ограничения.',
+    source: 'Сверку документа с делом выполняет продукт — совпадение актива, операции, исполнителя и окна работ. Интерфейс вердикт не считает: расчёт обязан быть воспроизводимым, а второй расчёт в браузере разошёлся бы с доказательным пакетом. Актив и операция подставлены из дела — именно с ними и будет идти сверка.',
+    action: 'Приложить документ, который назван в перечне «Чего не хватает». После этого вердикт пересчитывается, а оба состояния — до и после — остаются в журнале дела.',
+    doc: 'docs/product_boundary.md',
+  },
+  permits: {
+    title: 'Приложенные документы',
+    what: 'Организационные документы, уже приложенные к делу, с итогом сверки по каждому: вердикт, обоснование и контрольная сумма организационного контекста.',
+    source: 'Итог сверки приходит из ответа продукта. Контрольная сумма считается по составу документа: по ней проверяется, что приложенный документ с тех пор не подменили.',
+    action: 'Сверить, что документ относится к тому же активу и окну работ, что и события дела. Документ, не снявший неопределённость, показывает в обосновании, чего именно не хватило.',
+    doc: 'docs/product_boundary.md',
+  },
   xai: {
     title: 'Как собран кейс',
     what: 'Чем набран кейс: по каким отличительным сущностям собрано ядро и до каких узлов разбор расширен.',
@@ -337,6 +351,8 @@ let lastWorkspaceEvents = [];
 let currentCaseEventCount = null;
 let lastCaseFindings = [];
 let session = null;
+let lastCaseSummary = {};
+let lastCaseMissing = [];
 
 // --- Ключ доступа ----------------------------------------------------------
 //
@@ -664,6 +680,7 @@ async function openCase(caseId) {
 
 function renderCase(workspace) {
   const item = workspace.case || {};
+  lastCaseSummary = item;
   currentCaseStatus = item.status || '';
   currentCaseTransitions = item.allowed_status_transitions || [];
   lastWorkspaceEvents = workspace.events || [];
@@ -671,6 +688,7 @@ function renderCase(workspace) {
   resetRelink();
   $('#staleCaseBanner').hidden = true;
   closeStatusForm();
+  closePermitForm();
   $('#caseId').textContent = item.case_id || '—';
   $('#caseStatus').textContent = term('case_status', item.status);
   $('#caseTitle').textContent = item.title || '—';
@@ -694,6 +712,7 @@ function renderCase(workspace) {
   renderReconstruction(workspace.attack_chain || {});
   renderRelatedCases(item.related_cases || []);
   renderResponse(workspace.events || [], workspace.artifacts || [], item.correlation_evidence || []);
+  renderPermits(item.manual_permits || []);
   renderFindings(item.findings || []);
   renderJournal(item.audit_log || []);
 }
@@ -822,6 +841,7 @@ function renderConfidence(confidence) {
     grade.textContent = '—';
     grade.className = 'grade';
     scoreBox.textContent = 'показатель недоступен';
+    lastCaseMissing = [];
     renderMissing([]);
     return;
   }
@@ -852,7 +872,8 @@ function renderConfidence(confidence) {
     components.appendChild(row);
   }
 
-  renderMissing(confidence.missing || []);
+  lastCaseMissing = confidence.missing || [];
+  renderMissing(lastCaseMissing);
 }
 
 function gradeClass(grade) {
@@ -881,6 +902,148 @@ function renderMissing(items) {
       line.appendChild(hint);
     }
     list.appendChild(line);
+  }
+}
+
+// --- Организационный документ: наряд, заявка, окно работ (ТЗ §6.3) ---------
+//
+// Блок «Чего не хватает» называет документ, которого не хватает делу, но приложить его было
+// нечем: маршрут продукта работал, а кнопки не было, и аналитик упирался в тупик ровно там,
+// где продукт объяснял, что делать дальше.
+//
+// Сверку документа с делом — актив, операция, исполнитель, окно работ — выполняет продукт.
+// Интерфейс вердикт не считает и не показывает своей оценки совпадения: расчёт вердикта
+// обязан быть воспроизводимым, а второй расчёт в браузере разошёлся бы с доказательным
+// пакетом.
+
+let lastCasePermits = [];
+
+function openPermitForm() {
+  const item = lastCaseSummary || {};
+  const missing = (lastCaseMissing || [])[0] || {};
+  $('#permitForm').hidden = false;
+  $('#permitError').hidden = true;
+  $('#permitNumber').value = '';
+  // Актив и операция подставляются из дела: именно с ними продукт и будет сверять документ,
+  // и набирать их заново — приглашение к опечатке.
+  $('#permitAsset').value = item.primary_asset_id || '';
+  $('#permitOperation').value = item.trigger_operation || '';
+  $('#permitExecutor').value = '';
+  $('#permitApprover').value = missing.sanctioning_party || '';
+  $('#permitFrom').value = '';
+  $('#permitTo').value = '';
+  $('#permitStatus').value = '';
+  $('#permitRestrictions').value = '';
+  $('#permitNote').value = '';
+  $('#permitNumber').focus();
+}
+
+function closePermitForm() {
+  $('#permitForm').hidden = true;
+  $('#permitError').hidden = true;
+}
+
+async function submitPermitForm() {
+  if (!selectedCaseId) return;
+  const number = $('#permitNumber').value.trim();
+  if (!number) {
+    $('#permitError').textContent = 'Номер документа обязателен: по нему документ находится в системе заявок.';
+    $('#permitError').hidden = false;
+    $('#permitNumber').focus();
+    return;
+  }
+  const button = $('#permitSubmit');
+  button.disabled = true;
+  try {
+    const result = await api(`/cases/${encodeURIComponent(selectedCaseId)}/manual-permits`, {
+      method: 'POST',
+      body: JSON.stringify({
+        work_order_number: number,
+        asset_id: $('#permitAsset').value.trim(),
+        operation: $('#permitOperation').value.trim(),
+        executor: $('#permitExecutor').value.trim(),
+        approver: $('#permitApprover').value.trim(),
+        valid_from: $('#permitFrom').value.trim(),
+        valid_to: $('#permitTo').value.trim(),
+        document_status: $('#permitStatus').value.trim(),
+        restrictions: $('#permitRestrictions').value.trim(),
+        note: $('#permitNote').value.trim(),
+      }),
+    });
+    closePermitForm();
+    await openCase(selectedCaseId);
+    await refresh();
+    showPermitResult((result && result.permit) || {});
+  } catch (error) {
+    $('#permitError').textContent =
+      error.status === 403
+        ? 'Недостаточно прав: приложить документ может первая линия и выше.'
+        : `Документ не приложен: ${error.message}`;
+    $('#permitError').hidden = false;
+    button.disabled = false;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// Итог сверки показывается сразу: приложить документ и не узнать, снял ли он неопределённость,
+// значит проделать работу вслепую.
+function showPermitResult(permit) {
+  openModal('Документ приложен: итог сверки', (body) => {
+    const lines = [
+      `Документ: ${permit.work_order_number || '—'}`,
+      `Вердикт по документу: ${term('permit_verdict', permit.verdict)} (${score(permit.confidence)})`,
+      permit.rationale ? `Основание: ${permit.rationale}` : '',
+      permit.counterfactual ? `Что изменило бы вывод: ${permit.counterfactual}` : '',
+      'Сверку выполнил продукт. Документ и его контрольная сумма вошли в состав дела и в журнал.',
+    ].filter(Boolean);
+    for (const text of lines) {
+      const item = document.createElement('p');
+      item.textContent = text;
+      body.appendChild(item);
+    }
+  });
+}
+
+function renderPermits(permits) {
+  lastCasePermits = permits || [];
+  const block = $('#permitBlock');
+  const list = $('#permitList');
+  list.replaceChildren();
+  block.hidden = !lastCasePermits.length;
+  for (const permit of lastCasePermits) {
+    const row = document.createElement('li');
+    const head = document.createElement('div');
+    head.innerHTML = `<strong>${escapeHtml(permit.work_order_number || '—')}</strong> <span class="verdict sm ${escapeHtml(String(permit.verdict || '').toLowerCase())}">${escapeHtml(term('permit_verdict', permit.verdict))}</span> <span class="muted small">${escapeHtml(score(permit.confidence))}</span>`;
+    row.appendChild(head);
+    const facts = [
+      permit.asset_id ? `актив: ${permit.asset_id}` : '',
+      permit.operation ? `операция: ${permit.operation}` : '',
+      permit.executor ? `исполнитель: ${permit.executor}` : '',
+      permit.approver ? `утверждающий: ${permit.approver}` : '',
+      permit.valid_from || permit.valid_to ? `окно: ${permit.valid_from || '—'} — ${permit.valid_to || '—'}` : '',
+      permit.document_status ? `состояние: ${permit.document_status}` : '',
+      permit.restrictions ? `ограничения: ${permit.restrictions}` : '',
+    ].filter(Boolean);
+    if (facts.length) {
+      const meta = document.createElement('div');
+      meta.className = 'muted small';
+      meta.textContent = facts.join(' · ');
+      row.appendChild(meta);
+    }
+    if (permit.rationale) {
+      const why = document.createElement('div');
+      why.className = 'muted small';
+      why.textContent = permit.rationale;
+      row.appendChild(why);
+    }
+    const trace = document.createElement('div');
+    trace.className = 'muted small';
+    // Контрольная сумма организационного контекста уходит в доказательный пакет: по ней
+    // проверяется, что приложенный документ с тех пор не подменили.
+    trace.textContent = `${permit.actor || '—'} · ${stamp(permit.created_at)} · контрольная сумма ${shorten(permit.organizational_context_sha256 || '—', 10)}`;
+    row.appendChild(trace);
+    list.appendChild(row);
   }
 }
 
@@ -1860,6 +2023,8 @@ function applyPermissions() {
   $('#findingRoleNote').hidden = canWrite;
   $('#confirmResponseButton').hidden = !canWrite;
   $('#responseRoleNote').hidden = canWrite;
+  $('#permitOpen').hidden = !canWrite;
+  if (!canWrite) closePermitForm();
   const canRelink = permissions().case_relink;
   $('#relinkPanel').hidden = !canRelink;
   $('#relinkHeadCell').hidden = !canRelink;
@@ -2014,6 +2179,9 @@ document.addEventListener('keydown', (event) => {
   else if (event.key === 'Tab') trapFocus(event);
 });
 
+$('#permitOpen').addEventListener('click', openPermitForm);
+$('#permitCancel').addEventListener('click', closePermitForm);
+$('#permitSubmit').addEventListener('click', submitPermitForm);
 $('#detachButton').addEventListener('click', detachSelected);
 $('#splitButton').addEventListener('click', splitSelected);
 $('#attachOpen').addEventListener('click', openAttachPanel);

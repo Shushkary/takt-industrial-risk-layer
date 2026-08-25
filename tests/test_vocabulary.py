@@ -27,6 +27,7 @@ from takt.domain.vocabulary import (
     EVENT_SOURCE_RU,
     GRAPH_EDGE_KIND_RU,
     LEDGER_ISSUE_RU,
+    PERMIT_VERDICT_RU,
     RISK_CLASS_RU,
     ROLE_RU,
     TYPICALITY_RU,
@@ -141,6 +142,7 @@ def test_confidence_grades_match_the_service() -> None:
         DQ_REASON_RU,
         LEDGER_ISSUE_RU,
         ROLE_RU,
+        PERMIT_VERDICT_RU,
     ],
     ids=[
         "status",
@@ -154,6 +156,7 @@ def test_confidence_grades_match_the_service() -> None:
         "dq_reason",
         "ledger_issue",
         "role",
+        "permit_verdict",
     ],
 )
 def test_names_are_actually_russian(table: dict[str, str]) -> None:
@@ -168,6 +171,15 @@ def test_every_access_role_has_a_russian_name() -> None:
     from takt.infrastructure.security.api_keys import VALID_ROLES
 
     assert set(ROLE_RU) == set(VALID_ROLES)
+
+
+def test_permit_verdict_covers_the_same_triad_by_other_names() -> None:
+    """Сценарий наряда пишет вердикт полными словами, и эти значения уже лежат в делах.
+
+    Пока обозначений два набора, оба обязаны быть переведены: непереведённый второй набор
+    показался бы аналитику кодом ровно в том месте, где снимается неопределённость.
+    """
+    assert set(PERMIT_VERDICT_RU.values()) == set(VERDICT_RU.values())
 
 
 def test_artifact_names_may_keep_proper_nouns() -> None:
@@ -202,6 +214,7 @@ def test_vocabulary_bundles_every_table() -> None:
         "dq_reason",
         "ledger_issue",
         "role",
+        "permit_verdict",
     }
     assert payload["case_status"][CaseStatus.CONFIRMED.value] == "подтверждено"
 

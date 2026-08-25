@@ -44,6 +44,18 @@ VERDICT_RU: dict[str, str] = {
     "UNDET": "неопределённое",
 }
 
+PERMIT_VERDICT_RU: dict[str, str] = {
+    "legitimate": "легитимное",
+    "illegitimate": "нелегитимное",
+    "undetermined": "неопределённое",
+}
+"""Вердикт сверки организационного документа с делом (`manual_permits[].verdict`).
+
+Та же триада, что и `VERDICT_RU`, но другими обозначениями: сценарий наряда пишет их
+полными словами, и значения уже лежат в сохранённых делах и в выгруженных доказательных
+пакетах. Свести обозначения к одному набору — отдельное решение о совместимости данных,
+а не правка словаря; пока таблиц две, интерфейс берёт названия отсюда, а не изобретает свои."""
+
 EVENT_SOURCE_RU: dict[str, str] = {
     EventSource.EDR.value: "защита рабочих станций",
     EventSource.SIEM.value: "система сбора событий",
@@ -201,4 +213,5 @@ def vocabulary() -> dict[str, dict[str, str]]:
         "dq_reason": dict(DQ_REASON_RU),
         "ledger_issue": dict(LEDGER_ISSUE_RU),
         "role": dict(ROLE_RU),
+        "permit_verdict": dict(PERMIT_VERDICT_RU),
     }

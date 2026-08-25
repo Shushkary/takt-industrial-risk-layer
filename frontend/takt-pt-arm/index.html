@@ -125,10 +125,56 @@
           <div id="missingBlock" class="block missing-block" hidden>
             <div class="block-head">
               <h4>Чего не хватает</h4>
-              <button class="help" type="button" data-help="missing" aria-label="Пояснение: маршрут добора контекста">?</button>
+              <div class="head-actions">
+                <button id="permitOpen" class="link" type="button">Приложить документ</button>
+                <button class="help" type="button" data-help="missing" aria-label="Пояснение: маршрут добора контекста">?</button>
+              </div>
             </div>
             <ul id="missingList" class="plain"></ul>
             <p class="muted small">Пока перечень полон, вердикт остаётся неопределённым.</p>
+          </div>
+
+          <div id="permitForm" class="block permit-form" hidden>
+            <div class="block-head">
+              <h4>Наряд, заявка или окно работ</h4>
+              <button class="help" type="button" data-help="permit" aria-label="Пояснение: приложение организационного документа">?</button>
+            </div>
+            <div class="permit-grid">
+              <label for="permitNumber">Номер документа</label>
+              <input id="permitNumber" type="text" maxlength="128" placeholder="обязательно" />
+              <label for="permitAsset">Актив</label>
+              <input id="permitAsset" type="text" maxlength="256" />
+              <label for="permitOperation">Операция</label>
+              <input id="permitOperation" type="text" maxlength="256" />
+              <label for="permitExecutor">Исполнитель</label>
+              <input id="permitExecutor" type="text" maxlength="256" />
+              <label for="permitApprover">Утверждающий</label>
+              <input id="permitApprover" type="text" maxlength="256" />
+              <label for="permitFrom">Действует с</label>
+              <input id="permitFrom" type="text" maxlength="128" placeholder="2026-08-17T05:00:00+00:00" />
+              <label for="permitTo">Действует по</label>
+              <input id="permitTo" type="text" maxlength="128" placeholder="2026-08-17T09:00:00+00:00" />
+              <label for="permitStatus">Состояние документа</label>
+              <input id="permitStatus" type="text" maxlength="128" placeholder="утверждён" />
+              <label for="permitRestrictions">Ограничения</label>
+              <input id="permitRestrictions" type="text" maxlength="1000" />
+              <label for="permitNote">Примечание</label>
+              <input id="permitNote" type="text" maxlength="2000" />
+            </div>
+            <div class="permit-actions">
+              <button id="permitSubmit" class="action inline" type="button">Приложить</button>
+              <button id="permitCancel" class="action inline" type="button">Отмена</button>
+              <span class="muted small">Сверку документа с делом выполняет продукт: совпадение актива, операции, исполнителя и окна работ. Интерфейс вердикт не считает.</span>
+            </div>
+            <p id="permitError" class="relink-error small" hidden></p>
+          </div>
+
+          <div id="permitBlock" class="block" hidden>
+            <div class="block-head">
+              <h4>Приложенные документы</h4>
+              <button class="help" type="button" data-help="permits" aria-label="Пояснение: приложенные организационные документы">?</button>
+            </div>
+            <ul id="permitList" class="plain"></ul>
           </div>
 
           <div class="block">
