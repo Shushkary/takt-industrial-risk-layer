@@ -132,7 +132,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260825-05"}, versions
+    assert versions >= {"20260825-06"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -432,6 +432,35 @@ def test_assistant_entry_admits_the_missing_next_step_hints() -> None:
     # Слово «подсказки» встречается в шаге про телеметрию, поэтому проверяется именно
     # признание отсутствия функции, а не упоминание слова.
     assert "Подсказки следующих шагов" in block, "не сказано, что подсказок следующих шагов нет"
+
+
+def test_documentation_base_is_declared_before_the_bundle() -> None:
+    """Параметры контура задаются файлом и до сборки.
+
+    Встроенный скрипт запрещён политикой страницы (`script-src 'self'`), а сборка читает
+    базу документации при первом разборе реестра пояснений: подключённый после неё файл
+    значение уже не изменит.
+    """
+    index = _index()
+    env = (_ARM / "env.js").read_text(encoding="utf-8")
+
+    assert "window.TAKT_DOCS_BASE" in env
+    assert index.index("env.js") < index.index("app.min.js"), "env.js подключён после сборки"
+    # Инлайновый скрипт в разметке означал бы, что политика страницы ослаблена.
+    assert "<script>" not in index
+
+
+def test_documentation_links_resolve_outside_the_stand() -> None:
+    """База ведёт туда, где документы действительно лежат.
+
+    На боевом контуре каталога `docs/` рядом со статикой нет: относительная ссылка
+    разрешается в `index.html` с кодом 200, и это читается как несработавшая кнопка.
+    """
+    env = (_ARM / "env.js").read_text(encoding="utf-8")
+    assert "https://" in env, "база документации не задана"
+    assert env.rstrip().endswith("';"), "значение базы не закрыто"
+    base = env[env.index("window.TAKT_DOCS_BASE") :].split("'")[1]
+    assert base.endswith("/"), "база должна оканчиваться косой чертой: путь дописывается к ней"
 
 
 def test_glossary_is_reachable_from_the_header() -> None:
