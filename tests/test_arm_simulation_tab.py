@@ -132,7 +132,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260825-06"}, versions
+    assert versions >= {"20260825-07"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -461,6 +461,30 @@ def test_documentation_links_resolve_outside_the_stand() -> None:
     assert env.rstrip().endswith("';"), "значение базы не закрыто"
     base = env[env.index("window.TAKT_DOCS_BASE") :].split("'")[1]
     assert base.endswith("/"), "база должна оканчиваться косой чертой: путь дописывается к ней"
+
+
+def test_header_wraps_on_a_narrow_screen() -> None:
+    """С телефона рабочее место показывают на демонстрации, и шапка не должна тянуть страницу.
+
+    Запрет переноса в строке состояния — решение для широкого окна: там двухэтажная шапка
+    сдвигала бы вниз всю раскладку. На ширине телефона цена другая: строка растягивала
+    страницу до 1091 px, рабочее место приходилось возить по горизонтали, а часть кнопок
+    оставалась за краем экрана.
+    """
+    styles = _STYLES.read_text(encoding="utf-8")
+    start = styles.index("@media (max-width: 768px)")
+    block = styles[start : styles.index(chr(10) + "}" + chr(10) + chr(10), start)]
+    assert ".top" in block and "flex-wrap: wrap" in block
+
+
+def test_journal_line_breaks_long_values() -> None:
+    """Записи журнала содержат неразрывные значения, а панель обрезает вылезшее за край."""
+    styles = _STYLES.read_text(encoding="utf-8")
+    start = styles.index(".journal-item {")
+    # Конец правила — закрывающая скобка в начале строки: внутри пояснения к правилу тоже
+    # встречается `{ overflow: hidden }`, и поиск первой попавшейся скобки обрывает блок.
+    block = styles[start : styles.index(chr(10) + "}", start)]
+    assert "overflow-wrap" in block
 
 
 def test_glossary_is_reachable_from_the_header() -> None:
