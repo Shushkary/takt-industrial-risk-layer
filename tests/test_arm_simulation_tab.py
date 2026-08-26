@@ -132,7 +132,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260825-03"}, versions
+    assert versions >= {"20260825-04"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -341,6 +341,41 @@ def test_glossary_explains_the_private_language_of_the_product() -> None:
         "Обоснованность",
     ):
         assert term in glossary, f"словарь понятий не объясняет «{term}»"
+
+
+def test_assistant_entry_describes_the_pipeline_as_an_ordered_algorithm() -> None:
+    """Ассистент в ТАКТ — детерминированный конвейер, и объясняться он должен по шагам.
+
+    Порядок здесь и есть содержание: «сначала пивот, потом сверка с нарядом, потом вердикт»
+    — это то, что аналитик проверяет, когда не согласен с выводом. Слитый в абзац перечень
+    отвечает на вопрос «что делает продукт», но не на вопрос «на каком шаге это возникло».
+    """
+    app = _app()
+    start = app.index("  assistant: {")
+    block = app[start : app.index(chr(10) + "  },", start)]
+
+    assert "steps: [" in block, "алгоритм подан не по шагам"
+    for stage in ("Приём", "Оценка риска", "Сборка дела", "вердикт", "Пакет реагирования"):
+        assert stage in block, f"в алгоритме нет шага «{stage}»"
+    # Ассистент не должен выглядеть исполнителем: реагирование остаётся рекомендацией.
+    assert "не выполняет" in block
+
+
+def test_assistant_entry_is_reachable_from_the_header() -> None:
+    """Алгоритм нужен на любой вкладке, а не только там, где стоит его кнопка."""
+    index = _index()
+    header = index[index.index("<header") : index.index("</header>")]
+    assert 'data-help="assistant"' in header
+
+
+def test_help_modal_renders_numbered_steps() -> None:
+    """Нумерованный список рисуется разметкой, а не цифрами внутри текста."""
+    app = _app()
+    start = app.index("function openHelp(")
+    block = app[start : app.index(chr(10) + "}" + chr(10), start)]
+    assert "entry.steps" in block
+    assert "createElement('ol')" in block
+    assert "modal-steps" in _STYLES.read_text(encoding="utf-8")
 
 
 def test_glossary_is_reachable_from_the_header() -> None:
