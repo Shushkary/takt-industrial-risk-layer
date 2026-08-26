@@ -100,9 +100,9 @@ const HELP = {
   },
   attack_graph: {
     title: 'Граф атаки',
-    what: 'Сущности цепочки и переходы между ними: учётная запись, узел, адрес, объект конвейера. Цвет узла — фаза, в которой он впервые появился.',
-    source: 'Граф строится только по событиям цепочки этого кейса, связи вне кейса в нём не видны.',
-    action: 'Смотреть на переходы между узлами и смену учётной записи — по ним читается перемещение внутри сети.',
+    what: 'Сущности цепочки и переходы между ними: учётная запись, узел, адрес, объект конвейера. Вершина подписана видом сущности; при воспроизведении она берёт цвет фазы текущего шага и показывает, сколько её событий уже сыграно.',
+    source: 'Граф строится только по событиям цепочки этого кейса, связи вне кейса в нём не видны. Вершин на графе столько, сколько различных сущностей у событий дела, а не столько, сколько шагов в плеере: дело, собранное пивотом по одному адресу, даёт одну вершину — под графом это сказано числами.',
+    action: 'Смотреть на переходы между узлами и смену учётной записи — по ним читается перемещение внутри сети. Клик по вершине открывает её событие на текущем шаге плеера.',
     doc: 'docs/pt_techlab/simulation.md',
   },
   sim_summary: {
@@ -2764,6 +2764,9 @@ const PLAY_INTERVAL_MS = 1200;
 
 let simulation = null;
 let simCursor = 0;
+// Граф цепочки держится в состоянии окна: плеер перекрашивает готовые вершины и линии,
+// а не строит их заново на каждом шаге.
+let simGraph = null;
 let simTimer = null;
 
 // Значение счётчика на шаге: ровное распределение с остатком на последнем шаге.
@@ -2804,6 +2807,7 @@ async function openSimulation() {
     $('#simBody').hidden = true;
     $('#simEmpty').hidden = false;
     $('#simEmpty').textContent = `Симуляция недоступна: ${error.message}`;
+    simGraph = null;
     return;
   }
   simCursor = 0;
@@ -2850,23 +2854,59 @@ function renderSteps() {
 }
 
 // Узлы и переходы цепочки: сущности в порядке первого появления.
+// У каждой вершины и каждой линии хранится список шагов, в которых она участвует. Граф
+// красится по текущему положению плеера, а не по первому появлению: дело из одной сущности
+// иначе загоралось целиком на первом шаге и стояло мёртвым все оставшиеся — на кейсах
+// датасета AIT это все 69 шагов подряд, и блок читался как незагрузившийся.
 function chainGraph() {
   const nodes = new Map();
-  const edges = [];
-  const add = (id, type, phase, order) => {
+  const edges = new Map();
+  // Чем точнее известен вид сущности, тем он и подписан: один и тот же адрес приходит в
+  // событии то как `dst_address`, то как `host_id`, и называть узел «адресом» только потому,
+  // что первым встретилось поле адреса, — врать аналитику о составе дела.
+  const kindRank = { address: 1, host: 2, user: 3 };
+  const add = (id, type, step) => {
     if (!id) return null;
-    if (!nodes.has(id)) nodes.set(id, { id, type, phase, order });
+    let node = nodes.get(id);
+    if (!node) {
+      node = { id, type, order: step.order, steps: [] };
+      nodes.set(id, node);
+    } else if (kindRank[type] > kindRank[node.type]) {
+      node.type = type;
+    }
+    // Одна сущность приходит из нескольких полей одного события: адрес бывает сразу и
+    // `host_id`, и `src_address`. Шаг засчитывается вершине один раз, иначе счётчик
+    // сыгранных событий обгонит плеер.
+    const last = node.steps[node.steps.length - 1];
+    if (!last || last.order !== step.order) {
+      node.steps.push({ order: step.order, phase: step.attack_phase });
+    }
     return id;
+  };
+  const link = (from, to, label, step) => {
+    if (!from || !to || from === to) return;
+    const key = `${from}|${to}`;
+    let edge = edges.get(key);
+    if (!edge) {
+      edge = { from, to, label, order: step.order, steps: [] };
+      edges.set(key, edge);
+    }
+    edge.steps.push(step.order);
   };
   for (const step of simulation.steps || []) {
     const parts = step.entities || {};
-    const user = add(parts.user_id, 'user', step.attack_phase, step.order);
-    const host = add(parts.host_id, 'host', step.attack_phase, step.order);
-    const dst = add(parts.dst_address, 'address', step.attack_phase, step.order);
-    if (user && host) edges.push({ from: user, to: host, label: 'действует на', order: step.order });
-    if (host && dst) edges.push({ from: host, to: dst, label: 'обращается к', order: step.order });
+    const user = add(parts.user_id, 'user', step);
+    const host = add(parts.host_id, 'host', step);
+    // Адрес источника читается наравне с адресом назначения. Пока он не читался, событие,
+    // принёсшее только `src_address`, не давало ни вершины, ни линии: сущность молча
+    // пропадала с графа, хотя в ответе продукта она есть.
+    const src = add(parts.src_address, 'address', step);
+    const dst = add(parts.dst_address, 'address', step);
+    link(user, host, 'действует на', step);
+    link(host, dst, 'обращается к', step);
+    link(src, dst, 'обращается к', step);
   }
-  return { nodes: [...nodes.values()], edges };
+  return { nodes: [...nodes.values()], edges: [...edges.values()] };
 }
 
 // Имя намеренно отличается от `renderGraph` панели «Связи сущностей». Обе функции лежат в
@@ -2885,27 +2925,42 @@ function renderGraphNote(nodes, edges) {
   // Линий на графе столько, сколько различных пар сущностей: повторные переходы между теми
   // же двумя рисуются одной линией. Считать здесь события значило бы назвать число, которого
   // на картинке нет, — поэтому названы оба.
-  const unique = new Set(edges.map((edge) => `${edge.from}|${edge.to}`)).size;
-  const passes = unique && edges.length > unique ? ` (по ${edges.length} событиям)` : '';
+  const unique = edges.length;
+  const events = edges.reduce((sum, edge) => sum + edge.steps.length, 0);
+  const passes = unique && events > unique ? ` (по ${events} событиям)` : '';
   const facts = `Сущностей в цепочке: ${nodes}, переходов между ними: ${unique}${passes}.`;
+  // Что именно меняется при воспроизведении. Без этой фразы аналитик ждёт от графа движения
+  // по шагам и не находит его: в плеере 69 шагов, а вершина на графе одна.
+  const player =
+    'При воспроизведении вершина берёт цвет фазы текущего шага и показывает, сколько её событий уже сыграно.';
   if (unique) {
-    box.textContent = `${facts} Переход — это событие, связавшее две сущности.`;
+    box.textContent = `${facts} Переход — это событие, связавшее две сущности. ${player}`;
     return;
   }
   box.textContent =
     nodes === 1
-      ? `${facts} Все события дела касаются одной сущности, поэтому связывать нечего — это состав дела, а не сбой отрисовки.`
-      : `${facts} События дела не связывают сущности между собой: каждое касается своей.`;
+      ? `${facts} Все события дела касаются одной сущности, поэтому связывать нечего — это состав дела, а не сбой отрисовки. ${player}`
+      : `${facts} События дела не связывают сущности между собой: каждое касается своей. ${player}`;
 }
 
 function renderAttackGraph() {
   const svg = $('#attackGraph');
   svg.replaceChildren();
-  const { nodes, edges } = chainGraph();
+  simGraph = chainGraph();
+  const { nodes, edges } = simGraph;
   renderGraphNote(nodes.length, edges);
-  if (!nodes.length) return;
 
   const perRow = 5;
+  const rows = Math.max(1, Math.ceil(nodes.length / perRow));
+  const cols = Math.max(1, Math.min(nodes.length, perRow));
+  // Полотно по фактическому размеру графа. Фиксированная высота в 320 точек оставляла
+  // одинокую вершину висеть в пустом поле — вид ровно такой же, как у неотрисовавшегося блока.
+  const width = cols * 185 + 40;
+  const height = rows * 90 + 60;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.style.height = `${height}px`;
+  if (!nodes.length) return;
+
   const position = new Map();
   nodes.forEach((node, index) => {
     const row = Math.floor(index / perRow);
@@ -2914,11 +2969,7 @@ function renderAttackGraph() {
   });
 
   const ns = 'http://www.w3.org/2000/svg';
-  const seen = new Set();
   for (const edge of edges) {
-    const key = `${edge.from}|${edge.to}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
     const from = position.get(edge.from);
     const to = position.get(edge.to);
     if (!from || !to) continue;
@@ -2928,7 +2979,8 @@ function renderAttackGraph() {
     line.setAttribute('x2', to.x);
     line.setAttribute('y2', to.y);
     line.setAttribute('class', 'edge-line');
-    line.dataset.order = String(edge.order);
+    edge.element = line;
+    edge.orders = new Set(edge.steps);
     svg.appendChild(line);
     const label = document.createElementNS(ns, 'text');
     label.setAttribute('x', (from.x + to.x) / 2);
@@ -2942,12 +2994,10 @@ function renderAttackGraph() {
     const point = position.get(node.id);
     const group = document.createElementNS(ns, 'g');
     group.setAttribute('class', 'graph-node');
-    group.dataset.order = String(node.order);
     const circle = document.createElementNS(ns, 'circle');
     circle.setAttribute('cx', point.x);
     circle.setAttribute('cy', point.y);
     circle.setAttribute('r', 14);
-    circle.setAttribute('fill', phaseColor(node.phase));
     group.appendChild(circle);
     const text = document.createElementNS(ns, 'text');
     text.setAttribute('x', point.x);
@@ -2955,10 +3005,32 @@ function renderAttackGraph() {
     text.setAttribute('class', 'node-label');
     text.textContent = node.id.length > 22 ? `${node.id.slice(0, 21)}…` : node.id;
     group.appendChild(text);
-    group.addEventListener('click', () => openStep(node.order));
+    // Вид сущности подписью: кружок сам по себе не различает узел, учётную запись и адрес,
+    // а на графе из одной вершины различать больше нечем.
+    const meta = document.createElementNS(ns, 'text');
+    meta.setAttribute('x', point.x);
+    meta.setAttribute('y', point.y + 45);
+    meta.setAttribute('class', 'node-meta');
+    group.appendChild(meta);
+    node.element = group;
+    node.circle = circle;
+    node.meta = meta;
+    group.addEventListener('click', () => openStep(nodeStepAtCursor(node)));
     svg.appendChild(group);
   }
   paintProgress();
+}
+
+// Шаг сущности под текущим положением плеера: последний уже сыгранный, а до начала
+// воспроизведения — первый. Клик по вершине во время проигрывания должен открывать событие,
+// на котором плеер стоит, а не самое раннее в деле.
+function nodeStepAtCursor(node) {
+  let order = node.steps[0].order;
+  for (const item of node.steps) {
+    if (item.order > simCursor) break;
+    order = item.order;
+  }
+  return order;
 }
 
 function paintProgress() {
@@ -2967,8 +3039,32 @@ function paintProgress() {
     row.classList.toggle('played', order <= simCursor);
     row.classList.toggle('current', order === simCursor);
   }
-  for (const element of document.querySelectorAll('#attackGraph .edge-line, #attackGraph .graph-node')) {
-    element.classList.toggle('played', Number(element.dataset.order) <= simCursor);
+  paintGraphProgress();
+}
+
+// Состояние графа считается от положения плеера: вершина берёт цвет фазы последнего
+// сыгранного на ней события и показывает, сколько её событий уже прошло. Пока состояние
+// считалось по первому появлению, граф из одной сущности не менялся за всё воспроизведение
+// ни разу: цвет оставался фазой первого события, хотя цепочка проходит четыре фазы.
+function paintGraphProgress() {
+  if (!simGraph) return;
+  for (const node of simGraph.nodes) {
+    let played = 0;
+    let phase = node.steps[0].phase;
+    for (const item of node.steps) {
+      if (item.order > simCursor) break;
+      played += 1;
+      phase = item.phase;
+    }
+    node.circle.setAttribute('fill', phaseColor(phase));
+    node.element.classList.toggle('played', played > 0);
+    node.element.classList.toggle('current', node.steps.some((item) => item.order === simCursor));
+    node.meta.textContent = `${term('entity_type', node.type)} · ${played} из ${node.steps.length}`;
+  }
+  for (const edge of simGraph.edges) {
+    if (!edge.element) continue;
+    edge.element.classList.toggle('played', edge.steps[0] <= simCursor);
+    edge.element.classList.toggle('current', edge.orders.has(simCursor));
   }
 }
 

@@ -132,7 +132,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260825-08"}, versions
+    assert versions >= {"20260826-01"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -864,3 +864,72 @@ def test_queue_search_can_look_at_the_case_id_and_the_asset() -> None:
     assert 'id="queueSearchField"' in index
     assert "case_id_prefix" in app
     assert "primary_asset_id" in app
+
+
+def test_attack_graph_reads_every_address_field() -> None:
+    """Вершины строятся по обоим адресам события, а не только по адресу назначения.
+
+    Прецедент: `chainGraph` читал `user_id`, `host_id` и `dst_address` — три поля из шести,
+    объявленных в `EventEntities`. Событие, принёсшее только `src_address` (в корпусе AIT это
+    все события SIEM), не давало ни вершины, ни линии: сущность из ответа продукта молча
+    пропадала с графа.
+    """
+    app = _app()
+    start = app.index("function chainGraph(")
+    block = app[start : app.index("\n}\n", start)]
+    for field in ("user_id", "host_id", "src_address", "dst_address"):
+        assert field in block, field
+
+
+def test_attack_graph_state_follows_the_player() -> None:
+    """Граф красится по текущему положению плеера, а не по первому появлению сущности.
+
+    Прецедент кейса `INC-AIT-001`: все 69 событий касаются одного адреса, вершина получала
+    `order` первого шага и становилась «сыгранной» сразу — оставшиеся 68 шагов не меняли на
+    графе ничего, и блок выглядел неотрисовавшимся. Цвет вершины при этом оставался фазой
+    первого события, хотя цепочка проходит четыре фазы.
+    """
+    app = _app()
+    start = app.index("function paintGraphProgress(")
+    block = app[start : app.index("\n}\n", start)]
+
+    assert "simCursor" in block
+    assert "phaseColor(phase)" in block, "цвет вершины обязан идти от фазы сыгранного шага"
+    assert "'current'" in block, "текущий шаг обязан быть виден на графе"
+
+
+def test_attack_graph_shows_the_kind_of_each_entity() -> None:
+    """Вид сущности назван словом: кружок не различает узел, учётную запись и адрес.
+
+    Русское название берётся из словаря продукта (`GET /catalog/vocabulary`), а не пишется в
+    интерфейсе заново.
+    """
+    assert "term('entity_type', node.type)" in _app()
+
+
+def test_attack_graph_canvas_matches_the_node_count() -> None:
+    """Полотно считается по числу вершин.
+
+    Фиксированная высота в 320 точек оставляла одинокую вершину в пустом поле — вид ровно
+    такой же, как у блока, который не отрисовался.
+    """
+    app = _app()
+    start = app.index("function renderAttackGraph(")
+    block = app[start : app.index("\n}\n", start)]
+
+    assert "viewBox" in block and "nodes.length" in block
+    assert "height: 320px" not in _STYLES.read_text(encoding="utf-8")
+
+
+def test_graph_note_explains_what_the_player_changes() -> None:
+    """Подпись под графом обязана сказать, что именно двигается при воспроизведении.
+
+    Иначе аналитик ждёт движения по шагам и не находит его: в плеере 69 шагов, а вершина одна.
+    """
+    app = _app()
+    start = app.index("function renderGraphNote(")
+    block = app[start : app.index("\n}\n", start)]
+
+    assert "Сущностей в цепочке" in block
+    assert "фазы текущего шага" in block
+    assert "не сбой отрисовки" in block

@@ -1122,7 +1122,7 @@ ol.steps {
 #attackGraph {
   width: 100%;
   min-width: 720px;
-  height: 320px;
+  min-height: 120px;
 }
 
 #attackGraph .edge-line {
@@ -1149,6 +1149,25 @@ ol.steps {
 
 #attackGraph .graph-node.played {
   opacity: 1;
+}
+
+/* Текущий шаг плеера: обводка вершины и утолщённая линия. На деле из одной сущности это
+   единственный признак, по которому видно, что воспроизведение идёт. */
+#attackGraph .graph-node.current circle {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+#attackGraph .edge-line.current {
+  stroke: var(--accent);
+  stroke-width: 3;
+  opacity: 1;
+}
+
+#attackGraph .node-meta {
+  fill: var(--muted);
+  font-size: 10px;
+  text-anchor: middle;
 }
 
 #attackGraph .node-label {
