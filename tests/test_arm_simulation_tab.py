@@ -487,6 +487,22 @@ def test_journal_line_breaks_long_values() -> None:
     assert "overflow-wrap" in block
 
 
+def test_proxy_points_at_the_product_backend() -> None:
+    """Конфигурация обязана вести в backend продукта, а не в соседнее приложение.
+
+    На боевом контуре на 18092 отвечает другой продукт (иная модель данных, свои дела), а
+    ТАКТ опубликован на 18093. Конфигурация из репозитория указывала на 18092: развернувший
+    её по инструкции получил бы АРМ, который показывает чужие дела и молча расходится с
+    продуктом.
+    """
+    conf = (_ARM / "nginx.takt-pt-arm.conf").read_text(encoding="utf-8")
+    # Упоминание чужого порта в пояснении законно и полезно, запрещён он в самой директиве.
+    proxies = [line for line in conf.splitlines() if "proxy_pass" in line]
+    assert proxies, "в конфигурации нет ни одного proxy_pass"
+    assert not [line for line in proxies if "18092" in line], "proxy_pass ведёт в чужой backend"
+    assert len([line for line in proxies if "18093" in line]) >= 2
+
+
 def test_glossary_is_reachable_from_the_header() -> None:
     """Словарь нужен в первые смены, а не после того, как аналитик найдёт нужный блок."""
     index = _index()
