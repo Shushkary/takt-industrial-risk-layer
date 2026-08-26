@@ -135,7 +135,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260826-02"}, versions
+    assert versions >= {"20260826-03"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -963,6 +963,7 @@ def test_chain_timeline_follows_the_player() -> None:
     assert "simCursor" in block
     assert "'current'" in block and "'played'" in block
     assert "attack_phase_title_ru" in block, "подпись бегунка называет фазу текущего шага"
+    assert "scaleX" in block, "заливка пройденного пути обязана двигаться вместе с плеером"
 
 
 def test_attack_graph_is_hidden_when_there_is_nothing_to_link() -> None:

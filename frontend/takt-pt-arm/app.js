@@ -3004,7 +3004,7 @@ function renderTimeline() {
 
   const readout = label(pad, stepY + 40, '', 'tl-readout');
 
-  simTimeline = { marks, timeCursor, stepCursor, readout, atTime, atStep, times, slot };
+  simTimeline = { marks, timeCursor, stepCursor, readout, progress, atTime, atStep, times, slot, total: steps.length };
 
   const duration = span / 1000;
   const dense = densestMinute(times);
@@ -3018,7 +3018,7 @@ function renderTimeline() {
 
 function paintTimelineProgress() {
   if (!simTimeline) return;
-  const { marks, timeCursor, stepCursor, readout, atTime, atStep, times, slot } = simTimeline;
+  const { marks, timeCursor, stepCursor, readout, progress, atTime, atStep, times, slot, total } = simTimeline;
   for (const mark of marks) {
     const played = mark.order <= simCursor;
     const current = mark.order === simCursor;
@@ -3032,6 +3032,8 @@ function paintTimelineProgress() {
   // повторное открытие дела), и на более короткой цепочке шаг за концом уронил бы отрисовку.
   const index = Math.min(simulation.steps.length - 1, Math.max(0, simCursor - 1));
   const order = index + 1;
+  // Заливка пройденного пути: масштаб по доле сыгранных шагов, а не перерисовка полосы.
+  progress.style.transform = `scaleX(${started ? Math.min(1, simCursor / total) : 0})`;
   timeCursor.setAttribute('transform', `translate(${atTime(times[index])}, 0)`);
   stepCursor.setAttribute('transform', `translate(${atStep(order) + slot / 2}, 0)`);
   timeCursor.classList.toggle('idle', !started);
