@@ -132,7 +132,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260825-07"}, versions
+    assert versions >= {"20260825-08"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -501,6 +501,31 @@ def test_proxy_points_at_the_product_backend() -> None:
     assert proxies, "в конфигурации нет ни одного proxy_pass"
     assert not [line for line in proxies if "18092" in line], "proxy_pass ведёт в чужой backend"
     assert len([line for line in proxies if "18093" in line]) >= 2
+
+
+def test_product_version_is_visible_in_the_workplace() -> None:
+    """Версия продукта видна в окне: иначе отставший стенд ничем себя не выдаёт.
+
+    Прецедент: интерфейс выложен свежий, а backend остался образом недельной давности —
+    расхождение обнаружилось только чтением метаданных контейнера на сервере.
+    """
+    assert 'id="apiVersion"' in _index()
+    app = _app()
+    assert "/health" in app
+    assert "function renderApiVersion(" in app
+
+
+def test_graph_states_when_there_are_no_transitions() -> None:
+    """Дело из одной сущности рисует одинокую вершину — без пояснения это читается как сбой."""
+    assert 'id="graphNote"' in _index()
+    app = _app()
+    start = app.index("function renderAttackGraph(")
+    block = app[start : app.index(chr(10) + "}" + chr(10), start)]
+    # Подпись обновляется на каждой отрисовке, а не только когда граф пуст: иначе после
+    # перехода к делу с переходами осталась бы подпись от предыдущего.
+    assert "renderGraphNote(" in block
+    note = app[app.index("function renderGraphNote(") :]
+    assert "#graphNote" in note[:600]
 
 
 def test_glossary_is_reachable_from_the_header() -> None:

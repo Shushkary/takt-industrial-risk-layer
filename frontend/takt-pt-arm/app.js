@@ -2247,6 +2247,25 @@ function setConnection(state, detail = '') {
   else box.textContent = 'подключение';
 }
 
+// Версия продукта в шапке. Прецедент: интерфейс выложили свежий, а backend остался образом
+// недельной давности — расхождение обнаружилось только чтением метаданных контейнера на
+// сервере. Версию отдаёт сам продукт (`GET /health`), интерфейс её не выводит из своей сборки:
+// иначе он показывал бы собственный номер и расхождение осталось бы невидимым.
+async function renderApiVersion() {
+  const box = $('#apiVersion');
+  try {
+    const health = await api('/health');
+    const version = String(health.version || '').trim();
+    if (!version) return;
+    box.textContent = `продукт ${version}`;
+    box.title = `${health.product || 'ТАКТ'} ${version}`;
+    box.hidden = false;
+  } catch (error) {
+    // Молчание намеренно: состояние связи показывает соседний индикатор, а вторая надпись
+    // об одной и той же беде только отвлекает.
+  }
+}
+
 let accessKeyPromptShown = false;
 
 const QUEUE_PAGE_LIMIT = 100;
@@ -2854,10 +2873,36 @@ function chainGraph() {
 // одной области видимости, и объявление ниже перекрывало объявление выше: открытие кейса
 // вызывало отрисовку графа атаки, читало `simulation.steps` у ещё не загруженной симуляции и
 // падало — вкладка «Расследование» не открывалась вообще.
+// Что именно нарисовано: сколько сущностей и переходов. Дело из одной сущности рисует
+// одинокую вершину, а дело без переходов — набор вершин без линий; без подписи это читается
+// как незагрузившийся граф, хотя продукт показал ровно то, что есть в деле.
+function renderGraphNote(nodes, edges) {
+  const box = $('#graphNote');
+  if (!nodes) {
+    box.textContent = 'В цепочке нет сущностей: у событий дела не заполнены узел, учётная запись и адреса.';
+    return;
+  }
+  // Линий на графе столько, сколько различных пар сущностей: повторные переходы между теми
+  // же двумя рисуются одной линией. Считать здесь события значило бы назвать число, которого
+  // на картинке нет, — поэтому названы оба.
+  const unique = new Set(edges.map((edge) => `${edge.from}|${edge.to}`)).size;
+  const passes = unique && edges.length > unique ? ` (по ${edges.length} событиям)` : '';
+  const facts = `Сущностей в цепочке: ${nodes}, переходов между ними: ${unique}${passes}.`;
+  if (unique) {
+    box.textContent = `${facts} Переход — это событие, связавшее две сущности.`;
+    return;
+  }
+  box.textContent =
+    nodes === 1
+      ? `${facts} Все события дела касаются одной сущности, поэтому связывать нечего — это состав дела, а не сбой отрисовки.`
+      : `${facts} События дела не связывают сущности между собой: каждое касается своей.`;
+}
+
 function renderAttackGraph() {
   const svg = $('#attackGraph');
   svg.replaceChildren();
   const { nodes, edges } = chainGraph();
+  renderGraphNote(nodes.length, edges);
   if (!nodes.length) return;
 
   const perRow = 5;
@@ -3127,6 +3172,7 @@ applyQueueMode();
 
 loadVocabulary().then(() => {
   loadSession();
+  renderApiVersion();
   refresh();
   pollTimer = setInterval(refresh, POLL_MS);
 });

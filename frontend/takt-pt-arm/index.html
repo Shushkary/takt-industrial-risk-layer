@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260825-07" />
+    <link rel="stylesheet" href="./styles.css?v=20260825-08" />
   </head>
   <body>
     <header class="top">
@@ -25,6 +25,7 @@
         <span id="sessionActor" class="actor" hidden>—</span>
         <button id="accessKeyToggle" class="link" type="button">ключ доступа</button>
         <button class="help sm" type="button" data-help="access" aria-label="Пояснение: роль и права доступа">?</button>
+        <span id="apiVersion" class="muted small" hidden>—</span>
         <span id="connection" class="conn">подключение</span>
         <span id="lastSync" class="muted small">—</span>
       </div>
@@ -535,6 +536,7 @@
           <div class="graph-wrap">
             <svg id="attackGraph" viewBox="0 0 960 320" role="img" aria-label="Граф сущностей цепочки атаки"></svg>
           </div>
+          <p id="graphNote" class="muted small">—</p>
         </div>
 
         <div class="block">
@@ -562,7 +564,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260825-07"></script>
-    <script src="./app.min.js?v=20260825-07"></script>
+    <script src="./env.js?v=20260825-08"></script>
+    <script src="./app.min.js?v=20260825-08"></script>
   </body>
 </html>
