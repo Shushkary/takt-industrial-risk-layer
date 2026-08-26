@@ -132,7 +132,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260825-04"}, versions
+    assert versions >= {"20260825-05"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -376,6 +376,23 @@ def test_help_modal_renders_numbered_steps() -> None:
     assert "entry.steps" in block
     assert "createElement('ol')" in block
     assert "modal-steps" in _STYLES.read_text(encoding="utf-8")
+
+
+def test_training_entry_explains_that_rules_change_by_hand() -> None:
+    """«Дообучение» продукта — разметка и правка конфигурации, а не веса модели.
+
+    Вопрос задают на каждой демонстрации, и ответ «модель дообучается» здесь был бы ложью:
+    автоматический пересчёт по накопленной истории сделал бы вердикт невоспроизводимым.
+    """
+    entries = _help_entries()
+    assert "training" in entries, "нет пояснения о том, как меняются правила"
+    training = entries["training"]
+
+    assert "steps: [" in training, "цикл подан не по шагам"
+    for stage in ("Разметка", "Сведение", "Предложение", "Правка", "Проверка"):
+        assert stage in training, f"в цикле нет шага «{stage}»"
+    assert "воспроизводим" in training, "не сказано, почему пересчёт не автоматический"
+    assert "invariant-feedback" in training, "не назван маршрут отчёта по правилам"
 
 
 def test_glossary_is_reachable_from_the_header() -> None:
