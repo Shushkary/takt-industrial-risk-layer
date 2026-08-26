@@ -63,6 +63,7 @@ def test_simulation_help_topics_are_present() -> None:
         "effort_method",
         "player",
         "attack_graph",
+        "timeline",
         "sim_summary",
         "step",
         "seconds_per_action",
@@ -107,6 +108,8 @@ def test_method_modal_states_what_is_measured_and_what_is_modelled() -> None:
         "phaseLegend",
         "stepList",
         "attackGraph",
+        "attackGraphBlock",
+        "chainTimeline",
         "simSummary",
         "methodButton",
         "secondsPerAction",
@@ -132,7 +135,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260826-01"}, versions
+    assert versions >= {"20260826-02"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -933,3 +936,58 @@ def test_graph_note_explains_what_the_player_changes() -> None:
     assert "Сущностей в цепочке" in block
     assert "фазы текущего шага" in block
     assert "не сбой отрисовки" in block
+
+
+def test_chain_timeline_shows_both_time_and_step_order() -> None:
+    """Лента строится по двум осям сразу.
+
+    Одна ось реального времени бесполезна там, где 65 событий из 69 укладываются в шесть
+    секунд: бегунок стоит на месте, и последовательность шагов не читается. Одна ось шагов
+    скрывает темп атаки. Поэтому на ленте обе.
+    """
+    app = _app()
+    start = app.index("function renderTimeline(")
+    block = app[start : app.index(chr(10) + "}" + chr(10), start)]
+
+    assert "observed_at" in block, "верхняя ось идёт по времени события"
+    assert "atStep(step.order)" in block, "нижняя ось идёт по шагам плеера"
+    assert "phaseColor(step.attack_phase)" in block, "цвет деления — фаза цепочки"
+
+
+def test_chain_timeline_follows_the_player() -> None:
+    """Бегунки и заливка обязаны двигаться от положения плеера."""
+    app = _app()
+    start = app.index("function paintTimelineProgress(")
+    block = app[start : app.index(chr(10) + "}" + chr(10), start)]
+
+    assert "simCursor" in block
+    assert "'current'" in block and "'played'" in block
+    assert "attack_phase_title_ru" in block, "подпись бегунка называет фазу текущего шага"
+
+
+def test_attack_graph_is_hidden_when_there_is_nothing_to_link() -> None:
+    """Граф показывается только там, где есть связи.
+
+    На делах, собранных пивотом по одному адресу (весь корпус AIT), граф вырождается в точку
+    и читается как незагрузившийся блок. Ход такого дела показывает лента.
+    """
+    app = _app()
+    assert "$('#attackGraphBlock').hidden = nodes.length < 2;" in app
+    assert 'id="attackGraphBlock" hidden' in _index()
+
+
+def test_timeline_respects_reduced_motion() -> None:
+    """Вкладку показывают с проектора: если система просит меньше движения, переходов нет."""
+    css = _STYLES.read_text(encoding="utf-8")
+    start = css.index("prefers-reduced-motion")
+    block = css[start : css.index("}" + chr(10) + "}", start)]
+    assert "#chainTimeline" in block
+    assert "transition: none" in block
+
+
+def test_time_zone_switch_reaches_the_simulation_tab() -> None:
+    """Смена зоны обязана дойти до ленты и списка шагов, иначе время разъедется с карточкой."""
+    app = _app()
+    start = app.index("function toggleTimeZone(")
+    block = app[start : app.index(chr(10) + "}" + chr(10), start)]
+    assert "renderTimeline()" in block

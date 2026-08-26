@@ -1119,6 +1119,89 @@ ol.steps {
   overflow-x: auto;
 }
 
+.timeline-wrap {
+  overflow-x: auto;
+}
+
+#chainTimeline {
+  width: 100%;
+  min-width: 720px;
+  height: 150px;
+}
+
+#chainTimeline .tl-axis {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+#chainTimeline .tl-progress {
+  fill: var(--accent);
+  opacity: 0.35;
+  transform-origin: 40px 0;
+  transform: scaleX(0);
+  transition: transform 180ms ease-out;
+}
+
+/* Деление события: приглушено, пока плеер до него не дошёл. Сыгранное — в полном цвете
+   фазы, текущее — крупнее и с обводкой. Это и есть движение, которое видно на деле из
+   одной сущности, где графу связей показывать нечего. */
+#chainTimeline .tl-tick,
+#chainTimeline .tl-bar {
+  opacity: 0.25;
+  transition: opacity 180ms ease-out;
+}
+
+#chainTimeline .tl-bar {
+  cursor: pointer;
+}
+
+#chainTimeline .tl-tick.played,
+#chainTimeline .tl-bar.played {
+  opacity: 1;
+}
+
+#chainTimeline .tl-tick.current,
+#chainTimeline .tl-bar.current {
+  opacity: 1;
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+
+#chainTimeline .tl-cursor line {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+#chainTimeline .tl-cursor {
+  transition: transform 180ms ease-out;
+}
+
+#chainTimeline .tl-cursor.idle line {
+  stroke: var(--line);
+}
+
+#chainTimeline .tl-caption,
+#chainTimeline .tl-edge {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+#chainTimeline .tl-readout {
+  fill: var(--text);
+  font-size: 11px;
+}
+
+/* Показ на защите идёт с проектора, и дёргающаяся картинка там вредит: если система
+   попросила меньше движения, лента меняет состояние без переходов. */
+@media (prefers-reduced-motion: reduce) {
+  #chainTimeline .tl-progress,
+  #chainTimeline .tl-cursor,
+  #chainTimeline .tl-tick,
+  #chainTimeline .tl-bar {
+    transition: none;
+  }
+}
+
 #attackGraph {
   width: 100%;
   min-width: 720px;

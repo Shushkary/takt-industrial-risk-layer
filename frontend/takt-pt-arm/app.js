@@ -98,6 +98,13 @@ const HELP = {
     action: 'Остановиться на шаге и открыть его — в окне шага видно, что произошло и почему ТАКТ это выделил.',
     doc: 'docs/pt_techlab/simulation.md',
   },
+  timeline: {
+    title: 'Ход цепочки',
+    what: 'Две оси одного и того же дела: верхняя — реальное время событий, нижняя — шаги плеера подряд. Цвет деления — фаза цепочки, бегунки показывают текущее положение воспроизведения.',
+    source: 'Строится по времени и разметке фазы событий дела (`steps[].observed_at`, `steps[].attack_phase`). Ничего не досчитывается: если источник не проставил фазу, событие в цепочку не попало и на ленте его нет.',
+    action: 'Смотреть на разлёт бегунков: сгущение делений на верхней оси — темп атаки, разрыв — пауза между этапами. Клик по делению нижней оси открывает шаг.',
+    doc: 'docs/pt_techlab/simulation.md',
+  },
   attack_graph: {
     title: 'Граф атаки',
     what: 'Сущности цепочки и переходы между ними: учётная запись, узел, адрес, объект конвейера. Вершина подписана видом сущности; при воспроизведении она берёт цвет фазы текущего шага и показывает, сколько её событий уже сыграно.',
@@ -2233,6 +2240,11 @@ function toggleTimeZone() {
   // и в карточке сущности — точечная перерисовка оставила бы часть значений в старой зоне.
   if (selectedCaseId) openCase(selectedCaseId);
   else paintChain();
+  if (simulation) {
+    renderSteps();
+    renderTimeline();
+    paintProgress();
+  }
 }
 
 // Состояния: ok — связь есть; auth — продукт ответил 401; off — связи нет.
@@ -2808,11 +2820,13 @@ async function openSimulation() {
     $('#simEmpty').hidden = false;
     $('#simEmpty').textContent = `Симуляция недоступна: ${error.message}`;
     simGraph = null;
+    simTimeline = null;
     return;
   }
   simCursor = 0;
   renderLegend();
   renderSteps();
+  renderTimeline();
   renderAttackGraph();
   renderSummary();
   renderSavedActions();
@@ -2851,6 +2865,183 @@ function renderSteps() {
     list.appendChild(row);
   }
   paintProgress();
+}
+
+// Лента хода цепочки. Граф сущностей отвечает на вопрос «кто с кем связан» и на деле из
+// одной сущности показывать ему нечего, а развивается по шагам другое: время и фазы. Лента
+// показывает оба измерения сразу — сверху реальное время (темп: где события сгущаются, где
+// пауза), снизу равные деления по шагам плеера (последовательность, видимая даже когда все
+// события уложились в две минуты).
+const TIMELINE = { width: 1000, pad: 40, timeY: 46, stepY: 104, height: 150 };
+
+let simTimeline = null;
+
+// Время без даты: в ленте оси подписаны часами, дата стоит в списке шагов.
+function clockTime(value) {
+  return utc(value).slice(11);
+}
+
+// Событий в самую плотную минуту: аналитику это говорит о темпе больше, чем общая
+// длительность. Считается по скользящему окну в 60 секунд от каждого события.
+function densestMinute(times) {
+  let best = 0;
+  for (let index = 0; index < times.length; index += 1) {
+    let count = 0;
+    while (index + count < times.length && times[index + count] - times[index] <= 60000) count += 1;
+    best = Math.max(best, count);
+  }
+  return best;
+}
+
+function renderTimeline() {
+  const svg = $('#chainTimeline');
+  svg.replaceChildren();
+  const note = $('#timelineNote');
+  const steps = simulation.steps || [];
+  simTimeline = null;
+  if (!steps.length) {
+    note.textContent = 'Шагов с разметкой фазы в деле нет: ленту строить не по чему.';
+    return;
+  }
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const { width, pad, timeY, stepY } = TIMELINE;
+  const trackWidth = width - pad * 2;
+  const times = steps.map((step) => new Date(step.observed_at).getTime());
+  const first = times[0];
+  const last = times[times.length - 1];
+  const span = last - first;
+  // Цепочка в одно мгновение (или с одним шагом) не имеет протяжённости: делить на ноль
+  // нельзя, и все события честнее поставить в начало оси.
+  const atTime = (value) => (span > 0 ? pad + ((value - first) / span) * trackWidth : pad);
+  const slot = trackWidth / steps.length;
+  const atStep = (order) => pad + (order - 1) * slot;
+
+  const line = (x1, y1, x2, y2, cls) => {
+    const element = document.createElementNS(ns, 'line');
+    element.setAttribute('x1', x1);
+    element.setAttribute('y1', y1);
+    element.setAttribute('x2', x2);
+    element.setAttribute('y2', y2);
+    element.setAttribute('class', cls);
+    svg.appendChild(element);
+    return element;
+  };
+  const label = (x, y, text, cls, anchor) => {
+    const element = document.createElementNS(ns, 'text');
+    element.setAttribute('x', x);
+    element.setAttribute('y', y);
+    element.setAttribute('class', cls);
+    if (anchor) element.setAttribute('text-anchor', anchor);
+    element.textContent = text;
+    svg.appendChild(element);
+    return element;
+  };
+
+  label(pad, 22, 'по времени', 'tl-caption');
+  label(pad, stepY - 28, 'по шагам', 'tl-caption');
+  line(pad, timeY, width - pad, timeY, 'tl-axis');
+  line(pad, stepY, width - pad, stepY, 'tl-axis');
+  label(pad, 138, `${clockTime(steps[0].observed_at)} ${zoneLabel()}`, 'tl-edge');
+  label(width - pad, 138, `${clockTime(steps[steps.length - 1].observed_at)} ${zoneLabel()}`, 'tl-edge', 'end');
+
+  // Пройденная часть оси шагов: заливка масштабируется, а не перерисовывается, поэтому
+  // движение бегунка остаётся плавным и не нагружает отрисовку на длинных цепочках.
+  const progress = document.createElementNS(ns, 'rect');
+  progress.setAttribute('x', pad);
+  progress.setAttribute('y', stepY - 1);
+  progress.setAttribute('width', trackWidth);
+  progress.setAttribute('height', 2);
+  progress.setAttribute('class', 'tl-progress');
+  svg.appendChild(progress);
+
+  const marks = steps.map((step, index) => {
+    const color = phaseColor(step.attack_phase);
+    const tick = document.createElementNS(ns, 'rect');
+    tick.setAttribute('x', atTime(times[index]) - 1);
+    tick.setAttribute('y', timeY - 11);
+    tick.setAttribute('width', 2);
+    tick.setAttribute('height', 22);
+    tick.setAttribute('fill', color);
+    tick.setAttribute('class', 'tl-tick');
+    svg.appendChild(tick);
+
+    const barWidth = Math.max(1, slot - 3);
+    const bar = document.createElementNS(ns, 'rect');
+    bar.setAttribute('x', atStep(step.order));
+    bar.setAttribute('y', stepY - 13);
+    bar.setAttribute('width', barWidth);
+    bar.setAttribute('height', 26);
+    bar.setAttribute('rx', Math.min(2, barWidth / 2));
+    bar.setAttribute('fill', color);
+    bar.setAttribute('class', 'tl-bar');
+    bar.addEventListener('click', () => openStep(step.order));
+    svg.appendChild(bar);
+    return { order: step.order, tick, bar };
+  });
+
+  // Бегунки — единственное, что двигается: обе оси показывают одно и то же положение
+  // плеера, поэтому по разлёту между ними читается, насколько плотно шли события.
+  const timeCursor = document.createElementNS(ns, 'g');
+  timeCursor.setAttribute('class', 'tl-cursor');
+  timeCursor.appendChild(document.createElementNS(ns, 'line'));
+  const timeMark = timeCursor.firstChild;
+  timeMark.setAttribute('x1', 0);
+  timeMark.setAttribute('y1', timeY - 18);
+  timeMark.setAttribute('x2', 0);
+  timeMark.setAttribute('y2', timeY + 18);
+  svg.appendChild(timeCursor);
+
+  const stepCursor = document.createElementNS(ns, 'g');
+  stepCursor.setAttribute('class', 'tl-cursor');
+  const stepMark = document.createElementNS(ns, 'line');
+  stepMark.setAttribute('x1', 0);
+  stepMark.setAttribute('y1', stepY - 20);
+  stepMark.setAttribute('x2', 0);
+  stepMark.setAttribute('y2', stepY + 20);
+  stepCursor.appendChild(stepMark);
+  svg.appendChild(stepCursor);
+
+  const readout = label(pad, stepY + 40, '', 'tl-readout');
+
+  simTimeline = { marks, timeCursor, stepCursor, readout, atTime, atStep, times, slot };
+
+  const duration = span / 1000;
+  const dense = densestMinute(times);
+  const pace =
+    span > 0
+      ? `Цепочка длится ${formatDuration(duration)}; в самую плотную минуту — ${dense} ${plural(dense, 'событие', 'события', 'событий')} из ${steps.length}.`
+      : `Все ${steps.length} ${plural(steps.length, 'событие', 'события', 'событий')} цепочки пришлись на одну секунду.`;
+  note.textContent = `${pace} Верхняя ось — реальное время, нижняя — шаги плеера подряд.`;
+  paintTimelineProgress();
+}
+
+function paintTimelineProgress() {
+  if (!simTimeline) return;
+  const { marks, timeCursor, stepCursor, readout, atTime, atStep, times, slot } = simTimeline;
+  for (const mark of marks) {
+    const played = mark.order <= simCursor;
+    const current = mark.order === simCursor;
+    mark.tick.classList.toggle('played', played);
+    mark.tick.classList.toggle('current', current);
+    mark.bar.classList.toggle('played', played);
+    mark.bar.classList.toggle('current', current);
+  }
+  const started = simCursor > 0;
+  // Положение зажимается по длине цепочки: курсор переживает пересборку ленты (смена зоны,
+  // повторное открытие дела), и на более короткой цепочке шаг за концом уронил бы отрисовку.
+  const index = Math.min(simulation.steps.length - 1, Math.max(0, simCursor - 1));
+  const order = index + 1;
+  timeCursor.setAttribute('transform', `translate(${atTime(times[index])}, 0)`);
+  stepCursor.setAttribute('transform', `translate(${atStep(order) + slot / 2}, 0)`);
+  timeCursor.classList.toggle('idle', !started);
+  stepCursor.classList.toggle('idle', !started);
+  const step = simulation.steps[index];
+  readout.setAttribute('x', Math.min(TIMELINE.width - TIMELINE.pad, Math.max(TIMELINE.pad, atStep(order))));
+  readout.setAttribute('text-anchor', 'middle');
+  readout.textContent = started
+    ? `шаг ${order} из ${simulation.steps.length} · ${clockTime(step.observed_at)} · ${step.attack_phase_title_ru}`
+    : 'воспроизведение не начато';
 }
 
 // Узлы и переходы цепочки: сущности в порядке первого появления.
@@ -2949,6 +3140,10 @@ function renderAttackGraph() {
   simGraph = chainGraph();
   const { nodes, edges } = simGraph;
   renderGraphNote(nodes.length, edges);
+  // Дело из одной сущности связывать нечем: граф вырождается в точку и читается как
+  // незагрузившийся блок. Ход цепочки в таком деле показывает лента, а граф скрывается
+  // целиком — вместе с заголовком, чтобы на экране не оставалось пустого места.
+  $('#attackGraphBlock').hidden = nodes.length < 2;
 
   const perRow = 5;
   const rows = Math.max(1, Math.ceil(nodes.length / perRow));
@@ -3039,6 +3234,7 @@ function paintProgress() {
     row.classList.toggle('played', order <= simCursor);
     row.classList.toggle('current', order === simCursor);
   }
+  paintTimelineProgress();
   paintGraphProgress();
 }
 

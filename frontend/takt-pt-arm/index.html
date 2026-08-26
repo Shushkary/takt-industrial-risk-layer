@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260826-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260826-02" />
   </head>
   <body>
     <header class="top">
@@ -530,6 +530,17 @@
 
         <div class="block">
           <div class="block-head">
+            <h4>Ход цепочки</h4>
+            <button class="help" type="button" data-help="timeline" aria-label="Пояснение: ход цепочки">?</button>
+          </div>
+          <div class="timeline-wrap">
+            <svg id="chainTimeline" viewBox="0 0 1000 150" role="img" aria-label="Ход цепочки: события по времени и по шагам плеера"></svg>
+          </div>
+          <p id="timelineNote" class="muted small">—</p>
+        </div>
+
+        <div class="block" id="attackGraphBlock" hidden>
+          <div class="block-head">
             <h4>Граф атаки</h4>
             <button class="help" type="button" data-help="attack_graph" aria-label="Пояснение: граф атаки">?</button>
           </div>
@@ -564,7 +575,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260826-01"></script>
-    <script src="./app.min.js?v=20260826-01"></script>
+    <script src="./env.js?v=20260826-02"></script>
+    <script src="./app.min.js?v=20260826-02"></script>
   </body>
 </html>
