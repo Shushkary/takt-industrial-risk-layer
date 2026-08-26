@@ -24,6 +24,7 @@
         <button class="link" type="button" data-help="glossary">словарь понятий</button>
         <span id="sessionActor" class="actor" hidden>—</span>
         <button id="accessKeyToggle" class="link" type="button">ключ доступа</button>
+        <button class="help sm" type="button" data-help="access" aria-label="Пояснение: роль и права доступа">?</button>
         <span id="connection" class="conn">подключение</span>
         <span id="lastSync" class="muted small">—</span>
       </div>
@@ -429,7 +430,10 @@
 
       <div class="panel-head">
         <h2>Разбор значения</h2>
-        <button class="help" type="button" data-help="decode" aria-label="Пояснение: разбор закодированного значения">?</button>
+        <div class="head-actions">
+          <button class="link" type="button" data-help="enrichment">границы проверки артефактов</button>
+          <button class="help" type="button" data-help="decode" aria-label="Пояснение: разбор закодированного значения">?</button>
+        </div>
       </div>
       <div class="search-actions">
         <input id="decodeValue" type="search" placeholder="значение из события или артефакта" />

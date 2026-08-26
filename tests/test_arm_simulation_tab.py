@@ -378,6 +378,9 @@ def test_help_modal_renders_numbered_steps() -> None:
     assert "modal-steps" in _STYLES.read_text(encoding="utf-8")
 
 
+# --- Сверка с ТЗ «Техлаб 2026»: функции §5 объяснены в интерфейсе ---------------
+
+
 def test_training_entry_explains_that_rules_change_by_hand() -> None:
     """«Дообучение» продукта — разметка и правка конфигурации, а не веса модели.
 
@@ -393,6 +396,42 @@ def test_training_entry_explains_that_rules_change_by_hand() -> None:
         assert stage in training, f"в цикле нет шага «{stage}»"
     assert "воспроизводим" in training, "не сказано, почему пересчёт не автоматический"
     assert "invariant-feedback" in training, "не назван маршрут отчёта по правилам"
+
+
+def test_access_entry_explains_roles_and_the_key() -> None:
+    """ТЗ §5 требует разграничения прав; интерфейс роль показывал, но нигде не объяснял."""
+    entries = _help_entries()
+    assert "access" in entries, "нет пояснения о роли и правах доступа"
+    access = entries["access"]
+
+    assert "/session" in access, "не сказано, что права приходят от продукта"
+    assert "автор" in access, "не сказано, что ключ определяет автора действий в журнале"
+    assert "rbac_matrix.md" in access
+
+
+def test_enrichment_entry_names_the_boundary_of_artifact_checks() -> None:
+    """ТЗ §5 просит обогащение артефактов; часть проверок требует выхода наружу.
+
+    Интерфейс обязан называть, что он делает внутри контура, а чего не делает вовсе —
+    иначе отсутствие репутации и песочницы читается как несработавшая кнопка.
+    """
+    entries = _help_entries()
+    assert "enrichment" in entries, "нет пояснения о границах обогащения артефактов"
+    enrichment = entries["enrichment"]
+
+    assert "песочниц" in enrichment
+    assert "интеграц" in enrichment
+    assert "нет" in enrichment, "не сказано, что таких интеграций в поставке нет"
+
+
+def test_assistant_entry_admits_the_missing_next_step_hints() -> None:
+    """Подсказки следующих шагов (ТЗ §5) не реализованы — молчать об этом нельзя."""
+    app = _app()
+    start = app.index("  assistant: {")
+    block = app[start : app.index(chr(10) + "  },", start)]
+    # Слово «подсказки» встречается в шаге про телеметрию, поэтому проверяется именно
+    # признание отсутствия функции, а не упоминание слова.
+    assert "Подсказки следующих шагов" in block, "не сказано, что подсказок следующих шагов нет"
 
 
 def test_glossary_is_reachable_from_the_header() -> None:
