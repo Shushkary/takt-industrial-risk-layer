@@ -9,6 +9,10 @@
 если источник фазу не проставил, шаг в хронологию не попадает, а его наличие видно в
 счётчиках. Продукт не додумывает за источник.
 
+Часть источников фазу не передаёт, но объявляет свою классификацию инцидента — её перевод
+выполняет приём событий (`takt.infrastructure.importers.source_phase`) по таблице из
+конфигурации. Такой шаг несёт `attack_phase_origin`: видно, что фаза выведена, а не сообщена.
+
 Границы продукта не двигаются: это чтение и объяснение уже принятых данных, никаких
 действий и никаких вердиктов от имени системы.
 """
@@ -29,6 +33,8 @@ from takt.domain.entities.event import NormalizedEvent
 from takt.domain.entities.kill_chain import (
     PHASE_FIELD,
     PHASE_ORDER,
+    PHASE_ORIGIN_FIELD,
+    PHASE_REASON_FIELD,
     TECHNIQUE_FIELD,
     KillChainPhase,
     parse_phase,
@@ -129,6 +135,10 @@ def _step(
         "protocol": event.protocol,
         "attack_phase": phase.value,
         "attack_phase_title_ru": phase_title_ru(phase),
+        # Откуда взялась фаза. Пусто — значит источник назвал её сам; заполнено — значит она
+        # выведена из объявленной источником классификации, и это утверждение слабее.
+        "attack_phase_origin": event.payload.get(PHASE_ORIGIN_FIELD) or "",
+        "attack_phase_origin_reason": event.payload.get(PHASE_REASON_FIELD) or "",
         "mitre_technique": parse_technique(event.payload.get(TECHNIQUE_FIELD)),
         "entities": (
             {name: getattr(entities, name) for name in entities.__slots__} if entities else {}

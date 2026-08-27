@@ -19,6 +19,12 @@ from enum import StrEnum
 PHASE_FIELD = "attack_phase"
 TECHNIQUE_FIELD = "mitre_technique"
 
+# Происхождение фазы. Источник, назвавший фазу сам, и фаза, выведенная из объявленной им
+# классификации, — это разные по силе утверждения, и в доказательном пакете они не должны
+# выглядеть одинаково. Поля заполняет приём событий; пустые означают «источник сообщил фазу».
+PHASE_ORIGIN_FIELD = "attack_phase_origin"
+PHASE_REASON_FIELD = "attack_phase_origin_reason"
+
 
 class KillChainPhase(StrEnum):
     """Фазы в порядке развития атаки. Порядок значим: по нему строится хронология окна."""

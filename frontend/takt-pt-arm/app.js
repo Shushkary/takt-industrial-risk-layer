@@ -101,7 +101,7 @@ const HELP = {
   timeline: {
     title: 'Ход цепочки',
     what: 'Две оси одного и того же дела: верхняя — реальное время событий, нижняя — шаги плеера подряд. Цвет деления — фаза цепочки, бегунки показывают текущее положение воспроизведения.',
-    source: 'Строится по времени и разметке фазы событий дела (`steps[].observed_at`, `steps[].attack_phase`). Ничего не досчитывается: если источник не проставил фазу, событие в цепочку не попало и на ленте его нет.',
+    source: 'Строится по времени и разметке фазы событий дела (`steps[].observed_at`, `steps[].attack_phase`). Ничего не досчитывается: если источник не проставил фазу и её не удалось перевести из объявленной им классификации, событие в цепочку не попало и на ленте его нет. Откуда у шага фаза — сказано в окне шага.',
     action: 'Смотреть на разлёт бегунков: сгущение делений на верхней оси — темп атаки, разрыв — пауза между этапами. Клик по делению нижней оси открывает шаг.',
     doc: 'docs/pt_techlab/simulation.md',
   },
@@ -3349,6 +3349,18 @@ function renderSummary() {
   }
 }
 
+// Откуда у шага фаза. Различать это обязательно: «источник назвал фазу» и «фаза выведена из
+// объявленной источником категории» — утверждения разной силы, а в доказательном пакете они
+// стоят рядом. Стенд PT фазу не передаёт вовсе, и на его данных вся цепочка — переведённая.
+function phaseOriginText(step) {
+  const head = `Фаза цепочки: ${step.attack_phase_title_ru}. Техника ATT&CK: ${step.mitre_technique || 'не сопоставлена'}.`;
+  if (!step.attack_phase_origin) {
+    return `${head} Фазу сообщил сам источник — ТАКТ её не вычисляет.`;
+  }
+  const reason = step.attack_phase_origin_reason ? ` Основание перевода: ${step.attack_phase_origin_reason}` : '';
+  return `${head} Фаза выведена из классификации источника (${step.attack_phase_origin}), а не сообщена им напрямую.${reason}`;
+}
+
 function openStep(order) {
   const step = (simulation.steps || []).find((item) => item.order === order);
   if (!step) return;
@@ -3362,7 +3374,7 @@ function openStep(order) {
 
   const paragraphs = [
     `Что произошло: источник «${term('event_source', step.source)}» зафиксировал ${step.operation} в ${stamp(step.observed_at)}.`,
-    `Фаза цепочки: ${step.attack_phase_title_ru}. Техника ATT&CK: ${step.mitre_technique || 'не сопоставлена'}. Разметка приходит от источника, ТАКТ её не вычисляет.`,
+    phaseOriginText(step),
     `Чем выделено: ${detection.selected_by_title_ru || 'не зафиксировано'}. ${detection.reason || ''}`,
     detection.invariants && detection.invariants.length
       ? `Сработавшие инварианты на этом событии: ${detection.invariants.map(invariantTitle).join(', ')}.`

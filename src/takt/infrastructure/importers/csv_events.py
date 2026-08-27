@@ -14,6 +14,7 @@ from takt.domain.entities.event import (
     NormalizedEvent,
     RawEvent,
 )
+from takt.infrastructure.importers.source_phase import annotate_phase
 
 # Синонимы полей, встречающиеся у разных источников: CSV-выгрузки, тела интеграций
 # (netflow, ipfix, syslog, snmp) и ручной приём через `/events`. Порядок значим —
@@ -103,7 +104,9 @@ def raw_row_to_normalized(
         or row.get("op")
         or "UNKNOWN"
     )
-    payload = dict(row)
+    # Фаза цепочки: приходит колонкой из датасета либо переводится из классификации
+    # источника. Приём через интеграции идёт этим же путём, иначе разбор разошёлся бы.
+    payload = annotate_phase(dict(row))
     operator_id = (
         row.get("operator_id")
         or row.get("operator")

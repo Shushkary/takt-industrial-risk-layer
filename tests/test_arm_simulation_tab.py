@@ -135,7 +135,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260826-03"}, versions
+    assert versions >= {"20260827-01"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -992,3 +992,19 @@ def test_time_zone_switch_reaches_the_simulation_tab() -> None:
     start = app.index("function toggleTimeZone(")
     block = app[start : app.index(chr(10) + "}" + chr(10), start)]
     assert "renderTimeline()" in block
+
+
+def test_step_window_separates_declared_and_translated_phase() -> None:
+    """Окно шага обязано различать сообщённую и выведенную фазу.
+
+    Стенд PT фазу не передаёт: она переводится из объявленной источником категории
+    (`incident.category`). Показывать такой вывод как разметку источника значило бы выдать
+    предположение продукта за факт, зафиксированный средством обнаружения.
+    """
+    app = _app()
+    start = app.index("function phaseOriginText(")
+    block = app[start : app.index(chr(10) + "}" + chr(10), start)]
+
+    assert "attack_phase_origin" in block
+    assert "сообщил сам источник" in block
+    assert "выведена из классификации источника" in block

@@ -27,6 +27,7 @@ from takt.domain.entities.event import (
     NormalizedEvent,
 )
 from takt.infrastructure.importers.csv_events import _parse_ts
+from takt.infrastructure.importers.source_phase import annotate_phase
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +197,9 @@ def map_nad(doc: dict[str, Any], trust: float = 1.0) -> NormalizedEvent:
         raise ValueError("document has no timestamp field")
 
     operation = _first(doc, OPERATION_FIELDS) or "NETWORK_FLOW"
-    payload = redact(doc)
+    # Фаза цепочки: у выгрузки стенда её нет, и без перевода классификации источника событие
+    # не попадёт в хронологию инцидента.
+    payload = annotate_phase(redact(doc))
     # Техника MITRE ATT&CK выносится в payload плоским полем: по ней
     # корреляция и UI строят связи, не разбирая исходный документ.
     technique = _text(doc, "att_ck")
