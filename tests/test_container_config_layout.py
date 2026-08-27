@@ -86,3 +86,40 @@ def test_project_root_is_four_levels_above_the_api_module() -> None:
 
     assert module_path.parents[4] == api_app._ROOT
     assert (api_app._ROOT / "config" / "risk_weights.yaml").is_file()
+
+def test_build_revision_metadata_comes_after_the_expensive_layers() -> None:
+    """Метка ревизии не имеет права ронять кэш установки зависимостей.
+
+    `TAKT_BUILD_REVISION` меняется на каждой сборке. Пока `ARG`, `LABEL` и `ENV` с ним стояли
+    до `pip install` и `apt-get`, смена одного значения инвалидировала кэш всех последующих
+    слоёв, и пересборка ради строки метаданных лезла в pypi и в зеркала Debian.
+
+    Прецедент 2026-08-27: образ `3bc35a5` собрали на стенде с ревизией `d816f4e` в метке, и
+    исправить её пересборкой не вышло — у стенда нет выхода в сеть. Метку пришлось чинить
+    производным образом. Метаданные в конце файла делают такую пересборку офлайновой.
+    """
+    text = _DOCKERFILE.read_text(encoding="utf-8")
+
+    def position(pattern: str) -> int:
+        match = re.search(pattern, text, re.MULTILINE)
+        assert match is not None, f"в Dockerfile не найдено: {pattern}"
+        return match.start()
+
+    pip_install = position(r"^RUN pip install ")
+    apt_get = position(r"^RUN apt-get update")
+    last_expensive = max(pip_install, apt_get)
+
+    arg = position(r"^ARG TAKT_BUILD_REVISION")
+    label = position(r"^LABEL org\.opencontainers\.image\.revision")
+    env = position(r"^\s*(?:ENV\s+)?TAKT_BUILD_REVISION=")
+
+    for name, offset in (("ARG", arg), ("LABEL", label), ("ENV", env)):
+        assert offset > last_expensive, (
+            f"{name} с ревизией стоит до установки зависимостей — смена метки уронит кэш"
+            " и потребует сети"
+        )
+
+    # ARG обязан быть объявлен раньше тех инструкций, которые его подставляют, иначе
+    # значение молча станет пустым.
+    assert arg < label, "LABEL подставляет ARG раньше его объявления"
+    assert arg < env, "ENV подставляет ARG раньше его объявления"

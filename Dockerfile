@@ -4,9 +4,6 @@
 
 FROM python:3.13-slim-bookworm
 
-ARG TAKT_BUILD_REVISION=
-LABEL org.opencontainers.image.revision="${TAKT_BUILD_REVISION}"
-
 WORKDIR /app
 
 # PYTHONPATH обязателен. Корень проекта вычисляется от расположения модуля
@@ -18,8 +15,7 @@ WORKDIR /app
 # установленной копии, поэтому импортируется исходная раскладка и корнем становится `/app`.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app/src \
-    TAKT_BUILD_REVISION=${TAKT_BUILD_REVISION}
+    PYTHONPATH=/app/src
 
 
 COPY pyproject.toml README.md ./
@@ -43,6 +39,18 @@ RUN apt-get update \
     && apt-get purge -y fonts-dejavu-core \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
+
+# Метка ревизии стоит здесь, а не рядом с `FROM`, и переносить её наверх нельзя. Значение
+# меняется на каждой сборке, а первая же инструкция, которая его подставляет, обрывает кэш
+# для всего, что идёт следом. Наверху под обрыв попадали `pip install` и `apt-get`, и
+# пересборка ради одной строки метаданных требовала выхода в сеть.
+# Прецедент 2026-08-27: образ `3bc35a5` собрали на стенде с ревизией `d816f4e` в метке, а
+# исправить пересборкой не смогли — у стенда доступа к pypi и зеркалам Debian нет. Ниже
+# тяжёлых слоёв пересборка ревизии тратит секунды и обходится без сети.
+# Порядок закреплён `tests/test_container_config_layout.py`.
+ARG TAKT_BUILD_REVISION=
+LABEL org.opencontainers.image.revision="${TAKT_BUILD_REVISION}"
+ENV TAKT_BUILD_REVISION=${TAKT_BUILD_REVISION}
 
 EXPOSE 8090
 
