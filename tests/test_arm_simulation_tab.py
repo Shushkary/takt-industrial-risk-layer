@@ -135,7 +135,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260827-01"}, versions
+    assert versions >= {"20260827-02"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -1008,3 +1008,61 @@ def test_step_window_separates_declared_and_translated_phase() -> None:
     assert "attack_phase_origin" in block
     assert "сообщил сам источник" in block
     assert "выведена из классификации источника" in block
+
+
+def test_timeline_readout_does_not_sit_on_the_edge_time_labels() -> None:
+    """Подпись бегунка обязана иметь свою строку под краевыми отметками времени.
+
+    Подпись позиционируется по бегунку, и на первых шагах цепочки она приходится на левый
+    край ленты — ровно туда, где стоит отметка времени первого события. Пока обе строки
+    делили одну базовую линию, «шаг N из M · время · фаза» ложилось поверх отметки, и
+    читались обе как каша. Проверяется геометрия исходника, а не картинка: разъехаться она
+    может только правкой этих же чисел.
+    """
+    app = _app()
+
+    geometry = re.search(r"const TIMELINE = \{([^}]*)\};", app)
+    assert geometry, "константы геометрии ленты не найдены"
+    values = {
+        name: int(value) for name, value in re.findall(r"(\w+): (\d+)", geometry.group(1))
+    }
+
+    edge_rows = {
+        int(y) for y in re.findall(r"label\((?:pad|width - pad), (\d+), .*?'tl-edge'", app)
+    }
+    assert len(edge_rows) == 1, f"краевые отметки времени разъехались: {sorted(edge_rows)}"
+    edge_y = edge_rows.pop()
+
+    readout = re.search(r"label\(pad, stepY \+ (\d+), '', 'tl-readout'\)", app)
+    assert readout, "подпись бегунка не найдена"
+    readout_y = values["stepY"] + int(readout.group(1))
+
+    assert readout_y - edge_y >= 16, (
+        f"подпись бегунка (y={readout_y}) налезает на отметки времени (y={edge_y})"
+    )
+    assert readout_y < values["height"], "подпись бегунка не помещается в ленту"
+
+
+def test_timeline_height_agrees_across_markup_styles_and_code() -> None:
+    """Размер ленты записан трижды: разъехавшись, он обрежет нижнюю строку.
+
+    Отрисовка считает координаты по `TIMELINE`, `viewBox` задаёт систему координат, а CSS —
+    место на странице. Подпись бегунка стоит у самого низа, поэтому расхождение здесь режет
+    именно её.
+    """
+    app = _app()
+    geometry = re.search(r"const TIMELINE = \{([^}]*)\};", app)
+    assert geometry, "константы геометрии ленты не найдены"
+    values = {
+        name: int(value) for name, value in re.findall(r"(\w+): (\d+)", geometry.group(1))
+    }
+
+    view_box = re.search(r'id="chainTimeline" viewBox="0 0 (\d+) (\d+)"', _index())
+    assert view_box, "viewBox ленты не найден"
+    assert int(view_box.group(1)) == values["width"], "ширина ленты разошлась с viewBox"
+    assert int(view_box.group(2)) == values["height"], "высота ленты разошлась с viewBox"
+
+    css = _STYLES.read_text(encoding="utf-8")
+    start = css.index("#chainTimeline {")
+    block = css[start : css.index("}", start)]
+    assert f"height: {values['height']}px" in block, "высота ленты в CSS разошлась с кодом"

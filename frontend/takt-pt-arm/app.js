@@ -2872,7 +2872,7 @@ function renderSteps() {
 // показывает оба измерения сразу — сверху реальное время (темп: где события сгущаются, где
 // пауза), снизу равные деления по шагам плеера (последовательность, видимая даже когда все
 // события уложились в две минуты).
-const TIMELINE = { width: 1000, pad: 40, timeY: 46, stepY: 104, height: 150 };
+const TIMELINE = { width: 1000, pad: 40, timeY: 46, stepY: 104, height: 170 };
 
 let simTimeline = null;
 
@@ -3002,7 +3002,10 @@ function renderTimeline() {
   stepCursor.appendChild(stepMark);
   svg.appendChild(stepCursor);
 
-  const readout = label(pad, stepY + 40, '', 'tl-readout');
+  // Своя строка под краевыми отметками времени. Подпись ездит за бегунком и на первых шагах
+  // приходится на левый край ленты — туда же, где стоит время первого события; на общей
+  // базовой линии эти две строки складывались в кашу.
+  const readout = label(pad, stepY + 56, '', 'tl-readout');
 
   simTimeline = { marks, timeCursor, stepCursor, readout, progress, atTime, atStep, times, slot, total: steps.length };
 
@@ -3039,11 +3042,20 @@ function paintTimelineProgress() {
   timeCursor.classList.toggle('idle', !started);
   stepCursor.classList.toggle('idle', !started);
   const step = simulation.steps[index];
-  readout.setAttribute('x', Math.min(TIMELINE.width - TIMELINE.pad, Math.max(TIMELINE.pad, atStep(order))));
   readout.setAttribute('text-anchor', 'middle');
   readout.textContent = started
     ? `шаг ${order} из ${simulation.steps.length} · ${clockTime(step.observed_at)} · ${step.attack_phase_title_ru}`
     : 'воспроизведение не начато';
+  // Центр зажимается с учётом половины ширины строки, а не по голой координате бегунка:
+  // иначе на последних шагах хвост подписи уходил за viewBox и обрезался. Ширина меряется
+  // после установки текста; на скрытой вкладке она нулевая, и зажим вырождается в прежний.
+  const half = readout.getComputedTextLength() / 2;
+  const leftLimit = TIMELINE.pad + half;
+  const rightLimit = TIMELINE.width - TIMELINE.pad - half;
+  readout.setAttribute(
+    'x',
+    rightLimit < leftLimit ? TIMELINE.width / 2 : Math.min(rightLimit, Math.max(leftLimit, atStep(order))),
+  );
 }
 
 // Узлы и переходы цепочки: сущности в порядке первого появления.
