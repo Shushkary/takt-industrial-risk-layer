@@ -29,7 +29,7 @@
 Одно JSON-событие на строку. Поля: `ts, flow_id, src{ip,host}, dst{ip,port}, app_proto,
 dns{query,rrtype}?, smb{share,command}?, verdict, bytes, credentials{login,password}?, incident_id`.
 - **Безопасность:** `credentials.password` всегда `***REDACTED***` — маскируется
-  импортёром `nad_events.py` (REDACTED_FIELDS) до записи в payload.
+  импортёром `nad_events.py` (REDACTED_FIELD_NAMES) до записи в payload.
 - `credentials` может быть null.
 
 ## Инварианты (проверять тестами)

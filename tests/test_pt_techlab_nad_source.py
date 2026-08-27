@@ -142,3 +142,74 @@ def test_nad_ingest_trust_propagated() -> None:
 
     for event in events:
         assert event.ingest_trust == 0.8
+
+
+def _stand_document() -> dict:
+    """Документ ровно по схемам стенда PT (`Stend_PT/nad_table_schemas.json`).
+
+    В `nad_traffic_flow` поле `credentials` объявлено как
+    `array(row("login" varchar, "valid" boolean, "password" varchar))` — массив, а не объект;
+    пароли SMB лежат в `rqs` (`account_password`, `case_sensitive_password`), там же ключ
+    сессии. Проверка на выгрузке стенда показала, что при такой форме записи пароль доходил
+    до `payload` целиком.
+    """
+    side = {
+        "ip": "10.10.5.10",
+        "dns": "web-01.corp.local",
+        "mac": "00:15:5d:01:02:03",
+        "name": "web-01",
+        "port": 445,
+        "groups": ["corp"],
+        "host_id": "h-web-01",
+    }
+    return {
+        "_id": "smb-0002",
+        "tx_time": "2026-08-27T09:04:30Z",
+        "app_proto": "smb",
+        "s_msg": "SMB_LOGIN_SUCCESS",
+        "src": dict(side, ip="10.20.0.77", name="kali-ext", host_id="h-ext-77"),
+        "dst": side,
+        "user": "svc-backup",
+        "credentials": [{"login": "svc-backup", "valid": True, "password": "Sup3rSecret!"}],
+        "rqs": {
+            "account_password": "Sup3rSecret!",
+            "case_sensitive_password": "Sup3rSecret!",
+            "session_key": "0a1b2c3d",
+            "max_password_age": 42,
+        },
+        "rsp": {"encryption_key": "ff00ee11"},
+    }
+
+
+def test_nad_password_is_redacted_when_credentials_is_a_list() -> None:
+    """Массив учётных данных маскируется так же, как объект."""
+    event = map_nad(_stand_document())
+
+    dump = json.dumps(event.payload, ensure_ascii=False, default=str)
+    assert "Sup3rSecret!" not in dump
+    assert event.payload["credentials"][0]["password"] == "[redacted]"
+    # Логин — материал доказательства и остаётся: по нему строятся связи и артефакты.
+    assert event.payload["credentials"][0]["login"] == "svc-backup"
+    assert event.entities.user_id == "svc-backup"
+
+
+def test_nad_protocol_secrets_are_redacted() -> None:
+    """Пароли и ключи протоколов из `rqs`/`rsp` тоже не доходят до payload."""
+    event = map_nad(_stand_document())
+
+    assert event.payload["rqs"]["account_password"] == "[redacted]"
+    assert event.payload["rqs"]["case_sensitive_password"] == "[redacted]"
+    assert event.payload["rqs"]["session_key"] == "[redacted]"
+    assert event.payload["rsp"]["encryption_key"] == "[redacted]"
+
+
+def test_nad_password_policy_is_not_a_secret() -> None:
+    """Политика паролей остаётся в payload: по ней видно состояние домена.
+
+    `max_password_age`, `min_password_length` и `last_password_change` в схемах DCERPC — это
+    настройки, а не значения паролей. Замаскировать их значило бы потерять признак, ради
+    которого событие и принимается.
+    """
+    event = map_nad(_stand_document())
+
+    assert event.payload["rqs"]["max_password_age"] == 42

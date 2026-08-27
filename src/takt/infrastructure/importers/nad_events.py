@@ -5,9 +5,9 @@
 NDJSON — по одному JSON-объекту на строку, как в выгрузке `_search`/`scroll`,
 поэтому объём файла не влияет на потребление памяти.
 
-Безопасность: поле `credentials.password` содержит пароли, восстановленные из
-трафика. Оно **не** попадает ни в `payload`, ни в логи — значение заменяется
-на маркер. См. `REDACTED_FIELDS`.
+Безопасность: трафик несёт пароли и ключи сессий — в `credentials`, а также в запросах
+SMB и DCERPC. Эти значения **не** попадают ни в `payload`, ни в логи: они заменяются на
+маркер. Список полей и основание — `REDACTED_FIELD_NAMES`.
 """
 
 from __future__ import annotations
@@ -30,8 +30,26 @@ from takt.infrastructure.importers.csv_events import _parse_ts
 
 logger = logging.getLogger(__name__)
 
-# Поля, значения которых нельзя сохранять и журналировать.
-REDACTED_FIELDS: tuple[tuple[str, ...], ...] = (("credentials", "password"),)
+# Имена полей, значения которых нельзя сохранять и журналировать. Список составлен по
+# фактическим схемам стенда (`nad_table_schemas.json`, 38 таблиц PT NAD): пароли лежат не
+# только в `credentials`, но и в запросах SMB и DCERPC, а ключи сессии и шифрования — в
+# `rqs`/`rsp`. Маскирование идёт по имени поля, а не по фиксированному пути: путь зависит от
+# протокола, и новая таблица иначе молча принесла бы пароль в `payload`.
+#
+# Настройки политики паролей (`max_password_age`, `min_password_length`,
+# `last_password_change`) в список намеренно не входят: это состояние домена, а не значения
+# паролей, и ради этого признака событие и принимается.
+REDACTED_FIELD_NAMES: frozenset[str] = frozenset(
+    {
+        "password",
+        "account_password",
+        "case_insensitive_password",
+        "case_sensitive_password",
+        "session_key",
+        "encryption_key",
+        "x_csrf_token",
+    }
+)
 REDACTED_MARKER = "[redacted]"
 
 # Приоритет полей: первое непустое значение выигрывает. Каскад покрывает две
@@ -83,17 +101,27 @@ def _first(doc: dict[str, Any], paths: tuple[str, ...]) -> str | None:
 
 
 def redact(doc: dict[str, Any]) -> dict[str, Any]:
-    """Копия документа без секретов (пароли из трафика)."""
-    safe = json.loads(json.dumps(doc, ensure_ascii=False, default=str))
-    for path in REDACTED_FIELDS:
-        node = safe
-        for part in path[:-1]:
-            node = node.get(part) if isinstance(node, dict) else None
-            if not isinstance(node, dict):
-                break
-        if isinstance(node, dict) and path[-1] in node:
-            node[path[-1]] = REDACTED_MARKER
-    return safe
+    """Копия документа без секретов: паролей и ключей, восстановленных из трафика.
+
+    Обход рекурсивный и проходит массивы. Прецедент: маскирование по фиксированному пути
+    `credentials.password` работало только на форме записи «объект», а в схеме стенда
+    `credentials` объявлено как `array(row("login", "valid", "password"))` — пароль
+    доходил до `payload` целиком.
+    """
+
+    def walk(node: Any) -> Any:
+        if isinstance(node, dict):
+            return {
+                key: REDACTED_MARKER
+                if key in REDACTED_FIELD_NAMES and value not in (None, "")
+                else walk(value)
+                for key, value in node.items()
+            }
+        if isinstance(node, list):
+            return [walk(item) for item in node]
+        return node
+
+    return walk(json.loads(json.dumps(doc, ensure_ascii=False, default=str)))
 
 
 def _event_id(doc: dict[str, Any]) -> str:
@@ -232,4 +260,4 @@ class NadEventSourceReader:
                     )
 
 
-__all__ = ["REDACTED_FIELDS", "NadEventSourceReader", "map_nad", "redact"]
+__all__ = ["REDACTED_FIELD_NAMES", "NadEventSourceReader", "map_nad", "redact"]
