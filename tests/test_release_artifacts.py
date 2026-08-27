@@ -354,3 +354,27 @@ def test_frontend_sbom_has_no_local_file_references_when_present() -> None:
         if isinstance(ref, dict) and str(ref.get("url", "")).lower().startswith("file:")
     ]
     assert file_refs == []
+
+
+def test_ci_publishes_the_built_image_for_the_stand() -> None:
+    """Собранный в CI образ обязан доезжать до стенда, а не выбрасываться.
+
+    У боевой ВМ нет доступа ни к pypi, ни к Docker Hub: собрать образ на месте нельзя.
+    CI — единственное место, где он собирается из исходников с `github.sha` в метке, и пока
+    результат сборки выбрасывался, на стенд попадала сборка, сделанная руками. Так метка
+    ревизии однажды и разошлась с кодом: прецедент 2026-08-27, образ `3bc35a5` с ревизией
+    `d816f4e`. Контрольная сумма рядом с архивом нужна, чтобы оператор проверил, что на ВМ
+    приехало ровно то, что собрано.
+    """
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    required = (
+        # Без `load` образ остаётся в кэше buildx, и `docker save` его не найдёт.
+        "load: true",
+        "docker save",
+        "sha256sum",
+        "actions/upload-artifact@v4",
+        "takt-risk-layer-image",
+        "if-no-files-found: error",
+    )
+    missing = [phrase for phrase in required if phrase not in workflow]
+    assert missing == []
