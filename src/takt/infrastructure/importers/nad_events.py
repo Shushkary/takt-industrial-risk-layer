@@ -49,6 +49,11 @@ REDACTED_FIELD_NAMES: frozenset[str] = frozenset(
         "session_key",
         "encryption_key",
         "x_csrf_token",
+        # Сессионные cookie — такой же предъявитель доступа, как пароль: перехваченная из
+        # трафика сессия даёт вход без него. По схемам стенда `cookie` объявлен в `rqs`
+        # таблицы HTTP и отдельной колонкой в RDP, `set_cookie` — в ответе HTTP.
+        "cookie",
+        "set_cookie",
     }
 )
 REDACTED_MARKER = "[redacted]"

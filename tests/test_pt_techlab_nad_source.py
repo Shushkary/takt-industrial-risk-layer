@@ -203,6 +203,26 @@ def test_nad_protocol_secrets_are_redacted() -> None:
     assert event.payload["rsp"]["encryption_key"] == "[redacted]"
 
 
+def test_nad_session_cookies_are_redacted() -> None:
+    """Сессионные cookie — такой же предъявитель доступа, как пароль.
+
+    По схемам стенда `cookie` объявлен в `nad_traffic_http` (внутри `rqs`) и отдельной
+    колонкой в `nad_traffic_rdp`, а `set_cookie` — в ответе HTTP. Перехваченная из трафика
+    сессия даёт доступ без пароля, поэтому в `payload` ей места нет: маскирование по имени
+    поля покрывает обе таблицы сразу.
+    """
+    document = _stand_document()
+    document["rqs"]["cookie"] = "JSESSIONID=8f14e45fceea167a5a36dedd4bea2543"
+    document["rsp"]["set_cookie"] = "SESS=deadbeef; HttpOnly"
+    document["cookie"] = "mstshash=Administr"
+
+    event = map_nad(document)
+
+    assert event.payload["rqs"]["cookie"] == "[redacted]"
+    assert event.payload["rsp"]["set_cookie"] == "[redacted]"
+    assert event.payload["cookie"] == "[redacted]"
+
+
 def test_nad_password_policy_is_not_a_secret() -> None:
     """Политика паролей остаётся в payload: по ней видно состояние домена.
 
