@@ -7,7 +7,8 @@ NDJSON — по одному JSON-объекту на строку, как в в
 
 Безопасность: трафик несёт пароли и ключи сессий — в `credentials`, а также в запросах
 SMB и DCERPC. Эти значения **не** попадают ни в `payload`, ни в логи: они заменяются на
-маркер. Список полей и основание — `REDACTED_FIELD_NAMES`.
+маркер общим для всех коннекторов маскированием
+(`takt.infrastructure.importers.redaction`); список полей и основание — `REDACTED_FIELD_NAMES`.
 """
 
 from __future__ import annotations
@@ -27,36 +28,11 @@ from takt.domain.entities.event import (
     NormalizedEvent,
 )
 from takt.infrastructure.importers.csv_events import _parse_ts
+from takt.infrastructure.importers.redaction import REDACTED_FIELD_NAMES, redact
 from takt.infrastructure.importers.source_phase import annotate_phase
 
 logger = logging.getLogger(__name__)
 
-# Имена полей, значения которых нельзя сохранять и журналировать. Список составлен по
-# фактическим схемам стенда (`nad_table_schemas.json`, 38 таблиц PT NAD): пароли лежат не
-# только в `credentials`, но и в запросах SMB и DCERPC, а ключи сессии и шифрования — в
-# `rqs`/`rsp`. Маскирование идёт по имени поля, а не по фиксированному пути: путь зависит от
-# протокола, и новая таблица иначе молча принесла бы пароль в `payload`.
-#
-# Настройки политики паролей (`max_password_age`, `min_password_length`,
-# `last_password_change`) в список намеренно не входят: это состояние домена, а не значения
-# паролей, и ради этого признака событие и принимается.
-REDACTED_FIELD_NAMES: frozenset[str] = frozenset(
-    {
-        "password",
-        "account_password",
-        "case_insensitive_password",
-        "case_sensitive_password",
-        "session_key",
-        "encryption_key",
-        "x_csrf_token",
-        # Сессионные cookie — такой же предъявитель доступа, как пароль: перехваченная из
-        # трафика сессия даёт вход без него. По схемам стенда `cookie` объявлен в `rqs`
-        # таблицы HTTP и отдельной колонкой в RDP, `set_cookie` — в ответе HTTP.
-        "cookie",
-        "set_cookie",
-    }
-)
-REDACTED_MARKER = "[redacted]"
 
 # Приоритет полей: первое непустое значение выигрывает. Каскад покрывает две
 # формы записи: полную схему индекса заказчика (`src.host_id`, `s_msg`,
@@ -104,30 +80,6 @@ def _first(doc: dict[str, Any], paths: tuple[str, ...]) -> str | None:
         if value is not None:
             return value
     return None
-
-
-def redact(doc: dict[str, Any]) -> dict[str, Any]:
-    """Копия документа без секретов: паролей и ключей, восстановленных из трафика.
-
-    Обход рекурсивный и проходит массивы. Прецедент: маскирование по фиксированному пути
-    `credentials.password` работало только на форме записи «объект», а в схеме стенда
-    `credentials` объявлено как `array(row("login", "valid", "password"))` — пароль
-    доходил до `payload` целиком.
-    """
-
-    def walk(node: Any) -> Any:
-        if isinstance(node, dict):
-            return {
-                key: REDACTED_MARKER
-                if key in REDACTED_FIELD_NAMES and value not in (None, "")
-                else walk(value)
-                for key, value in node.items()
-            }
-        if isinstance(node, list):
-            return [walk(item) for item in node]
-        return node
-
-    return walk(json.loads(json.dumps(doc, ensure_ascii=False, default=str)))
 
 
 def _event_id(doc: dict[str, Any]) -> str:
