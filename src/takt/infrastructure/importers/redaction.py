@@ -33,6 +33,20 @@ REDACTED_FIELD_NAMES: frozenset[str] = frozenset(
         "session_key",
         "encryption_key",
         "x_csrf_token",
+        # Пароль простой привязки LDAP. Имя поля в схеме — `simple` (по названию механизма
+        # привязки), и оно единственное в 38 таблицах: путь `rqs.bind.simple`.
+        "simple",
+        # SNMP. `community` в версиях 1 и 2c — и есть пароль доступа к устройству;
+        # `auth_params`, `privacy_params` и `security_parameters` в версии 3 — материал
+        # аутентификации и шифрования. Имя пользователя (`user_name`) не маскируется: по нему
+        # идёт корреляция.
+        "community",
+        "auth_params",
+        "privacy_params",
+        "security_parameters",
+        # Заголовки HTTP: базовая аутентификация несёт пару «логин:пароль» в base64.
+        "authorization",
+        "proxy_authorization",
         # Сессионные cookie — такой же предъявитель доступа, как пароль: перехваченная из
         # трафика сессия даёт вход без него. По схемам стенда `cookie` объявлен в `rqs`
         # таблицы HTTP и отдельной колонкой в RDP, `set_cookie` — в ответе HTTP.
