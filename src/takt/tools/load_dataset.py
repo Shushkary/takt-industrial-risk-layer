@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from takt.domain.entities.event import EventSource, NormalizedEvent
 from takt.infrastructure.importers.nad_events import NadEventSourceReader
+from takt.infrastructure.importers.siem_events import PtSiemEventSourceReader
 from takt.infrastructure.importers.soc_csv import (
     CsvEventSourceReader,
     map_edr,
@@ -29,8 +30,11 @@ MAPPERS = {
 # Выгрузки, приходящие построчным NDJSON, а не CSV: по одному JSON-объекту на строку, как в
 # ответе `_search`/`scroll`. Читатель выгрузки PT NAD в продукте был и раньше, но точки входа
 # для него не было — принять выгрузку со стенда было нечем.
-NDJSON_READERS = {
+NDJSON_READERS: dict[str, Callable[..., Iterable[NormalizedEvent]]] = {
     "nad": NadEventSourceReader,
+    # Выгрузка PT SIEM по таксономии стенда. Имя `siem` занято CSV-выгрузкой
+    # обезличенного датасета: у неё другие колонки, и подменять её было бы регрессией.
+    "pt_siem": PtSiemEventSourceReader,
 }
 
 # Имя в командной строке называет формат выгрузки, а не класс источника события: выгрузка
@@ -43,6 +47,7 @@ SOURCE_CLASS = {
     "netflow": EventSource.NETWORK.value,
     "ot": EventSource.OT.value,
     "nad": EventSource.NDR.value,
+    "pt_siem": EventSource.SIEM.value,
 }
 
 
