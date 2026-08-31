@@ -264,3 +264,27 @@ def test_dataset_loader_knows_the_pt_siem_source() -> None:
 
     assert NDJSON_READERS["pt_siem"] is PtSiemEventSourceReader
     assert SOURCE_CLASS["pt_siem"] == EventSource.SIEM.value
+
+
+def test_process_command_line_keeps_the_process_and_drops_the_password() -> None:
+    """Командная строка доходит до аналитика, пароль в ней — нет.
+
+    Это признак «процесс» из ТЗ §4.2 и одновременно требование ТЗ §8.7: маскировать строку
+    целиком значит закрыть секрет ценой самого события. Вычищается значение известного ключа
+    передачи пароля, остальное сохраняется.
+    """
+    document = {
+        "time": "2026-06-01T09:00:00Z",
+        "action": "start",
+        "object": "process",
+        "event_src.host": "ws-buh-14",
+        "subject.process.name": "cmd.exe",
+        "subject.process.cmdline": r"cmd.exe /c net use \srv\c$ /user:CORP\svc P@ssw0rd-not-for-storage",
+    }
+    event = map_pt_siem(document)
+
+    command_line = event.payload["subject.process.cmdline"]
+    assert "P@ssw0rd-not-for-storage" not in command_line
+    assert command_line.startswith(r"cmd.exe /c net use \srv\c$")
+    assert r"/user:CORP\svc" in command_line
+    assert event.operation == "START_PROCESS"
