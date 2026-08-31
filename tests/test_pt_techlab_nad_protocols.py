@@ -353,3 +353,98 @@ def test_smtp_auth_mechanism_is_not_an_account() -> None:
     assert event.entities.user_id is None
     assert event.payload["rqs"]["cmd"]["args"] == "[redacted]"
     assert event.operation == "AUTH"
+
+
+@pytest.mark.parametrize(
+    ("table", "operation"),
+    [
+        ("nad_traffic_mysql", "CONNECT"),
+        ("nad_traffic_postgresql", "CONNECT"),
+        ("nad_traffic_oracle_tns", "CONNECT"),
+        ("nad_traffic_tds", "CONNECT"),
+        ("nad_traffic_rdp", "CONNECT"),
+        ("nad_traffic_rfb", "CONNECT"),
+        ("nad_traffic_quic", "CONNECT"),
+        ("nad_traffic_mc_nmf", "CONNECT"),
+        ("nad_traffic_files", "FILE_TRANSFER"),
+        ("nad_traffic_files_old", "FILE_TRANSFER"),
+        ("nad_traffic_pipes", "PIPE_ACCESS"),
+        ("nad_traffic_mail", "MESSAGE"),
+    ],
+)
+def test_operation_of_tables_whose_row_is_the_event_itself(table: str, operation: str) -> None:
+    """У части таблиц команды нет: сама строка и есть событие.
+
+    Запись подключения к СУБД, согласование RDP, извлечённый файл, обращение к именованному
+    каналу и восстановленное письмо не несут поля команды — но событие в них названо самой
+    таблицей. Оставлять их безликим `NETWORK_FLOW` значит терять в хронологии инцидента то,
+    что произошло: обращение к именованному каналу `svcctl` — признак бокового перемещения,
+    а не «сетевой поток».
+    """
+    document = {"table_name": table, "tx_time": "2026-06-01T09:00:00Z",
+                "src": {"ip": "10.10.1.17", "host_id": "ws-buh-14"}, "dst": {"ip": "10.10.0.5"}}
+    assert map_nad(document).operation == operation
+
+
+def test_client_application_name_is_not_an_operation() -> None:
+    """`app_name` — имя клиентского приложения, а не действие.
+
+    У таблиц PostgreSQL и Oracle TNS это поле называет программу, из которой пришло
+    соединение (`psql`, `SQL Developer`). Пока оно стояло в каскаде операции, событие
+    подключения называлось именем программы — операцией это не является.
+    """
+    document = {"table_name": "nad_traffic_postgresql", "tx_time": "2026-06-01T09:00:00Z",
+                "user": "postgres", "database": "billing", "app_name": "psql"}
+    event = map_nad(document)
+
+    assert event.operation == "CONNECT"
+    assert event.payload["app_name"] == "psql"
+
+
+@pytest.mark.parametrize(
+    ("branch", "operation"),
+    [("read", "READ"), ("write", "WRITE")],
+)
+def test_tftp_operation_is_told_by_the_branch_of_the_request(branch: str, operation: str) -> None:
+    """У TFTP команду называет не значение поля, а наличие ветки запроса.
+
+    В схеме объявлены `rqs.read` и `rqs.write` как отдельные записи: заполнена ровно одна из
+    них. Каскад по значениям полей такую форму не разбирает, поэтому чтение и запись файла
+    через TFTP различаются по тому, какая ветка присутствует.
+    """
+    document = {"table_name": "nad_traffic_tftp", "tx_time": "2026-06-01T09:00:00Z",
+                "src": {"ip": "10.10.1.17"}, "dst": {"ip": "10.10.2.20"},
+                "rqs": {branch: {"filename": "plc-config.bin", "mode": "octet"}}}
+    event = map_nad(document)
+
+    assert event.operation == operation
+    files = {a.value for a in event.artifacts if a.type is ArtifactType.FILE}
+    assert "plc-config.bin" in files
+
+
+def test_telnet_stream_stays_without_an_operation() -> None:
+    """Телнет команду не называет: в строке лежит кусок потока, а не команда.
+
+    Приписать такому событию операцию нечем — `rqs.data` содержит набранные символы, и
+    выводить из них команду значит разбирать чужой протокол догадками.
+    """
+    document = {"table_name": "nad_traffic_telnet", "tx_time": "2026-06-01T09:00:00Z",
+                "src": {"ip": "10.10.1.17"}, "dst": {"ip": "10.10.2.20"},
+                "rqs": {"data": "show running-config\r\n"}}
+    assert map_nad(document).operation == "NETWORK_FLOW"
+
+
+def test_ssh_keypressed_is_a_flag_not_captured_keystrokes() -> None:
+    """`keypressed` в схеме — булев признак, а не перехваченные нажатия.
+
+    Сеанс SSH зашифрован: сенсор отмечает факт интерактивного ввода, но не его содержимое.
+    Маскировать здесь нечего, а счётчики неудачных попыток (`auth_pwd_failed`) — наоборот,
+    признак подбора пароля и должны доходить до аналитика.
+    """
+    document = {"table_name": "nad_traffic_ssh", "tx_time": "2026-06-01T09:00:00Z",
+                "src": {"ip": "10.10.1.17"}, "dst": {"ip": "10.10.0.7"},
+                "type": "SSH2", "auth": "password", "keypressed": True, "auth_pwd_failed": 17}
+    payload = map_nad(document).payload
+
+    assert payload["keypressed"] is True
+    assert payload["auth_pwd_failed"] == 17

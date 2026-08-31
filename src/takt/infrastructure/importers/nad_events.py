@@ -63,8 +63,34 @@ OPERATION_FIELDS = (
     "rqs.mode",              # NTP
     "opcode",                # DNS
     "type",                  # SSH, TLS
-    "app_name",
 )
+# У TFTP команду называет не значение поля, а наличие ветки запроса: в схеме `rqs.read` и
+# `rqs.write` объявлены отдельными записями, и заполнена ровно одна из них.
+BRANCH_OPERATIONS: tuple[tuple[str, str], ...] = (
+    ("rqs.read", "READ"),
+    ("rqs.write", "WRITE"),
+)
+# Операция таблиц, где строка и есть событие: поля команды у них нет, но событие названо самой
+# таблицей. Запись подключения к СУБД, согласование RDP, извлечённый файл, обращение к
+# именованному каналу и восстановленное письмо — это не «сетевой поток», и в хронологии
+# инцидента они должны читаться тем, чем являются: обращение к `IPC$\svcctl` — признак бокового
+# перемещения. Таблицы, которых здесь нет, операцию не получают: у `flow` строка и есть поток,
+# а у `telnet` в строке лежит кусок набранного потока, из которого команду можно только
+# додумать.
+TABLE_OPERATION: dict[str, str] = {
+    "nad_traffic_mysql": "CONNECT",
+    "nad_traffic_postgresql": "CONNECT",
+    "nad_traffic_oracle_tns": "CONNECT",
+    "nad_traffic_tds": "CONNECT",
+    "nad_traffic_rdp": "CONNECT",
+    "nad_traffic_rfb": "CONNECT",
+    "nad_traffic_quic": "CONNECT",
+    "nad_traffic_mc_nmf": "CONNECT",
+    "nad_traffic_files": "FILE_TRANSFER",
+    "nad_traffic_files_old": "FILE_TRANSFER",
+    "nad_traffic_pipes": "PIPE_ACCESS",
+    "nad_traffic_mail": "MESSAGE",
+}
 HOST_FIELDS = (
     "src.host_id", "host.host_id", "attacker.host_id",
     "src.host", "host.host", "src.name", "host.name",
@@ -255,6 +281,26 @@ def _table_name(doc: dict[str, Any], table_name: str | None) -> str | None:
     return _first(doc, TABLE_NAME_FIELDS) or table_name
 
 
+def _operation(doc: dict[str, Any], table: str | None) -> str:
+    """Операция события: команда протокола, ветка запроса или событие самой таблицы.
+
+    Порядок значим. Сначала поля команды: они говорят о событии точнее всего. Затем ветка
+    запроса — форма записи, при которой команду называет присутствие поля, а не его значение.
+    И только потом — операция таблицы: она верна для всей таблицы и потому самая грубая.
+    """
+    named = _first(doc, OPERATION_FIELDS)
+    if named is not None:
+        return named.upper()
+    for path, operation in BRANCH_OPERATIONS:
+        if isinstance(_get(doc, path), dict):
+            return operation
+    if table is not None:
+        from_table = TABLE_OPERATION.get(table.lower())
+        if from_table is not None:
+            return from_table
+    return "NETWORK_FLOW"
+
+
 def _login_from_command(doc: dict[str, Any]) -> str | None:
     """Учётная запись из аргумента команды аутентификации открытым текстом.
 
@@ -335,9 +381,9 @@ def map_nad(
     if observed_raw is None:
         raise ValueError("document has no timestamp field")
 
-    operation = _first(doc, OPERATION_FIELDS) or "NETWORK_FLOW"
     user = _first(doc, USER_FIELDS) or _login_from_command(doc)
     table = _table_name(doc, table_name)
+    operation = _operation(doc, table)
     protocol = (
         _first(doc, PROTOCOL_FIELDS)
         or (TABLE_PROTOCOL.get(table.lower()) if table else None)
@@ -358,7 +404,7 @@ def map_nad(
         observed_at=_parse_ts(observed_raw),
         source=EventSource.NDR,
         protocol=protocol,
-        operation=operation.upper(),
+        operation=operation,
         payload_size=_payload_size(doc),
         payload=payload,
         operator_id=user or "",
@@ -426,6 +472,7 @@ class NadEventSourceReader:
 
 __all__ = [
     "REDACTED_FIELD_NAMES",
+    "TABLE_OPERATION",
     "TABLE_PROTOCOL",
     "NadEventSourceReader",
     "map_nad",
