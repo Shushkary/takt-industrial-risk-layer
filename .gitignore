@@ -21,6 +21,7 @@ tmp_pytest*/
 .tmp_pip_audit_cache/
 .coverage
 htmlcov/
+build/
 dist/
 *.egg-info/
 
