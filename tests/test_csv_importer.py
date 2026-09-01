@@ -12,7 +12,7 @@ from takt.infrastructure.importers.csv_events import (
 
 
 def test_csv_loader():
-    p = Path(__file__).parent / "fixtures" / "plc_polling_demo.csv"
+    p = Path(__file__).resolve().parents[1] / "config" / "demo" / "plc_polling_demo.csv"
     events = load_normalized_from_csv(p, source=EventSource.PLC_POLLING)
     assert len(events) == 2
     assert events[0].protocol == "TCP"

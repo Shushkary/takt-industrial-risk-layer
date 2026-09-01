@@ -23,6 +23,11 @@ services:
       # TAKT_RATE_LIMIT_IP_HEADER: "CF-Connecting-IP"
       # Ревизия в GET /health → build_revision (см. README); при сборке: TAKT_BUILD_REVISION=$(git rev-parse HEAD) docker compose build
       # TAKT_BUILD_REVISION: "local-dev"
+    # Шапка файла обещала персистентность, а тома не было: `data/takt_cases.db` лежал
+    # в записываемом слое контейнера и пропадал на `docker compose down`. Точка монтирования
+    # — `/app/data`: путь `TAKT_SQLITE_PATH` относительный, рабочий каталог образа — `/app`.
+    volumes:
+      - takt_sqlite:/app/data
     restart: unless-stopped
     healthcheck:
       test:
@@ -36,3 +41,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+volumes:
+  takt_sqlite:

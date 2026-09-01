@@ -123,3 +123,18 @@ def test_build_revision_metadata_comes_after_the_expensive_layers() -> None:
     # значение молча станет пустым.
     assert arg < label, "LABEL подставляет ARG раньше его объявления"
     assert arg < env, "ENV подставляет ARG раньше его объявления"
+
+
+def test_backtest_demo_dataset_ships_with_the_image() -> None:
+    """`POST /backtest/fixture` обязан работать в образе, а не только в рабочем дереве.
+
+    Датасет лежал в `tests/fixtures/`, а `.dockerignore` исключает `tests`. Эндпойнт описан в
+    `docs/api_reference.md` как рабочий, но в любом собранном образе отвечал 500 «fixture
+    missing». Перенос в `config/` лечит это: каталог копируется в образ.
+    """
+    dataset = _ROOT / "config" / "demo" / "plc_polling_demo.csv"
+
+    assert dataset.is_file(), "демо-датасет бэктеста пропал из config/"
+
+    ignored = (_ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    assert "config" not in {line.strip() for line in ignored}

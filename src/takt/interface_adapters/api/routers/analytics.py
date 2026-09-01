@@ -26,7 +26,10 @@ def register_analytics_routes(ctx: ApiContext) -> None:
 
     @app.post("/backtest/fixture", response_model=BacktestFixtureResponse, tags=["Analytics"])
     def backtest_fixture():
-        fx = ctx.root / "tests" / "fixtures" / "plc_polling_demo.csv"
+        # Датасет лежит в `config/`, а не в `tests/`: каталог тестов исключён `.dockerignore`,
+        # и эндпойнт, описанный в `docs/api_reference.md`, отвечал в образе 500 «fixture missing»
+        # при любой конфигурации. `config/` копируется в образ — см. `Dockerfile`.
+        fx = ctx.root / "config" / "demo" / "plc_polling_demo.csv"
         if not fx.is_file():
             raise HTTPException(status_code=500, detail="fixture missing")
         events = load_normalized_from_csv(fx, source=EventSource.PLC_POLLING)

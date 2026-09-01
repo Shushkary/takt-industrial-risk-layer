@@ -99,7 +99,7 @@
 - `GET /cases/{id}/audit-ledger/verify` — верификация append-only hash-chain аудита кейса (для SQLite backend).
 - `GET /audit-ledger/operations/verify` — верификация append-only hash-chain операционного ledger (`decision:*`, `import:*`; для SQLite backend).
 - `GET /data-quality` — после последнего **`POST /assess`** (с сохранением) или **`POST /events`**
-- `POST /backtest/fixture` — прогон `tests/fixtures/plc_polling_demo.csv` с теми же **`demo_graph_edges`**, что у API, и тем же **`ingest_trust.by_source`**, что у **`POST /assess`** / **`/events`**
+- `POST /backtest/fixture` — прогон `config/demo/plc_polling_demo.csv` с теми же **`demo_graph_edges`**, что у API, и тем же **`ingest_trust.by_source`**, что у **`POST /assess`** / **`/events`**
 
 ## SBOM (спринт 12, упрощённо)
 

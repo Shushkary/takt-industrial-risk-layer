@@ -4,6 +4,7 @@ import contextlib
 import os
 import re
 import shutil
+from collections.abc import Iterator
 from pathlib import Path
 from uuid import uuid4
 
@@ -25,13 +26,33 @@ def _takt_tests_relax_default_strict_auth(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("TAKT_AUTH_REQUIRED", "false")
 
 
+_TMP_ROOT = _PROJECT_ROOT / ".pytest_tmp_path_local"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _sweep_stale_tmp_dirs() -> None:
+    """Убирает каталоги, оставшиеся от прошлых прогонов.
+
+    Уборка после теста делается через `ignore_errors=True`: на Windows файл SQLite, который
+    тест не закрыл, держится открытым, и `rmtree` падает. Ошибка гасится — каталог остаётся,
+    и остаётся навсегда, потому что второй попытки не было. К началу следующего прогона
+    прежние процессы уже завершились, файлы отпущены, и удаление проходит. Без этого мусор
+    копился в рабочем дереве: на момент введения уборки — 141 каталог и 7,5 МБ.
+    """
+    if not _TMP_ROOT.is_dir():
+        return
+    for stale in _TMP_ROOT.iterdir():
+        if stale.name == "hypothesis":
+            continue
+        shutil.rmtree(stale, ignore_errors=True)
+
+
 @pytest.fixture
-def tmp_path(request: pytest.FixtureRequest) -> Path:
+def tmp_path(request: pytest.FixtureRequest) -> Iterator[Path]:
     """Windows-safe tmp_path replacement for locked pytest temp roots."""
-    root = Path(__file__).resolve().parents[1] / ".pytest_tmp_path_local"
-    root.mkdir(exist_ok=True)
+    _TMP_ROOT.mkdir(exist_ok=True)
     safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", request.node.nodeid)[-120:]
-    path = root / f"{safe_name}-{uuid4().hex}"
+    path = _TMP_ROOT / f"{safe_name}-{uuid4().hex}"
     path.mkdir()
     try:
         yield path
@@ -39,4 +60,4 @@ def tmp_path(request: pytest.FixtureRequest) -> Path:
         shutil.rmtree(path, ignore_errors=True)
         # Корень удаляем только когда он опустел: параллельные тесты могут держать свои каталоги.
         with contextlib.suppress(OSError):
-            root.rmdir()
+            _TMP_ROOT.rmdir()

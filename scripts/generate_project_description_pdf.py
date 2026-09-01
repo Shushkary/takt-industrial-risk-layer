@@ -239,7 +239,7 @@ def main() -> int:
         "ProcessEventUseCase — ingest одного события или элемент пакетной обработки: обогащение, DQ, "
         "инварианты, обновление/создание кейса.\n"
         "SubmitCaseDecisionUseCase — смена статуса кейса; при EXPECTED_BEHAVIOR обновляется baseline пар актив+операция.\n"
-        "RunBacktestUseCase — прогон фикстуры (например tests/fixtures/plc_polling_demo.csv) с теми же рёбрами графа "
+        "RunBacktestUseCase — прогон фикстуры (например config/demo/plc_polling_demo.csv) с теми же рёбрами графа "
         "и ingest_trust, что у работающего API."
     )
 

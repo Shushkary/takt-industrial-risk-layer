@@ -40,7 +40,7 @@ def test_backtest_plc_polling_demo_legacy_byte_identical() -> None:
     golden_path = root / "fixtures" / "backtest_plc_polling_demo_legacy_golden.json"
     golden = json.loads(golden_path.read_text(encoding="utf-8"))
 
-    csv_path = root / "fixtures" / "plc_polling_demo.csv"
+    csv_path = root.parent / "config" / "demo" / "plc_polling_demo.csv"
     events = load_normalized_from_csv(csv_path, source=EventSource.PLC_POLLING)
     events = [replace(ev, event_id=f"e{i}") for i, ev in enumerate(events)]
 
