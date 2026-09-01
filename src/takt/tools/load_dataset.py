@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from pathlib import Path
 
-from takt.domain.entities.event import EventSource, NormalizedEvent
+from takt.domain.entities.event import EventSource
+from takt.domain.ports.event_source_reader import EventSourceReaderPort
 from takt.infrastructure.importers.nad_events import NadEventSourceReader
 from takt.infrastructure.importers.siem_events import PtSiemEventSourceReader
 from takt.infrastructure.importers.soc_csv import (
@@ -30,7 +31,7 @@ MAPPERS = {
 # Выгрузки, приходящие построчным NDJSON, а не CSV: по одному JSON-объекту на строку, как в
 # ответе `_search`/`scroll`. Читатель выгрузки PT NAD в продукте был и раньше, но точки входа
 # для него не было — принять выгрузку со стенда было нечем.
-NDJSON_READERS: dict[str, Callable[..., Iterable[NormalizedEvent]]] = {
+NDJSON_READERS: dict[str, Callable[..., EventSourceReaderPort]] = {
     "nad": NadEventSourceReader,
     # Выгрузка PT SIEM по таксономии стенда. Имя `siem` занято CSV-выгрузкой
     # обезличенного датасета: у неё другие колонки, и подменять её было бы регрессией.
@@ -59,8 +60,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _reader(source: str, path: Path, *, trust: float) -> Iterable[NormalizedEvent]:
-    """Читатель выгрузки по имени источника: CSV или построчный NDJSON."""
+def _reader(source: str, path: Path, *, trust: float) -> EventSourceReaderPort:
+    """Читатель выгрузки по имени источника: CSV или построчный NDJSON.
+
+    Тип возврата — доменный порт, а не голый `Iterable`: так mypy проверяет, что каждый
+    читатель импортёров действительно реализует шов «внешний источник событий». До этого
+    порт не был назван ни в одном модуле и ничего не удерживал.
+    """
     ndjson = NDJSON_READERS.get(source)
     if ndjson is not None:
         return ndjson(path, ingest_trust=trust)

@@ -46,6 +46,22 @@ where = ["src"]
 root_package = "takt"
 include_external_packages = true
 
+# Направление зависимостей всего стека. Два контракта ниже запрещают конкретные
+# импорты; этот задаёт порядок слоёв целиком и закрывает то, чего они не видели:
+# `takt.tools` (точки входа CLI) не был назван ни в одном контракте, и ничто не мешало
+# домену или сценарию импортировать командную строку, а инфраструктуре — слой доставки
+# (это замкнуло бы цикл L3 ↔ L4).
+[[tool.importlinter.contracts]]
+name = "Layers L1-L4 + entrypoints"
+type = "layers"
+layers = [
+  "takt.tools",
+  "takt.interface_adapters",
+  "takt.infrastructure",
+  "takt.application",
+  "takt.domain",
+]
+
 [[tool.importlinter.contracts]]
 name = "Domain is independent (L1)"
 type = "forbidden"

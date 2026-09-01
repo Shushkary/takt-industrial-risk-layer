@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from takt.application.port_fixtures import FrozenClock, SequentialIdProvider
+from port_fixtures import FrozenClock, SequentialIdProvider
 
 
 def test_frozen_clock_returns_same_instant() -> None:
