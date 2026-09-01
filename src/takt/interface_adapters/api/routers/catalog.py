@@ -19,7 +19,7 @@ def register_catalog_routes(ctx: ApiContext) -> None:
 
     @app.get("/invariants", response_model=list[InvariantCatalogItem], tags=["Catalog"])
     def invariants_catalog(block_key: str | None = Query(default=None, description="Фильтр: rhythm, topology, …")):
-        rows = tuple(app.state.invariant_catalog.records)
+        rows = tuple(ctx.invariant_catalog.records)
         if block_key is not None and block_key.strip() != "":
             bk = block_key.strip().lower()
             known = frozenset(r.block_key for r in rows)
@@ -42,7 +42,7 @@ def register_catalog_routes(ctx: ApiContext) -> None:
 
     @app.get("/catalog/event-sources", response_model=list[EventSourceCatalogItem], tags=["Catalog"])
     def event_sources_catalog():
-        tbs = app.state.trust_by_source or {}
+        tbs = ctx.trust_by_source
         store = getattr(app.state, "recent_event_store", None)
         counts = store.event_counts_by_source() if store is not None else {}
         return [

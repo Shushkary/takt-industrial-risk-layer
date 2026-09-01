@@ -23,7 +23,7 @@ def register_integration_routes(ctx: ApiContext) -> None:
             code = facade.forward_siem_sync(
                 case_id=body.case_id,
                 target_url=body.target_url,
-                allowed_prefixes=app.state.siem_webhook_prefixes,
+                allowed_prefixes=ctx.siem_webhook_prefixes,
                 retries=int(getattr(app.state, "webhook_retries", 3)),
                 backoff_sec=float(getattr(app.state, "webhook_backoff_sec", 0.35)),
             )
@@ -40,7 +40,7 @@ def register_integration_routes(ctx: ApiContext) -> None:
             code = await facade.forward_siem_async(
                 case_id=body.case_id,
                 target_url=body.target_url,
-                allowed_prefixes=app.state.siem_webhook_prefixes,
+                allowed_prefixes=ctx.siem_webhook_prefixes,
                 retries=int(getattr(app.state, "webhook_retries", 3)),
                 backoff_sec=float(getattr(app.state, "webhook_backoff_sec", 0.35)),
             )

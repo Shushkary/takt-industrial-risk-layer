@@ -21,7 +21,7 @@ def register_analytics_routes(ctx: ApiContext) -> None:
         """
         return invariant_feedback(
             ctx.repo.list_all(),
-            weights_version=str(getattr(app.state, "risk_weights_version", "") or ""),
+            weights_version=ctx.risk_weights_version,
         ).to_dict()
 
     @app.post("/backtest/fixture", response_model=BacktestFixtureResponse, tags=["Analytics"])
@@ -39,7 +39,7 @@ def register_analytics_routes(ctx: ApiContext) -> None:
             events,
             graph_edges=list(ctx.demo_edges),
             polling_intervals_us=[1000.0, 1000.0, 4670.0, 21_800.0],
-            trust_by_source=app.state.trust_by_source,
+            trust_by_source=ctx.trust_by_source,
         )
         return BacktestFixtureResponse(
             events_processed=report.events_processed,

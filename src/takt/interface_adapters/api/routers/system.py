@@ -45,7 +45,7 @@ def register_system_routes(ctx: ApiContext) -> None:
     def _health_payload() -> dict[str, Any]:
         all_cases = ctx.repo.list_all()
         open_n = sum(1 for c in all_cases if c.status in (CaseStatus.NEW, CaseStatus.TRIAGE))
-        tbs = dict(app.state.trust_by_source) if app.state.trust_by_source else {}
+        tbs = dict(ctx.trust_by_source)
         slog = getattr(app.state, "security_log", None)
         if slog is not None:
             sst = slog.health_snapshot()
@@ -84,7 +84,7 @@ def register_system_routes(ctx: ApiContext) -> None:
             "cases_list_default_sort": ctx.case_list_default_sort,
             "siem_webhook_retries": app.state.webhook_retries,
             "siem_webhook_backoff_sec": app.state.webhook_backoff_sec,
-            "siem_webhook_allowlist_prefixes_count": len(app.state.siem_webhook_prefixes),
+            "siem_webhook_allowlist_prefixes_count": len(ctx.siem_webhook_prefixes),
             "export_pdf_unicode_font_configured": bool(getattr(app.state, "pdf_unicode_font", None)),
             "prometheus_metrics_enabled": bool(getattr(app.state, "prometheus_metrics_active", False)),
             "forensic_crypto_mode": ctx.forensic_crypto_mode(),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -127,7 +127,7 @@ class ExportFacade:
         *,
         case_id: str,
         target_url: str,
-        allowed_prefixes: list[str],
+        allowed_prefixes: Sequence[str],
         retries: int,
         backoff_sec: float,
     ) -> int:
@@ -145,7 +145,7 @@ class ExportFacade:
         *,
         case_id: str,
         target_url: str,
-        allowed_prefixes: list[str],
+        allowed_prefixes: Sequence[str],
         retries: int,
         backoff_sec: float,
     ) -> int:
