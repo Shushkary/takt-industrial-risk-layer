@@ -97,7 +97,12 @@ python -m pip install -e ".[dev]"
 python -m pytest
 lint-imports                        # контракты слоёв
 uvicorn takt.interface_adapters.api.main:app --reload --port 8090
+python -m takt.tools.assembly_worker   # второе окно: сборка инцидентов
 ```
+
+Сборка инцидентов вынесена в отдельный процесс (`incident_assembly.mode: worker` — значение по
+умолчанию): без воркера API принимает события и заводит дела, но связанный инцидент не
+собирается. Для одиночного процесса — `mode: on_ingest`.
 
 Для вывода кириллицы в консоль добавляй `PYTHONUTF8=1`. Системный `python` в Git Bash на машине
 разработчика может не содержать `pytest` — используй интерпретатор из окружения проекта.

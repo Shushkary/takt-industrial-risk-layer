@@ -251,14 +251,28 @@ def test_assembly_is_not_run_on_every_event(ingested) -> None:
 # --- сборка приложения ----------------------------------------------------
 
 
-def test_api_ingest_assembles_when_events_are_stored(tmp_path: Path, monkeypatch) -> None:
-    """Приложение с постоянным хранилищем принимает поток со сборкой, а не без неё."""
+def test_api_ingest_assembles_in_process_when_asked(tmp_path: Path, monkeypatch) -> None:
+    """`mode: on_ingest` — прогон идёт в процессе приёма, отдельный процесс не нужен."""
+    from takt.infrastructure.config.weights_loader import load_risk_weights
     from takt.interface_adapters.api.main import create_app
 
     monkeypatch.setenv("TAKT_STORAGE", "sqlite")
     monkeypatch.setenv("TAKT_SQLITE_PATH", str(tmp_path / "cases.sqlite"))
+
+    def _weights(path):
+        loaded = load_risk_weights(path)
+        loaded["incident_assembly"] = {**loaded.get("incident_assembly", {}), "mode": "on_ingest"}
+        return loaded
+
+    monkeypatch.setattr("takt.interface_adapters.api.main.load_risk_weights", _weights)
     app = create_app()
-    assert isinstance(app.state.ingest_facade.assembly, AssembleOnIngest)
+    try:
+        assert isinstance(app.state.ingest_facade.assembly, AssembleOnIngest)
+    finally:
+        for attr in ("assembly_queue", "recent_event_store", "repo", "baseline"):
+            close = getattr(getattr(app.state, attr, None), "close", None)
+            if callable(close):
+                close()
 
 
 def test_api_ingest_without_persistent_events_keeps_pipeline_cases(monkeypatch) -> None:

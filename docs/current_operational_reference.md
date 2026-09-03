@@ -44,8 +44,8 @@
 - `GET /cases/{id}/export/gossopka-official.json`
 - `GET /cases/{id}/export/gossopka-official-transport.json` (smoke gate для `gossopka_official_ok`)
 - `POST /cases/assemble/auto` (повтор сборки ядра инцидентов с другим порогом отличительности; при
-  приёме тот же шаг выполняется сам — `incident_assembly.mode`: `on_ingest` в процессе API,
-  `worker` в отдельном процессе `python -m takt.tools.assembly_worker`; SQLite backend)
+  приёме тот же шаг выполняется сам — `incident_assembly.mode`: по умолчанию `worker`, отдельным
+  процессом `python -m takt.tools.assembly_worker`, либо `on_ingest` в процессе API; SQLite backend)
 - `GET /cases/{id}/audit-ledger/verify` (SQLite backend)
 - `GET /audit-ledger/operations/verify` (SQLite backend)
 

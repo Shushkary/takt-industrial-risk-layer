@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -63,9 +64,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-assemble",
         action="store_true",
         help=(
-            "не выполнять догоняющую сборку в конце загрузки. Сборку по ходу приёма флаг не"
-            " отменяет — она настраивается в YAML (incident_assembly.on_ingest); без"
-            " догоняющего прогона в инцидент не попадут события после последнего срабатывания."
+            "не выполнять догоняющую сборку в конце загрузки. Где идёт сборка по ходу приёма,"
+            " задаёт YAML (incident_assembly.mode); при mode: worker без догоняющего прогона"
+            " инцидента не будет вовсе, пока не запустят takt.tools.assembly_worker."
         ),
     )
     parser.add_argument(
@@ -93,11 +94,12 @@ def _reader(source: str, path: Path, *, trust: float) -> EventSourceReaderPort:
 def _assemble_incidents(app, *, distinctive_max_events: int) -> None:
     """Догоняющий прогон сборки в конце загрузки.
 
-    Приём собирает инцидент сам, по ходу потока (`incident_assembly.on_ingest`), но каждый
-    его прогон видит поток по состоянию на очередное срабатывание инварианта. События,
-    пришедшие после последнего срабатывания, попадут в инцидент только на следующем прогоне,
-    а в пакетной загрузке следующего прогона не будет — файл кончился. Этот шаг закрывает
-    хвост: он выполняется один раз и видит корпус целиком.
+    Пакетная загрузка — единственный путь приёма, у которого есть конец. При
+    `incident_assembly.mode: on_ingest` каждый прогон видит поток по состоянию на очередное
+    срабатывание, и события после последнего срабатывания ждали бы следующего — которого не
+    будет, файл кончился. При `mode: worker` прогонов по ходу нет вовсе: сигналы копятся, и
+    без этого шага загрузка датасета вообще не давала бы инцидента, пока кто-нибудь не
+    запустит воркер.
 
     Порог отличительности здесь задаётся аргументом командной строки и может отличаться от
     того, с которым работал приём: это же значение принимает `POST /cases/assemble/auto`.
@@ -121,6 +123,21 @@ def _assemble_incidents(app, *, distinctive_max_events: int) -> None:
     )
     for item in report.incidents:
         print(f"  incident {item.case_id} events={item.event_count} seeds={','.join(item.seeds)}")
+    _clear_assembly_signals(app)
+
+
+def _clear_assembly_signals(app) -> None:
+    """Снимает сигналы, накопленные приёмом: работа по ним только что выполнена.
+
+    Иначе воркер, поднятый после загрузки, сделал бы лишний прогон по уже собранному. Он
+    идемпотентен и вреда бы не принёс, но полный обход хранилища дел стоит денег, а
+    неубранный сигнал ещё и выглядит как невыполненная работа.
+    """
+    queue = getattr(app.state, "assembly_queue", None)
+    if queue is None:
+        return
+    with contextlib.suppress(Exception):
+        queue.take_pending()
 
 
 def run(
@@ -164,7 +181,7 @@ def run(
                 print(f"assemble: часть строк не принята (failed={failed}), инцидент собран по принятым")
             _assemble_incidents(app, distinctive_max_events=distinctive_max_events)
     finally:
-        for attr in ("recent_event_store", "repo", "baseline", "audit_engagement_store"):
+        for attr in ("assembly_queue", "recent_event_store", "repo", "baseline", "audit_engagement_store"):
             resource = getattr(app.state, attr, None)
             close = getattr(resource, "close", None)
             if callable(close):

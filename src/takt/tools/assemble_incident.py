@@ -95,7 +95,7 @@ def run(
         print(f"error: {exc}", file=sys.stderr)
         return 2
     finally:
-        for attr in ("recent_event_store", "repo", "baseline", "audit_engagement_store"):
+        for attr in ("assembly_queue", "recent_event_store", "repo", "baseline", "audit_engagement_store"):
             resource = getattr(app.state, attr, None)
             close = getattr(resource, "close", None)
             if callable(close):

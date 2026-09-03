@@ -175,6 +175,14 @@ def run(
     stop = _StopSignal()
     stop.install()
     try:
+        if not settings.defers_to_worker:
+            # Собственная конфигурация не отправляет сборку сюда. Не ошибка — воркер годится
+            # и как догоняющая сборка, — но молчание процесса иначе объяснялось бы отсутствием
+            # атак, а не настройкой.
+            print(
+                f"assembly worker: incident_assembly.mode={settings.mode},"
+                " сигналов от приёма не будет"
+            )
         if not _config_agrees_with_api(
             queue, settings=settings, allow_mismatch=allow_config_mismatch
         ):

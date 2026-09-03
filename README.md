@@ -27,7 +27,11 @@ cd <repo-root>
 python -m pip install -e ".[dev]"
 python -m pytest
 uvicorn takt.interface_adapters.api.main:app --reload --host 127.0.0.1 --port 8090
+# во втором окне: сборка инцидентов (см. ниже — при mode: worker обязательна)
+python -m takt.tools.assembly_worker
 ```
+
+**Два процесса, а не один.** В поставляемой конфигурации (`incident_assembly.mode: worker`) приём событий только отмечает работу, а связанный инцидент собирает отдельный процесс — так приём не ждёт прогона сборки (на хранилище в 8000 дел это 1,8 с на каждое срабатывание инварианта). Без воркера API принимает события и заводит дела, но инциденты не появляются; при старте он пишет об этом в лог. Если второй процесс не нужен — поставьте `incident_assembly.mode: on_ingest` в [`config/risk_weights.yaml`](config/risk_weights.yaml), и сборка пойдёт внутри приёма. Разбор режимов и замеры: [`docs/pt_techlab/correlation_quality.md`](docs/pt_techlab/correlation_quality.md).
 
 Переменные из файла **`.env`** удобно подставить так: `uvicorn … --env-file .env` (флаг поддерживается **uvicorn** ≥ **0.30**). Полный список переменных окружения и security-периметр: [`docs/configuration.md`](docs/configuration.md).
 

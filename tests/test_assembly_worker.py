@@ -396,6 +396,51 @@ def test_worker_leaves_its_own_trace(tmp_path: Path, monkeypatch) -> None:
         queue.close()
 
 
+# --- поставляемая конфигурация --------------------------------------------
+
+
+def test_shipped_config_defers_assembly_to_the_worker() -> None:
+    """Поставляемая конфигурация выносит сборку в отдельный процесс."""
+    from takt.infrastructure.config.settings_helpers import incident_assembly_settings
+    from takt.infrastructure.config.weights_loader import load_risk_weights
+
+    settings = incident_assembly_settings(load_risk_weights(ROOT / "config" / "risk_weights.yaml"))
+    assert settings.mode == "worker"
+
+
+def test_compose_starts_the_worker_alongside_the_api() -> None:
+    """Раз сборка вынесена в процесс, этот процесс должен подниматься вместе с API.
+
+    Сторож ровно от той ошибки, ради которой писалась сверка настроек при старте: конфигурация
+    говорит «собирает воркер», а разворачивание его не поднимает — приём работает, инцидентов
+    нет, и никто не виноват.
+    """
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "takt.tools.assembly_worker" in compose, "compose не поднимает сборку инцидентов"
+    assert "profiles:" not in compose, "воркер под профилем не поднимется обычным `compose up`"
+
+
+def test_api_says_that_assembly_needs_a_worker(tmp_path: Path, monkeypatch, caplog) -> None:
+    """Стенд без воркера иначе выглядит как отказ сборки, а не как незапущенный процесс."""
+    import logging
+
+    from takt.interface_adapters.api.main import create_app
+
+    _sqlite_env(monkeypatch, tmp_path, mode="worker")
+    with caplog.at_level(logging.INFO, logger="takt.api"):
+        app = create_app()
+    try:
+        assert "takt.tools.assembly_worker" in caplog.text
+    finally:
+        _close_app(app)
+
+
+def test_quickstart_names_the_worker() -> None:
+    """Быстрый старт обязан называть оба процесса: иначе инциденты не появятся."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "python -m takt.tools.assembly_worker" in readme
+
+
 # --- режим приложения и точка входа ---------------------------------------
 
 
