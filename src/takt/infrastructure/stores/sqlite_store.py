@@ -43,6 +43,7 @@ from takt.infrastructure.stores.sqlite_connection import (
 )
 from takt.infrastructure.stores.sqlite_connection import dt_to_sql as _dt_to_sql
 from takt.infrastructure.stores.sqlite_connection import sqlite_busy_timeout_ms_from_env  # noqa: F401
+from takt.infrastructure.stores.sqlite_correlation_keys import reindex_correlation_keys as _reindex_correlation_keys
 from takt.infrastructure.stores.sqlite_expected_behavior import SqliteExpectedBehavior  # noqa: F401
 from takt.infrastructure.stores.sqlite_idempotency import (
     idempotency_delete_expired as _idempotency_delete_expired,
@@ -210,13 +211,7 @@ class SqliteCaseStore(CaseRepositoryPort):
                     case.pdf_last_generated_at,
                 ),
             )
-            self._conn.execute("DELETE FROM case_correlation_keys WHERE case_id = ?", (case.case_id,))
-            for fingerprint in dict.fromkeys([case.burst_fingerprint, *case.correlation_fingerprints]):
-                if fingerprint:
-                    self._conn.execute(
-                        "INSERT OR IGNORE INTO case_correlation_keys (fingerprint, case_id) VALUES (?, ?)",
-                        (fingerprint, case.case_id),
-                    )
+            _reindex_correlation_keys(self._conn, case, existing)
             old_audit = existing.audit_log if existing is not None else []
             if len(case.audit_log) > len(old_audit):
                 for line in case.audit_log[len(old_audit) :]:

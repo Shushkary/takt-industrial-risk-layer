@@ -133,6 +133,7 @@ def test_sqlite_store_stays_facade_over_split_modules() -> None:
         "sqlite_audit_ledger.py",
         "sqlite_case_mapper.py",
         "sqlite_connection.py",
+        "sqlite_correlation_keys.py",
         "sqlite_expected_behavior.py",
         "sqlite_recent_events.py",
         "sqlite_schema.py",
