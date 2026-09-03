@@ -585,20 +585,46 @@ table.chain {
 
 /* Доли подобраны на датасете INC-002 так, чтобы значения, по которым аналитик принимает
    решение, не усекались вовсе: время, основание, узел и учётная запись помещаются целиком.
-   Класс источника (четыре известных значения), адрес и артефакт усекаются многоточием —
-   полное значение остаётся в подсказке и копируется по клику. */
-table.chain th:nth-child(1), table.chain td:nth-child(1) { width: 22%; }
-table.chain th:nth-child(2), table.chain td:nth-child(2) { width: 12%; }
-table.chain th:nth-child(3), table.chain td:nth-child(3) { width: 10%; }
-table.chain th:nth-child(4), table.chain td:nth-child(4) { width: 18%; }
-table.chain th:nth-child(5), table.chain td:nth-child(5) { width: 11%; }
-table.chain th:nth-child(6), table.chain td:nth-child(6) { width: 10%; }
-table.chain th:nth-child(7), table.chain td:nth-child(7) { width: 9%; }
-table.chain th:nth-child(8), table.chain td:nth-child(8) { width: 8%; }
+   Класс источника (четыре известных значения), процесс, адрес и артефакт усекаются
+   многоточием — полное значение остаётся в подсказке и копируется по клику.
+
+   Колонок девять: к узлу и учётной записи добавлен процесс — третья сущность, по которой
+   продукт отдаёт карточку истории. Место под неё взято у времени и операции, а не у узла и
+   учётной записи: усечь идентификатор узла значило бы усечь то, по чему принимается
+   решение. */
+/* Состав дела: доли считаются от конца ряда. Слева у этой таблицы стоит необязательная
+   колонка отметки — она появляется только у роли, которая вправе править состав дела. При
+   счёте от начала эта колонка забирала долю времени (161 px под флажок), всё смещалось на
+   один шаг, и последняя колонка оставалась без ширины: «Артефакт» схлопывался в ноль. */
+table.chain-case th:nth-last-child(9), table.chain-case td:nth-last-child(9) { width: 18%; }
+table.chain-case th:nth-last-child(8), table.chain-case td:nth-last-child(8) { width: 11%; }
+table.chain-case th:nth-last-child(7), table.chain-case td:nth-last-child(7) { width: 10%; }
+table.chain-case th:nth-last-child(6), table.chain-case td:nth-last-child(6) { width: 15%; }
+table.chain-case th:nth-last-child(5), table.chain-case td:nth-last-child(5) { width: 11%; }
+table.chain-case th:nth-last-child(4), table.chain-case td:nth-last-child(4) { width: 10%; }
+table.chain-case th:nth-last-child(3), table.chain-case td:nth-last-child(3) { width: 9%; }
+table.chain-case th:nth-last-child(2), table.chain-case td:nth-last-child(2) { width: 9%; }
+table.chain-case th:nth-last-child(1), table.chain-case td:nth-last-child(1) { width: 7%; }
+
+/* Поиск по событиям: колонки другие (нет основания, последняя — кнопка «Прицепить»), и
+   необязательных колонок нет, поэтому доли считаются от начала. */
+table.chain-search th:nth-child(1), table.chain-search td:nth-child(1) { width: 18%; }
+table.chain-search th:nth-child(2), table.chain-search td:nth-child(2) { width: 11%; }
+table.chain-search th:nth-child(3), table.chain-search td:nth-child(3) { width: 15%; }
+table.chain-search th:nth-child(4), table.chain-search td:nth-child(4) { width: 11%; }
+table.chain-search th:nth-child(5), table.chain-search td:nth-child(5) { width: 10%; }
+table.chain-search th:nth-child(6), table.chain-search td:nth-child(6) { width: 9%; }
+table.chain-search th:nth-child(7), table.chain-search td:nth-child(7) { width: 9%; }
+table.chain-search th:nth-child(8), table.chain-search td:nth-child(8) { width: 10%; }
+table.chain-search th:nth-child(9), table.chain-search td:nth-child(9) { width: 7%; }
+
+/* Колонка отметки не участвует в долях: её ширина задана в пикселях под флажок. */
+table.chain th.relink-cell, table.chain td.relink-cell { width: 28px; }
 
 /* Метка времени — 19 знаков моноширинным: на 14px она не помещается в свою долю и усекалась
    бы многоточием, а это первичный ключ доказательства. */
-table.chain td:nth-child(1) {
+table.chain-case td:nth-last-child(9),
+table.chain-search td:nth-child(1) {
   font-size: 12px;
 }
 
@@ -1410,6 +1436,15 @@ ol.steps {
 /* Вид очереди: дела или сведённые строки. Переключатель стоит над фильтрами, потому что
    он меняет не отбор, а то, что считается строкой очереди. */
 .queue-modes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+/* Сборка инцидентов — отдельной строкой, а не в шапке панели: колонка очереди узкая, и
+   кнопка в шапке переносила заголовок на две строки. */
+.queue-actions {
   display: flex;
   align-items: center;
   gap: 6px;

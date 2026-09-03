@@ -137,7 +137,7 @@ const HELP = {
   queue: {
     title: 'Очередь инцидентов',
     what: 'Кейсы из хранилища ТАКТ, от большего балла риска к меньшему. Кейс — группа событий, отнесённых к одному разбору.',
-    source: 'Часть кейсов создаёт конвейер приёма по совпадению признаков, часть собирает аналитик пивотом по отличительным сущностям; сборка пивотом выполняется вне этого окна — утилитой assemble_incident.',
+    source: 'Часть кейсов создаёт конвейер приёма по совпадению признаков, часть собирает продукт пивотом по отличительным сущностям сразу после приёма — такой кейс отличается идентификатором AUTO- и перечнем сущностей в заголовке. Расширение разбора до уровня узла автоматика не делает: оно добирает штатную активность и остаётся решением аналитика.',
     action: 'Открыть кейс с наибольшим баллом, проверить состав событий и решить, инцидент это или штатная активность.',
     doc: 'docs/customer_value_map.md',
   },
@@ -315,6 +315,19 @@ const HELP = {
     what: 'Пользователь или служебная запись, от имени которой выполнено действие.',
     source: 'Идентификатор приходит из данных источника. ТАКТ не связывает учётную запись с сотрудником: сопоставление — за организацией.',
     action: 'Сверить с тем, кто фактически работал. Служебная запись с интерактивными действиями — отдельный повод для проверки.',
+  },
+  assemble_auto: {
+    title: 'Сборка инцидентов',
+    what: 'Собирает связанные инциденты из дел очереди: берёт дела, где сработал инвариант, и по их отличительным сущностям отбирает все события этой цепочки — из всех источников, а не только из одного дела.',
+    source: 'Отбор идёт по сущностям, которые встречаются в потоке редко: скомпрометированная учётная запись, адрес управляющего канала, объект релизного конвейера. Узел сюда не входит — узел атаки делит активность с фоном, и расширение разбора до уровня узла остаётся вашим решением. Загрузка датасета выполняет этот шаг сама; кнопка нужна, когда события приняты через API.',
+    action: 'Нажать после приёма потока и разбирать собранный инцидент (идентификатор начинается с AUTO-), а не ленту мелких дел. Повторное нажатие пересобирает: инцидент с тем же составом сущностей остаётся тем же кейсом.',
+    doc: 'docs/pt_techlab/correlation_quality.md',
+  },
+  entity_process: {
+    title: 'Процесс',
+    what: 'Процесс, в котором зафиксировано событие конечной точки: идентификатор процесса и его родителя.',
+    source: 'Идентификатор приходит от EDR и не переписывается. История процесса накапливается по всем принятым событиям, как у узла и учётной записи.',
+    action: 'Открыть карточку процесса и проверить частоту в истории: процесс, встретившийся впервые, и запуск из нетипичного родителя — разные поводы, и оба видны только по истории.',
   },
   entity_address: {
     title: 'Адрес',
@@ -1380,6 +1393,7 @@ function paintChain() {
       <td class="mono">${escapeHtml(event.operation)}</td>
       <td>${entityButton('host', entities.host_id)}</td>
       <td>${entityButton('user', entities.user_id)}</td>
+      <td>${entityButton('process', entities.process_id)}</td>
       <td class="mono small">${addressOf(entities)}</td>
       <td class="small">${artifactCell(event)}</td>`;
     body.appendChild(row);
@@ -2178,6 +2192,8 @@ function applyPermissions() {
   $('#confirmResponseButton').hidden = !canWrite;
   $('#responseRoleNote').hidden = canWrite;
   $('#permitOpen').hidden = !canWrite;
+  $('#assembleAuto').hidden = !canWrite;
+  $('#assembleRoleNote').hidden = canWrite;
   if (!canWrite) closePermitForm();
   const canRelink = permissions().case_relink;
   $('#relinkPanel').hidden = !canRelink;
@@ -2566,11 +2582,51 @@ $('#staleCaseRefresh').addEventListener('click', () => {
   if (selectedCaseId) openCase(selectedCaseId);
 });
 
+// Сборка инцидентов из очереди (ТЗ §5.2).
+//
+// Конвейер приёма группирует события ключами, которые событие делит с фоном, поэтому цепочка
+// атаки остаётся разложенной по десяткам мелких дел. Сборка отвечает на другой вопрос —
+// «какие события относятся к одному инциденту» — и до сих пор запускалась только загрузкой
+// датасета. Событиям, принятым через API, запустить её из интерфейса было нечем.
+//
+// Действие не меняет состав дел конвейера и ничего не закрывает: оно добавляет собранный
+// кейс. Поэтому подтверждения не требует, но результат называет числом, а не «готово».
+async function runAutoAssembly() {
+  const button = $('#assembleAuto');
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = 'Собираем…';
+  try {
+    const report = await api('/cases/assemble/auto', { method: 'POST', body: JSON.stringify({}) });
+    const incidents = report.incidents || [];
+    if (!incidents.length) {
+      // Пустой результат — не ошибка: отличительных сущностей в делах может не быть.
+      // Молчаливое «готово» здесь читалось бы как «инцидентов нет», а это разные вещи.
+      const considered = (report.considered_cases || []).length;
+      toast(considered
+        ? `Отличительных сущностей не нашлось: рассмотрено дел — ${considered}`
+        : 'Собирать не из чего: дел со сработавшим инвариантом нет');
+    } else {
+      const events = incidents.reduce((sum, item) => sum + (item.event_count || 0), 0);
+      toast(`Собрано ${incidents.length} ${plural(incidents.length, 'инцидент', 'инцидента', 'инцидентов')}`
+        + ` · событий: ${events}`);
+    }
+    await refresh();
+    if (incidents.length === 1) await openCase(incidents[0].case_id);
+  } catch (error) {
+    toast(`Сборка не выполнена: ${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = previous;
+  }
+}
+
 let queueSearchTimer = null;
 $('#queueSearch').addEventListener('input', () => {
   clearTimeout(queueSearchTimer);
   queueSearchTimer = setTimeout(refresh, 300);
 });
+$('#assembleAuto').addEventListener('click', runAutoAssembly);
 $('#queueModeCases').addEventListener('click', () => setQueueMode('cases'));
 $('#queueModeAsset').addEventListener('click', () => setQueueMode('asset'));
 $('#queueModeRule').addEventListener('click', () => setQueueMode('operation'));
@@ -2663,6 +2719,7 @@ function renderSearchResults() {
       <td class="mono">${escapeHtml(event.operation)}</td>
       <td>${copyable(entities.host_id || '')}</td>
       <td>${copyable(entities.user_id || '')}</td>
+      <td>${copyable(entities.process_id || '')}</td>
       <td class="mono small">${addressOf(entities)}</td>
       <td class="small">${artifactCell(event)}</td>
       <td class="relink-cell"></td>`;

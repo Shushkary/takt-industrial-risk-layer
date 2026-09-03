@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260827-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260903-01" />
   </head>
   <body>
     <header class="top">
@@ -45,6 +45,11 @@
           <h2 id="queueTitle">Очередь инцидентов</h2>
           <button class="help" type="button" data-help="queue" aria-label="Пояснение: очередь инцидентов">?</button>
         </div>
+        <div class="queue-actions">
+          <button id="assembleAuto" class="action inline" type="button">Собрать инциденты</button>
+          <button class="help sm" type="button" data-help="assemble_auto" aria-label="Пояснение: сборка инцидентов">?</button>
+        </div>
+        <p id="assembleRoleNote" class="muted small pad" hidden>Роль работает только на чтение: сборка инцидентов недоступна.</p>
         <div class="queue-modes" role="group" aria-label="Вид очереди">
           <button id="queueModeCases" class="mode active" type="button">дела</button>
           <button id="queueModeAsset" class="mode" type="button">по узлам</button>
@@ -267,7 +272,7 @@
             </div>
 
             <div class="table-scroll">
-              <table class="chain">
+              <table class="chain chain-case">
                 <thead>
                   <tr>
                     <th id="relinkHeadCell" scope="col" class="relink-cell" hidden><span class="visually-hidden">Отметка события</span></th>
@@ -277,6 +282,7 @@
                     <th scope="col">Операция <button class="help sm" type="button" data-help="operation" aria-label="Пояснение: операция">?</button></th>
                     <th scope="col">Узел <button class="help sm" type="button" data-help="entity_host" aria-label="Пояснение: узел">?</button></th>
                     <th scope="col">Учётная запись <button class="help sm" type="button" data-help="entity_user" aria-label="Пояснение: учётная запись">?</button></th>
+                    <th scope="col">Процесс <button class="help sm" type="button" data-help="entity_process" aria-label="Пояснение: процесс">?</button></th>
                     <th scope="col">Адрес <button class="help sm" type="button" data-help="entity_address" aria-label="Пояснение: адрес">?</button></th>
                     <th scope="col">Артефакт <button class="help sm" type="button" data-help="artifact" aria-label="Пояснение: артефакт">?</button></th>
                   </tr>
@@ -412,7 +418,7 @@
       <p id="searchError" class="relink-error small" hidden></p>
 
       <div class="table-scroll">
-        <table class="chain">
+        <table class="chain chain-search">
           <thead>
             <tr>
               <th scope="col">Время, <span id="searchTimeZone">UTC</span></th>
@@ -420,6 +426,7 @@
               <th scope="col">Операция</th>
               <th scope="col">Узел</th>
               <th scope="col">Учётная запись</th>
+              <th scope="col">Процесс</th>
               <th scope="col">Адрес</th>
               <th scope="col">Артефакт</th>
               <th scope="col">В открытое дело</th>
@@ -575,7 +582,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260827-02"></script>
-    <script src="./app.min.js?v=20260827-02"></script>
+    <script src="./env.js?v=20260903-01"></script>
+    <script src="./app.min.js?v=20260903-01"></script>
   </body>
 </html>
