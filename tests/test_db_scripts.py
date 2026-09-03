@@ -20,6 +20,7 @@ def _load_function(script_name: str, function_name: str):
 
 backup = _load_function("db_backup.py", "backup")
 run = _load_function("db_migrate.py", "run")
+LATEST_SCHEMA_VERSION = _load_function("db_migrate.py", "LATEST_SCHEMA_VERSION")
 verify = _load_function("verify_audit_ledger.py", "verify")
 verify_operations = _load_function("verify_operation_ledger.py", "verify")
 
@@ -363,6 +364,31 @@ def test_db_migrate_v6_adds_raw_evidence_and_append_only_triggers(tmp_path) -> N
         conn2.close()
 
 
+def test_db_migrate_v9_adds_assembly_queue(tmp_path) -> None:
+    """Очередь сигналов сборки заводится и на базе, которая жила до появления воркера."""
+    db = tmp_path / "migrate-v9.sqlite"
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute("CREATE TABLE app_metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)")
+        conn.execute("INSERT INTO app_metadata (key, value) VALUES ('schema_version', '8')")
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert run(db) == 0
+
+    conn2 = sqlite3.connect(str(db))
+    try:
+        cols = {str(row[1]) for row in conn2.execute("PRAGMA table_info(assembly_queue)").fetchall()}
+        assert {"pending", "lease_owner", "lease_until"}.issubset(cols)
+        # Строка ровно одна и создана сразу: приём отмечает работу через UPDATE.
+        assert conn2.execute("SELECT COUNT(*) FROM assembly_queue").fetchone()[0] == 1
+        version = conn2.execute("SELECT value FROM app_metadata WHERE key='schema_version'").fetchone()[0]
+        assert version == str(LATEST_SCHEMA_VERSION)
+    finally:
+        conn2.close()
+
+
 def test_db_migrate_v8_adds_recent_events_table(tmp_path) -> None:
     db = tmp_path / "migrate-v8.sqlite"
     conn = sqlite3.connect(str(db))
@@ -380,7 +406,8 @@ def test_db_migrate_v8_adds_recent_events_table(tmp_path) -> None:
     try:
         cols = {str(row[1]) for row in conn2.execute("PRAGMA table_info(recent_events)").fetchall()}
         assert {"event_id", "observed_at", "payload_json", "inserted_at"}.issubset(cols)
+        # Раннер доводит базу до последней версии, а не до той, в которой появилась таблица.
         version = conn2.execute("SELECT value FROM app_metadata WHERE key='schema_version'").fetchone()[0]
-        assert version == "8"
+        assert version == str(LATEST_SCHEMA_VERSION)
     finally:
         conn2.close()

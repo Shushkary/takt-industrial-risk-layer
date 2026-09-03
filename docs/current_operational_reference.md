@@ -17,7 +17,7 @@
 | Доменных инвариантов | 26 (enum `InvariantId`, 26 файлов `config/invariants/*.yaml`) | `tests/test_invariant_catalog.py`, `tests/test_invariant_catalog_yaml.py`, `tests/test_docs_invariant_count_consistency.py` |
 | Инвариантов с baseline-протоколом детектирования | 11 из 26, синтетический корпус | `docs/detection_quality.md` |
 | Инвариантов отключено в проде (`builtin:noop`) | 6 из 26, известный разрыв | `docs/invariant_matrix.md` |
-| Версия схемы SQLite | `LATEST_SCHEMA_VERSION = 8` | `scripts/db_migrate.py`, `sqlite_schema_version` в `GET /health` |
+| Версия схемы SQLite | `LATEST_SCHEMA_VERSION = 9` | `scripts/db_migrate.py`, `sqlite_schema_version` в `GET /health` |
 | Объём backend-прогона | порядка 840 тестов, ~1,5–4 мин | точное значение — вывод `python -m pytest` |
 
 Число тестов намеренно не фиксируется точно: оно меняется каждым коммитом, а устаревшая цифра в документации хуже её отсутствия.
@@ -44,7 +44,8 @@
 - `GET /cases/{id}/export/gossopka-official.json`
 - `GET /cases/{id}/export/gossopka-official-transport.json` (smoke gate для `gossopka_official_ok`)
 - `POST /cases/assemble/auto` (повтор сборки ядра инцидентов с другим порогом отличительности; при
-  приёме тот же шаг выполняется сам — `incident_assembly.on_ingest`; SQLite backend)
+  приёме тот же шаг выполняется сам — `incident_assembly.mode`: `on_ingest` в процессе API,
+  `worker` в отдельном процессе `python -m takt.tools.assembly_worker`; SQLite backend)
 - `GET /cases/{id}/audit-ledger/verify` (SQLite backend)
 - `GET /audit-ledger/operations/verify` (SQLite backend)
 

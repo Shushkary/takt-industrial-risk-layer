@@ -36,6 +36,11 @@ EDR и NDR, — заканчивался лентой мелких дел кон
 требование воспроизводимости, что и у контура вердикта
 (`tests/test_verdict_determinism_guard.py`).
 
+**Прогон можно вынести из процесса приёма.** `DeferAssemblyToWorker` — та же точка
+подключения, но вместо прогона он отмечает работу в очереди, а выполняет её
+`python -m takt.tools.assembly_worker` (`assembly_worker.py`). Режим выбирается настройкой
+`incident_assembly.mode`; там же — разбор того, что при этом меняется.
+
 Границы продукта не двигаются: сборка группирует уже принятые события. Вердикт, расширение
 разбора до уровня узла и пакет реагирования остаются за аналитиком.
 """
@@ -45,11 +50,41 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from typing import Protocol
 
 from takt.application.use_cases.auto_assemble_incidents import (
     AutoAssembleIncidentsUseCase,
     AutoAssemblyReport,
 )
+
+
+class AssemblyQueuePort(Protocol):
+    """Очередь сигналов сборки. Реализуется хранилищем (L4).
+
+    Приём отмечает срабатывания, отдельный процесс их забирает. Точность счётчика не важна:
+    любой ненулевой остаток означает «в потоке появилось срабатывание, инциденты нужно
+    пересобрать».
+    """
+
+    def note_hits(self, count: int = 1) -> None: ...
+    def take_pending(self) -> int: ...
+
+
+@dataclass(slots=True)
+class DeferAssemblyToWorker:
+    """Приём только отмечает работу; собирает отдельный процесс.
+
+    Режим для установок, где полный обход хранилища дел дорог: приём платит одну короткую
+    запись вместо прогона (на 8000 дел — 1,8 с). Цена — задержка: инцидент появляется не в
+    момент приёма, а на ближайшем цикле воркера.
+    """
+
+    queue: AssemblyQueuePort
+
+    def after_ingest(self, *, invariant_hits: Sequence[str]) -> None:
+        if not invariant_hits:
+            return
+        self.queue.note_hits(1)
 
 
 @dataclass(slots=True)

@@ -57,7 +57,7 @@ from takt.infrastructure.stores.sqlite_idempotency import (
 from takt.infrastructure.stores.sqlite_schema import ensure_case_schema
 
 # Версия схемы БД кейсов (метаданные `app_metadata`); при миграциях увеличивать.
-CURRENT_DB_SCHEMA_VERSION = 8
+CURRENT_DB_SCHEMA_VERSION = 9
 
 
 class SqliteCaseStore(CaseRepositoryPort):

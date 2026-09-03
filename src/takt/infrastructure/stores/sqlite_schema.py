@@ -123,9 +123,31 @@ def ensure_case_schema(conn: sqlite3.Connection, schema_version: int) -> None:
         END;
         """
     )
+    ensure_assembly_queue_schema(conn)
     cols = table_columns(conn, "cases")
     _add_missing_case_columns(conn, cols)
     _set_schema_version(conn, schema_version)
+
+
+def ensure_assembly_queue_schema(conn: sqlite3.Connection) -> None:
+    """Очередь сигналов сборки: одна строка со счётчиком и арендой воркера.
+
+    `CHECK (id = 1)` — не украшение: строка здесь ровно одна, и без ограничения ошибка
+    вставки развела бы приём и воркер по разным счётчикам, а выглядело бы это как «воркер
+    молчит».
+    """
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS assembly_queue (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          pending INTEGER NOT NULL DEFAULT 0,
+          lease_owner TEXT NOT NULL DEFAULT '',
+          lease_until TEXT NOT NULL DEFAULT ''
+        );
+        INSERT OR IGNORE INTO assembly_queue (id, pending, lease_owner, lease_until)
+          VALUES (1, 0, '', '');
+        """
+    )
 
 
 def ensure_expected_behavior_schema(conn: sqlite3.Connection) -> None:

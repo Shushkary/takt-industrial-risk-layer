@@ -5,7 +5,7 @@ import argparse
 import sqlite3
 from pathlib import Path
 
-LATEST_SCHEMA_VERSION = 8
+LATEST_SCHEMA_VERSION = 9
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
@@ -167,6 +167,21 @@ def _apply_to_v8(conn: sqlite3.Connection) -> None:
     )
 
 
+def _apply_to_v9(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS assembly_queue (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          pending INTEGER NOT NULL DEFAULT 0,
+          lease_owner TEXT NOT NULL DEFAULT '',
+          lease_until TEXT NOT NULL DEFAULT ''
+        );
+        INSERT OR IGNORE INTO assembly_queue (id, pending, lease_owner, lease_until)
+          VALUES (1, 0, '', '');
+        """
+    )
+
+
 def run(db_path: Path) -> int:
     conn = _connect(db_path)
     try:
@@ -193,6 +208,9 @@ def run(db_path: Path) -> int:
         if current < 8:
             _apply_to_v8(conn)
             current = 8
+        if current < 9:
+            _apply_to_v9(conn)
+            current = 9
         _set_schema_version(conn, current)
         conn.commit()
         print(f"schema_version={current}")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -137,6 +138,54 @@ def sqlite_storage_db_path(weights: Mapping[str, Any], *, project_root: Path) ->
     path = _project_local_path(raw_path, project_root=project_root, label="TAKT_SQLITE_PATH/storage.sqlite_path")
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentAssemblySettings:
+    """Настройка сборки инцидента: раздел `incident_assembly` в YAML.
+
+    Читается и API, и воркером — режим должен быть одним и тем же с обеих сторон. Если API
+    работает в `on_ingest`, а воркер запущен, он не увидит ни одного сигнала: приём их не
+    оставляет.
+    """
+
+    mode: str = "on_ingest"
+    distinctive_max_events: int = 12
+    hits_between_runs: int = 1
+    worker_poll_sec: float = 2.0
+
+    @property
+    def assembles_on_ingest(self) -> bool:
+        return self.mode == "on_ingest"
+
+    @property
+    def defers_to_worker(self) -> bool:
+        return self.mode == "worker"
+
+
+_ASSEMBLY_MODES = frozenset({"on_ingest", "worker", "off"})
+
+
+def incident_assembly_settings(weights: Mapping[str, Any]) -> IncidentAssemblySettings:
+    """Разбирает `incident_assembly`; неизвестный режим — ошибка, а не тихий откат.
+
+    Опечатка в режиме означала бы сборку не там, где её ждут: при `worker` инцидент собирает
+    отдельный процесс, при откате на умолчание — процесс API, и разница видна только по
+    задержке приёма.
+    """
+    raw = weights.get("incident_assembly")
+    cfg: Mapping[str, Any] = raw if isinstance(raw, Mapping) else {}
+    mode = str(cfg.get("mode", "on_ingest")).strip().lower()
+    if mode not in _ASSEMBLY_MODES:
+        raise ValueError(
+            f"incident_assembly.mode must be one of {', '.join(sorted(_ASSEMBLY_MODES))}, not {mode!r}"
+        )
+    return IncidentAssemblySettings(
+        mode=mode,
+        distinctive_max_events=int(cfg.get("distinctive_max_events", 12)),
+        hits_between_runs=int(cfg.get("hits_between_runs", 1)),
+        worker_poll_sec=float(cfg.get("worker_poll_sec", 2.0)),
+    )
 
 
 def case_repository_from_weights(weights: Mapping[str, Any], *, project_root: Path) -> CaseRepositoryPort:

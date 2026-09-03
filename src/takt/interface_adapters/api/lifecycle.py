@@ -29,7 +29,7 @@ def build_app_lifespan(
         if slog is not None:
             slog.record_service_stop()
             slog.close()
-        for attr in ("repo", "baseline", "audit_engagement_store", "recent_event_store"):
+        for attr in ("repo", "baseline", "audit_engagement_store", "recent_event_store", "assembly_queue"):
             obj = getattr(app.state, attr, None)
             closer = getattr(obj, "close", None)
             if callable(closer):

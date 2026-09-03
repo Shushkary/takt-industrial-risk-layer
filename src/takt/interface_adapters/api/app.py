@@ -19,7 +19,7 @@ from takt.application.use_cases.assemble_incident import (
     AssembleIncidentUseCase,
     IncidentEventSearchPort,
 )
-from takt.application.use_cases.assembly_on_ingest import AssembleOnIngest
+from takt.application.use_cases.assembly_on_ingest import AssembleOnIngest, DeferAssemblyToWorker
 from takt.application.use_cases.audit_engagement import ManageAuditEngagementUseCase
 from takt.application.use_cases.audit_ledger_facade import AuditLedgerFacade
 from takt.application.use_cases.auto_assemble_incidents import AutoAssembleIncidentsUseCase
@@ -53,9 +53,11 @@ from takt.domain.ports.audit_engagement_repository import AuditEngagementReposit
 from takt.domain.ports.case_repository import CaseRepositoryPort
 from takt.infrastructure.config.pipeline import build_assessment_pipeline
 from takt.infrastructure.config.settings_helpers import (
+    IncidentAssemblySettings,
     apply_storage_env_overrides,
     case_repository_from_weights,
     expected_behavior_from_weights,
+    incident_assembly_settings,
     siem_webhook_retries,
 )
 from takt.infrastructure.config.weights_loader import load_risk_weights
@@ -111,6 +113,7 @@ from takt.infrastructure.security.webhook_allowlist import (
     require_allowed_siem_url,
 )
 from takt.infrastructure.stores.memory import InMemoryAuditEngagementStore, InMemoryIdempotencyStore
+from takt.infrastructure.stores.sqlite_assembly_queue import SqliteAssemblyQueue
 from takt.infrastructure.stores.sqlite_recent_events import SqliteRecentEventStore
 from takt.infrastructure.stores.sqlite_store import (
     SqliteAuditEngagementStore,
@@ -331,39 +334,45 @@ _app_lifespan = build_app_lifespan(
 )
 
 
-def _assembly_on_ingest(
+def _assembly_for_ingest(
     weights: dict[str, Any],
     *,
     repo: CaseRepositoryPort,
     events: SqliteRecentEventStore | None,
-) -> AssembleOnIngest | None:
-    """Сборка инцидента по мере приёма — настройка `incident_assembly` в YAML.
+    settings: IncidentAssemblySettings,
+) -> tuple[AssembleOnIngest | DeferAssemblyToWorker | None, SqliteAssemblyQueue | None]:
+    """Что делает приём со срабатыванием — по настройке `incident_assembly.mode`.
+
+    `on_ingest` — прогон в процессе приёма; `worker` — отметка в очереди, прогон выполняет
+    `python -m takt.tools.assembly_worker`; `off` — ничего, сборка остаётся ручной.
 
     Без постоянного хранилища событий (`storage.backend: memory`) собирать не из чего:
     сборка ищет события по сущностям, а окно в памяти хранит только последние. В этом
-    режиме приём заканчивается делом конвейера, как и раньше.
+    режиме приём заканчивается делом конвейера при любом значении `mode`.
     """
-    if events is None:
-        return None
-    raw = weights.get("incident_assembly")
-    cfg: dict[str, Any] = raw if isinstance(raw, dict) else {}
-    if not bool(cfg.get("on_ingest", True)):
-        return None
+    if events is None or not isinstance(repo, SqliteCaseStore):
+        return None, None
+    if settings.defers_to_worker:
+        queue = SqliteAssemblyQueue(repo.database_path)
+        return DeferAssemblyToWorker(queue=queue), queue
+    if not settings.assembles_on_ingest:
+        return None, None
     # Порт поиска объявлен как `search_events(**criteria)`, а хранилище перечисляет критерии
     # поимённо — формально это разные сигнатуры, хотя набор критериев сборки хранилище
     # покрывает целиком. Тот же шов у `POST /cases/assemble/pivot`, только там хранилище
     # приходит из `app.state` и типа не имеет вовсе.
     search: IncidentEventSearchPort = cast(IncidentEventSearchPort, events)
-    return AssembleOnIngest(
+    trigger = AssembleOnIngest(
         assemble=AutoAssembleIncidentsUseCase(
             assemble=AssembleIncidentUseCase(events=search, repo=repo, weights=weights),
             repo=repo,
             events=events,
-            distinctive_max_events=int(cfg.get("distinctive_max_events", 12)),
+            distinctive_max_events=settings.distinctive_max_events,
         ),
-        hits_between_runs=int(cfg.get("hits_between_runs", 1)),
+        hits_between_runs=settings.hits_between_runs,
         on_error=lambda exc: _LOGGER.warning("assembly on ingest failed: %s", exc),
     )
+    return trigger, None
 
 
 def _coerce_event_source(raw: str | None) -> EventSource:
@@ -416,7 +425,11 @@ def create_app() -> FastAPI:
     demo_edges = pipeline.graph_edges
     app.state.event_window = []
     recent_event_store = SqliteRecentEventStore(repo.database_path) if isinstance(repo, SqliteCaseStore) else None
-    assembly_on_ingest = _assembly_on_ingest(weights, repo=repo, events=recent_event_store)
+    assembly_settings = incident_assembly_settings(weights)
+    app.state.incident_assembly_mode = assembly_settings.mode
+    assembly_on_ingest, assembly_queue = _assembly_for_ingest(
+        weights, repo=repo, events=recent_event_store, settings=assembly_settings
+    )
     ingest_facade = IngestAssessmentFacade(
         process=process,
         repo=repo,
@@ -466,6 +479,9 @@ def create_app() -> FastAPI:
     app.state.repo = repo
     app.state.ingest_facade = ingest_facade
     app.state.recent_event_store = recent_event_store
+    # Очередь сигналов сборки живёт только в режиме `worker`; закрывается вместе с остальными
+    # хранилищами (`lifecycle.py`), иначе соединение с базой пережило бы остановку API.
+    app.state.assembly_queue = assembly_queue
     app.state.idempotency_store = repo if isinstance(repo, SqliteCaseStore) else InMemoryIdempotencyStore()
     app.state.baseline = baseline
     app.state.audit_engagement_store = audit_engagement_store

@@ -42,5 +42,27 @@ services:
       retries: 3
       start_period: 20s
 
+  # Сборка инцидентов отдельным процессом. Нужна при incident_assembly.mode: worker —
+  # тогда приём только отмечает работу, а прогон идёт здесь и не задерживает POST /events.
+  # При mode: on_ingest (по умолчанию) сервис не нужен: запускать его не вредно, но сигналов
+  # он не увидит. Профиль держит его выключенным: docker compose --profile worker up
+  assembly:
+    profiles: ["worker"]
+    build:
+      context: .
+      args:
+        TAKT_BUILD_REVISION: ${TAKT_BUILD_REVISION:-}
+    command: ["python", "-m", "takt.tools.assembly_worker"]
+    environment:
+      TAKT_STORAGE: sqlite
+      # Тот же файл базы, что у api: очередь сигналов лежит в нём же
+      TAKT_SQLITE_PATH: data/takt_cases.db
+      TAKT_AUTH_REQUIRED: "0"
+    volumes:
+      - takt_sqlite:/app/data
+    depends_on:
+      - api
+    restart: unless-stopped
+
 volumes:
   takt_sqlite:

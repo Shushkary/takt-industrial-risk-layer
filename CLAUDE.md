@@ -83,7 +83,7 @@ release-gate. Кратко:
 | L2 Application | `src/takt/application/use_cases` | Assess, ProcessEvent, CaseDecision, Backtest, ManualPermit |
 | L3 Interface Adapters | `src/takt/interface_adapters/api` | FastAPI: `routers/`, `schemas/`, `mappers/`, `pagination.py`, `openapi.py`, `lifecycle.py` |
 | L4 Infrastructure | `src/takt/infrastructure` | `importers/`, `stores/`, `export/`, `security/`, `config/`, `http/` |
-| Точки входа | `src/takt/tools` | CLI поверх собранного приложения: `load_dataset`, `assemble_incident` |
+| Точки входа | `src/takt/tools` | CLI поверх собранного приложения: `load_dataset`, `assemble_incident`, `assembly_worker` |
 
 Направление зависимостей: `tools` → `interface_adapters` → `infrastructure` → `application` →
 `domain`. Обратных импортов нет ни на одном шаге; порядок закреплён контрактом
