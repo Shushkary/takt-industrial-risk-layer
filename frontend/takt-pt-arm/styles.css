@@ -1464,12 +1464,24 @@ ol.steps {
 }
 
 /* Сборка инцидентов — отдельной строкой, а не в шапке панели: колонка очереди узкая, и
-   кнопка в шапке переносила заголовок на две строки. */
+   кнопка в шапке переносила заголовок на две строки. Перенос строк — по тому же принципу,
+   что у .queue-filters: та же узкая колонка, тот же риск переполнения вбок. */
 .queue-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   padding: 8px 12px 0;
+}
+
+.queue-actions input {
+  width: 56px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
 }
 
 .mode {

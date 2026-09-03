@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260903-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260904-01" />
   </head>
   <body>
     <header class="top">
@@ -48,6 +48,9 @@
         <div class="queue-actions">
           <button id="assembleAuto" class="action inline" type="button">Собрать инциденты</button>
           <button class="help sm" type="button" data-help="assemble_auto" aria-label="Пояснение: сборка инцидентов">?</button>
+          <label for="assembleThreshold" class="muted small">порог отличительности</label>
+          <input id="assembleThreshold" type="number" min="1" max="1000" step="1" placeholder="12" />
+          <button class="help sm" type="button" data-help="assemble_threshold" aria-label="Пояснение: порог отличительности">?</button>
         </div>
         <p id="assembleRoleNote" class="muted small pad" hidden>Роль работает только на чтение: сборка инцидентов недоступна.</p>
         <div class="queue-modes" role="group" aria-label="Вид очереди">
@@ -596,7 +599,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260903-02"></script>
-    <script src="./app.min.js?v=20260903-02"></script>
+    <script src="./env.js?v=20260904-01"></script>
+    <script src="./app.min.js?v=20260904-01"></script>
   </body>
 </html>

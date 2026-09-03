@@ -142,3 +142,24 @@ def test_host_expansion_is_hidden_from_a_read_only_role() -> None:
 def test_host_expansion_has_a_help_entry() -> None:
     assert 'data-help="expand_hosts"' in _INDEX
     assert re.search(r"^  expand_hosts: \{$", _APP, re.MULTILINE)
+
+
+# --------------------------------------------------------------------------- #
+# Порог отличительности — параметр, а не спрятанная константа
+# --------------------------------------------------------------------------- #
+
+def test_assembly_threshold_is_adjustable_from_the_queue() -> None:
+    """Значение по умолчанию (12) откалибровано на одном корпусе и не универсально:
+
+    на независимой проверке (`tests/test_auto_assemble_incidents_ext001.py`, реальная
+    внешняя цепочка EXT-001) тот же порог не связывает вообще ничего. Аналитик, у которого
+    свой поток ведёт себя иначе, должен иметь возможность подставить своё число, не уходя
+    в конфигурацию или командную строку.
+    """
+    assert 'id="assembleThreshold"' in _INDEX
+    assert "distinctive_max_events: Number(thresholdRaw)" in _APP
+
+
+def test_assembly_threshold_has_a_help_entry_stating_the_trade_off() -> None:
+    assert 'data-help="assemble_threshold"' in _INDEX
+    assert re.search(r"^  assemble_threshold: \{$", _APP, re.MULTILINE)
