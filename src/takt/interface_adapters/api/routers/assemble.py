@@ -7,6 +7,7 @@ from takt.application.use_cases.assemble_incident import (
     AssembleIncidentUseCase,
     IncidentSeed,
 )
+from takt.application.use_cases.auto_assemble_incidents import AutoAssembleIncidentsUseCase
 from takt.interface_adapters.api.dependencies import ApiContext
 
 
@@ -27,6 +28,34 @@ class AssembleIncidentResponse(BaseModel):
     expanded_events: int
     total_events: int
     source_case_ids: list[str]
+
+
+class AutoAssembleRequest(BaseModel):
+    """Автоматическая сборка ядра инцидентов по делам со срабатыванием инварианта."""
+
+    distinctive_max_events: int = Field(
+        default=12,
+        ge=1,
+        le=1000,
+        description=(
+            "Сущность считается отличительной, если встречается в принятом потоке не чаще"
+            " этого числа раз. Выше порог — полнее цепочка и больше фона вместе с ней."
+        ),
+    )
+    actor: str = ""
+
+
+class AutoAssembledIncidentOut(BaseModel):
+    case_id: str
+    seeds: list[str]
+    event_count: int
+    source_case_ids: list[str]
+
+
+class AutoAssembleResponse(BaseModel):
+    incidents: list[AutoAssembledIncidentOut]
+    considered_cases: list[str]
+    skipped_cases: list[str]
 
 
 def register_assemble_routes(ctx: ApiContext) -> None:
@@ -71,4 +100,40 @@ def register_assemble_routes(ctx: ApiContext) -> None:
             expanded_events=len(assembled.expanded_event_ids),
             total_events=assembled.total_events,
             source_case_ids=list(assembled.source_case_ids),
+        )
+
+    @app.post("/cases/assemble/auto", response_model=AutoAssembleResponse, tags=["Cases"])
+    def assemble_auto_endpoint(request: AutoAssembleRequest) -> AutoAssembleResponse:
+        """Собирает ядро инцидентов из дел конвейера, не дожидаясь действий аналитика.
+
+        Отбор — по отличительным сущностям дел, где сработал инвариант. Расширение до уровня
+        узла сюда не входит: оно добирает штатную активность и остаётся решением аналитика.
+        """
+        store = getattr(app.state, "recent_event_store", None)
+        if store is None:
+            raise HTTPException(
+                status_code=409,
+                detail="сборка инцидента требует постоянного хранилища событий (TAKT_STORAGE=sqlite)",
+            )
+        use_case = AutoAssembleIncidentsUseCase(
+            assemble=AssembleIncidentUseCase(
+                events=store, repo=ctx.repo, weights=getattr(app.state, "risk_weights", {})
+            ),
+            repo=ctx.repo,
+            events=store,
+            distinctive_max_events=request.distinctive_max_events,
+        )
+        report = use_case.execute(actor=request.actor or "auto-assembly")
+        return AutoAssembleResponse(
+            incidents=[
+                AutoAssembledIncidentOut(
+                    case_id=item.case_id,
+                    seeds=list(item.seeds),
+                    event_count=item.event_count,
+                    source_case_ids=list(item.source_case_ids),
+                )
+                for item in report.incidents
+            ],
+            considered_cases=list(report.considered_cases),
+            skipped_cases=list(report.skipped_cases),
         )

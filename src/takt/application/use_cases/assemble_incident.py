@@ -71,6 +71,41 @@ class IncidentEventSearchPort(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class CaseEventIndex:
+    """Снимок дел хранилища, разложенный по событиям.
+
+    Сборка спрашивает «какие дела содержат эти события», и без индекса ответ стоит полного
+    обхода хранилища — на каждый собранный инцидент. Замер: 8000 дел и 40 инцидентов дают
+    20 с только на обходы, и растёт это по обоим множителям сразу. Тот же класс дефекта уже
+    встречался в `InMemoryCaseStore.find_open_by_fingerprint`.
+
+    Снимок берётся один раз на прогон. Это корректно: дела конвейера во время сборки не
+    меняются, а собранные ею же кейсы в источники оценки не входят по метке в журнале.
+    """
+
+    by_case_id: Mapping[str, Case]
+    case_ids_by_event: Mapping[str, tuple[str, ...]]
+
+    @staticmethod
+    def of(cases: Iterable[Case]) -> CaseEventIndex:
+        by_case_id: dict[str, Case] = {}
+        by_event: dict[str, list[str]] = {}
+        for case in cases:
+            by_case_id[case.case_id] = case
+            for event_id in case.normalized_event_ids:
+                by_event.setdefault(event_id, []).append(case.case_id)
+        return CaseEventIndex(by_case_id, {key: tuple(value) for key, value in by_event.items()})
+
+    def cases_touching(self, event_ids: set[str]) -> list[Case]:
+        found: dict[str, Case] = {}
+        for event_id in event_ids:
+            for case_id in self.case_ids_by_event.get(event_id, ()):
+                if case_id not in found:
+                    found[case_id] = self.by_case_id[case_id]
+        return list(found.values())
+
+
+@dataclass(frozen=True, slots=True)
 class IncidentSeed:
     """Отличительная сущность инцидента в виде «вид — значение»."""
 
@@ -147,6 +182,9 @@ class AssembleIncidentUseCase:
     weights: Mapping[str, Any] = field(default_factory=dict)
     page_size: int = _PAGE
     max_pages: int = _MAX_PAGES
+    # Снимок дел на прогон. Пусто — каждый вызов читает хранилище целиком; так работает
+    # одиночная сборка по запросу аналитика, где обход ровно один.
+    case_index: CaseEventIndex | None = None
 
     def execute(
         self,
@@ -164,9 +202,7 @@ class AssembleIncidentUseCase:
         if not seeds:
             raise ValueError("нужна хотя бы одна отличительная сущность")
 
-        candidates = self._candidates(seeds)
-        pivots = [key for seed in seeds for key in seed.pivot_keys]
-        core = assemble_by_pivot(candidates.values(), pivots)
+        core = self.core_for(seeds)
         if not core:
             raise LookupError(
                 "по указанным сущностям событий не найдено: " + ", ".join(str(seed) for seed in seeds)
@@ -200,6 +236,22 @@ class AssembleIncidentUseCase:
         )
 
     # --- чтение хранилища -------------------------------------------------
+
+    def core_for(self, seeds: Sequence[IncidentSeed]) -> list[NormalizedEvent]:
+        """Ядро инцидента по набору сущностей, без сохранения кейса.
+
+        Отдельно от `execute`, потому что автоматическая сборка обязана сначала узнать
+        состав ядра: два набора сущностей, дающие пересекающиеся ядра, описывают один
+        инцидент, и объединять их нужно **до** того, как в хранилище появятся два кейса.
+        """
+        candidates = self._candidates(seeds)
+        pivots = [key for seed in seeds for key in seed.pivot_keys]
+        return assemble_by_pivot(candidates.values(), pivots)
+
+    def occurrences(self, seed: IncidentSeed) -> int:
+        """Сколько всего принятых событий содержит эту сущность."""
+        _, total = self.events.search_events(offset=0, limit=1, **seed.search_criteria())
+        return int(total)
 
     def _candidates(self, seeds: Sequence[IncidentSeed]) -> dict[str, NormalizedEvent]:
         """События, где встречается любая из отличительных сущностей, без дублей."""
@@ -295,14 +347,25 @@ class AssembleIncidentUseCase:
 
         Ранее собранные пивотом кейсы исключаются: они не источник оценки, а такой же
         результат сборки, и агрегировать риск с них означало бы считать его дважды.
+
+        Порядок — по `case_id`, а не по порядку выдачи хранилища: от него зависит порядок
+        записей о срабатываниях в собранном кейсе, а значит и его воспроизводимость.
         """
-        return [
-            case
-            for case in self.repo.list_all()
-            if case.case_id != exclude_case_id
-            and not _is_assembled(case)
-            and set(case.normalized_event_ids) & event_ids
-        ]
+        pool = (
+            self.repo.list_all()
+            if self.case_index is None
+            else self.case_index.cases_touching(event_ids)
+        )
+        return sorted(
+            (
+                case
+                for case in pool
+                if case.case_id != exclude_case_id
+                and not _is_assembled(case)
+                and set(case.normalized_event_ids) & event_ids
+            ),
+            key=lambda case: case.case_id,
+        )
 
 
 # --- вспомогательные чистые функции ---------------------------------------

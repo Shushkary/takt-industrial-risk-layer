@@ -5,6 +5,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from takt.application.use_cases.assemble_incident import AssembleIncidentUseCase
+from takt.application.use_cases.auto_assemble_incidents import AutoAssembleIncidentsUseCase
 from takt.domain.entities.event import EventSource
 from takt.domain.ports.event_source_reader import EventSourceReaderPort
 from takt.infrastructure.importers.nad_events import NadEventSourceReader
@@ -57,6 +59,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source", required=True, choices=sorted(SOURCE_CLASS))
     parser.add_argument("--path", required=True, type=Path)
     parser.add_argument("--progress-every", type=int, default=1000)
+    parser.add_argument(
+        "--no-assemble",
+        action="store_true",
+        help=(
+            "не собирать инциденты после загрузки. По умолчанию загрузка завершается сборкой"
+            " ядра инцидентов по отличительным сущностям: без неё цепочка атаки остаётся"
+            " разложенной по мелким делам конвейера."
+        ),
+    )
+    parser.add_argument(
+        "--distinctive-max-events",
+        type=int,
+        default=12,
+        help="порог отличительности сущности: не чаще скольких раз она встречается в потоке",
+    )
     return parser
 
 
@@ -73,7 +90,42 @@ def _reader(source: str, path: Path, *, trust: float) -> EventSourceReaderPort:
     return CsvEventSourceReader(path, MAPPERS[source], ingest_trust=trust)
 
 
-def run(*, source: str, path: Path, progress_every: int = 1000) -> int:
+def _assemble_incidents(app, *, distinctive_max_events: int) -> None:
+    """Сборка ядра инцидентов после загрузки — тот же шаг, что делает `POST /cases/assemble/auto`.
+
+    Загрузка датасета — штатный путь приёма, и до сих пор он заканчивался лентой мелких дел
+    конвейера: связанную цепочку аналитик собирал отдельной утилитой. Шаг выполняется здесь,
+    чтобы прогон датасета и приём через API давали одно и то же состояние.
+    """
+    store = getattr(app.state, "recent_event_store", None)
+    if store is None:
+        print("assemble skipped: требуется постоянное хранилище событий (TAKT_STORAGE=sqlite)")
+        return
+    use_case = AutoAssembleIncidentsUseCase(
+        assemble=AssembleIncidentUseCase(
+            events=store, repo=app.state.repo, weights=getattr(app.state, "risk_weights", {})
+        ),
+        repo=app.state.repo,
+        events=store,
+        distinctive_max_events=distinctive_max_events,
+    )
+    report = use_case.execute(actor="load_dataset")
+    print(
+        f"assembled incidents={len(report.incidents)} events={report.assembled_events}"
+        f" considered={len(report.considered_cases)} skipped={len(report.skipped_cases)}"
+    )
+    for item in report.incidents:
+        print(f"  incident {item.case_id} events={item.event_count} seeds={','.join(item.seeds)}")
+
+
+def run(
+    *,
+    source: str,
+    path: Path,
+    progress_every: int = 1000,
+    assemble: bool = True,
+    distinctive_max_events: int = 12,
+) -> int:
     if not path.is_file():
         print(f"error: file not found: {path}", file=sys.stderr)
         return 2
@@ -97,6 +149,15 @@ def run(*, source: str, path: Path, progress_every: int = 1000) -> int:
             except Exception as exc:
                 failed += 1
                 print(f"event failed source={source} event_id={event.event_id} reason={exc}", file=sys.stderr)
+        # Сборка выполняется и при сбойных строках. Пропускать её означало бы, что одна
+        # непрочитанная строка из тысячи молча оставляет оператора без инцидента: в выводе
+        # он видит только `failed=1` и не знает, что шаг вообще не запускался. Состав
+        # инцидента выводится из принятых событий, а следующая успешная загрузка пересобирает
+        # его под тем же идентификатором.
+        if assemble:
+            if failed:
+                print(f"assemble: часть строк не принята (failed={failed}), инцидент собран по принятым")
+            _assemble_incidents(app, distinctive_max_events=distinctive_max_events)
     finally:
         for attr in ("recent_event_store", "repo", "baseline", "audit_engagement_store"):
             resource = getattr(app.state, attr, None)
@@ -109,7 +170,13 @@ def run(*, source: str, path: Path, progress_every: int = 1000) -> int:
 
 def main() -> int:
     args = build_parser().parse_args()
-    return run(source=args.source, path=args.path, progress_every=args.progress_every)
+    return run(
+        source=args.source,
+        path=args.path,
+        progress_every=args.progress_every,
+        assemble=not args.no_assemble,
+        distinctive_max_events=args.distinctive_max_events,
+    )
 
 
 if __name__ == "__main__":

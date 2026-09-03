@@ -21,6 +21,7 @@ EXPECTED_ROUTE_CONTRACTS = [
     ("GET", "/audit-ledger/operations/verify", ("Analytics",), None),
     ("POST", "/backtest/fixture", ("Analytics",), "BacktestFixtureResponse"),
     ("GET", "/cases", ("Cases",), "CaseSummary"),
+    ("POST", "/cases/assemble/auto", ("Cases",), "AutoAssembleResponse"),
     ("POST", "/cases/assemble/pivot", ("Cases",), "AssembleIncidentResponse"),
     ("GET", "/cases/{case_id}/scenario.json", ("Export",), None),
     ("GET", "/cases/{case_id}/simulation", ("Cases",), None),
