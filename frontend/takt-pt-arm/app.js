@@ -316,6 +316,13 @@ const HELP = {
     source: 'Идентификатор приходит из данных источника. ТАКТ не связывает учётную запись с сотрудником: сопоставление — за организацией.',
     action: 'Сверить с тем, кто фактически работал. Служебная запись с интерактивными действиями — отдельный повод для проверки.',
   },
+  expand_hosts: {
+    title: 'Расширение до узла',
+    what: 'Второй шаг сборки пивотом: добавляет к делу штатную активность выбранных узлов в окне уже собранного ядра — события, которых нет среди отличительных сущностей, но которые относятся к тем же узлам.',
+    source: 'Список — узлы, встретившиеся среди событий этого дела; уже расширенные отмечены. Действие вызывает тот же `POST /cases/assemble/pivot`, что и утилита командной строки, с теми же отличительными сущностями и выбранными узлами.',
+    action: 'Выбирать узел осознанно: расширение приводит легитимную активность того же узла вместе с недостающими событиями, и отделить одно от другого может только аналитик — автоматика этого не делает.',
+    doc: 'docs/pt_techlab/analyst_window.md',
+  },
   assemble_auto: {
     title: 'Сборка инцидентов',
     what: 'Собирает связанные инциденты из дел очереди: берёт дела, где сработал инвариант, и по их отличительным сущностям отбирает все события этой цепочки — из всех источников, а не только из одного дела.',
@@ -470,6 +477,7 @@ let lastCaseFindings = [];
 let session = null;
 let lastCaseSummary = {};
 let lastCaseMissing = [];
+let lastCaseArtifacts = [];
 
 // --- Ключ доступа ----------------------------------------------------------
 //
@@ -829,7 +837,9 @@ function renderCase(workspace) {
   renderGraph(workspace.graph || { nodes: [], edges: [] });
   renderReconstruction(workspace.attack_chain || {});
   renderRelatedCases(item.related_cases || []);
-  renderResponse(workspace.events || [], workspace.artifacts || [], item.correlation_evidence || []);
+  lastCaseArtifacts = workspace.artifacts || [];
+  renderResponse(workspace.events || [], lastCaseArtifacts, item.correlation_evidence || []);
+  renderExpandBlock();
   renderPermits(item.manual_permits || []);
   renderFindings(item.findings || []);
   renderJournal(item.audit_log || []);
@@ -1422,6 +1432,95 @@ function paintChain() {
     if (!present.has(id)) selectedChainEvents.delete(id);
   }
   updateRelinkState();
+}
+
+// --- Расширение разбора до уровня узла (второй шаг сборки пивотом) ---------
+//
+// Ядро дела, собранного пивотом (вручную или сборкой после приёма), намеренно неполно:
+// событие без отличительной сущности в него не попадает, даже если оно часть той же цепочки.
+// Второй шаг — `POST /cases/assemble/pivot` с тем же `case_id` и теми же сидами, но с
+// `expand_hosts` — уже существовал и был проверен (`docs/pt_techlab/analyst_window.md`,
+// раздел 2), но вызывался только утилитой командной строки. Аналитик, которому нужно было
+// добрать штатную активность узла, сделать этого из интерфейса не мог.
+//
+// Расширение добирает фон вместе с недостающими событиями — это ожидаемая плата за полноту,
+// и решение о ней остаётся за аналитиком: список узлов не выбирается автоматически, кнопка
+// не активируется сама.
+function pivotSeedStrings(artifacts) {
+  return (artifacts || [])
+    .filter((item) => item.source === 'pivot-seed')
+    .map((item) => `${item.type}:${item.value}`);
+}
+
+function renderExpandBlock() {
+  const seeds = pivotSeedStrings(lastCaseArtifacts);
+  const block = $('#expandBlock');
+  if (!seeds.length) {
+    // Дело конвейера — не собрано пивотом, отличительных сущностей у него нет, и расширять
+    // до узла нечего: узел уже и есть его единственный ключ группировки.
+    block.hidden = true;
+    return;
+  }
+  block.hidden = false;
+  $('#expandHostsError').hidden = true;
+
+  const hosts = new Map();
+  for (const event of lastChainEvents) {
+    const host = event.entities && event.entities.host_id;
+    if (!host) continue;
+    const entry = hosts.get(host) || { count: 0, expanded: false };
+    entry.count += 1;
+    const evidence = lastChainEvidence.get(event.event_id);
+    if (evidence && evidence.rule === 'host-expansion') entry.expanded = true;
+    hosts.set(host, entry);
+  }
+
+  const list = $('#expandHostList');
+  list.replaceChildren();
+  if (!hosts.size) {
+    list.innerHTML = '<span class="muted small">в деле нет событий с узлом</span>';
+  } else {
+    for (const [host, info] of [...hosts.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      const label = document.createElement('label');
+      const note = info.expanded ? 'уже расширено' : `${info.count} ${plural(info.count, 'событие', 'события', 'событий')}`;
+      label.innerHTML = `<input type="checkbox" value="${escapeHtml(host)}"${info.expanded ? ' checked' : ''} />
+        <span class="mono">${escapeHtml(host)}</span> <span class="muted">(${note})</span>`;
+      list.appendChild(label);
+    }
+  }
+}
+
+async function runExpandToHosts() {
+  const seeds = pivotSeedStrings(lastCaseArtifacts);
+  const hosts = [...document.querySelectorAll('#expandHostList input[type="checkbox"]:checked')].map(
+    (box) => box.value
+  );
+  if (!hosts.length) {
+    $('#expandHostsError').textContent = 'Выберите хотя бы один узел.';
+    $('#expandHostsError').hidden = false;
+    return;
+  }
+  const button = $('#expandHostsButton');
+  button.disabled = true;
+  try {
+    const result = await api('/cases/assemble/pivot', {
+      method: 'POST',
+      body: JSON.stringify({
+        case_id: selectedCaseId,
+        seeds,
+        title: lastCaseSummary.title || '',
+        expand_hosts: hosts,
+        actor: (session && session.actor_id) || '',
+      }),
+    });
+    toast(`Расширено: ядро ${result.core_events}, добавлено ${result.expanded_events}, всего ${result.total_events}`);
+    await openCase(selectedCaseId);
+  } catch (error) {
+    $('#expandHostsError').textContent = `Расширение не выполнено: ${error.message}`;
+    $('#expandHostsError').hidden = false;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // --- Ручная корректировка состава дела (ТЗ §5.2) ---------------------------
@@ -2194,6 +2293,8 @@ function applyPermissions() {
   $('#permitOpen').hidden = !canWrite;
   $('#assembleAuto').hidden = !canWrite;
   $('#assembleRoleNote').hidden = canWrite;
+  $('#expandHostsButton').hidden = !canWrite;
+  $('#expandHostsRoleNote').hidden = canWrite;
   if (!canWrite) closePermitForm();
   const canRelink = permissions().case_relink;
   $('#relinkPanel').hidden = !canRelink;
@@ -2627,6 +2728,7 @@ $('#queueSearch').addEventListener('input', () => {
   queueSearchTimer = setTimeout(refresh, 300);
 });
 $('#assembleAuto').addEventListener('click', runAutoAssembly);
+$('#expandHostsButton').addEventListener('click', runExpandToHosts);
 $('#queueModeCases').addEventListener('click', () => setQueueMode('cases'));
 $('#queueModeAsset').addEventListener('click', () => setQueueMode('asset'));
 $('#queueModeRule').addEventListener('click', () => setQueueMode('operation'));

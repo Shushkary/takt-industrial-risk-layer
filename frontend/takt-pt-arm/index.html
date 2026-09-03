@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260903-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260903-02" />
   </head>
   <body>
     <header class="top">
@@ -221,6 +221,20 @@
               </div>
             </div>
             <div id="invariantList" class="chips"></div>
+          </div>
+
+          <div id="expandBlock" class="block" hidden>
+            <div class="block-head">
+              <h4>Расширение до узла</h4>
+              <button class="help" type="button" data-help="expand_hosts" aria-label="Пояснение: расширение разбора до уровня узла">?</button>
+            </div>
+            <p class="muted small">Добирает штатную активность выбранных узлов в окне инцидента вместе с событиями, которых нет среди отличительных сущностей. Отсев — за аналитиком, поэтому действие требует явного выбора узла.</p>
+            <div id="expandHostList" class="host-checklist"></div>
+            <div class="relink-row">
+              <button id="expandHostsButton" class="action inline" type="button">Расширить</button>
+              <span id="expandHostsRoleNote" class="muted small" hidden>Роль работает только на чтение: расширение недоступно.</span>
+            </div>
+            <p id="expandHostsError" class="relink-error small" hidden></p>
           </div>
 
           <div class="block">
@@ -582,7 +596,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260903-01"></script>
-    <script src="./app.min.js?v=20260903-01"></script>
+    <script src="./env.js?v=20260903-02"></script>
+    <script src="./app.min.js?v=20260903-02"></script>
   </body>
 </html>

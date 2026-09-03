@@ -99,3 +99,46 @@ def test_assembly_is_hidden_from_a_read_only_role() -> None:
 def test_assembly_has_a_help_entry() -> None:
     assert 'data-help="assemble_auto"' in _INDEX
     assert re.search(r"^  assemble_auto: \{$", _APP, re.MULTILINE)
+
+
+# --------------------------------------------------------------------------- #
+# Расширение до узла (второй шаг сборки пивотом)
+# --------------------------------------------------------------------------- #
+
+def test_host_expansion_can_be_started_from_the_case_panel() -> None:
+    """`POST /cases/assemble/pivot` умеет `expand_hosts` давно, кнопки не было.
+
+    Второй шаг разбора — расширение ядра до уровня узла — был задокументирован
+    (`docs/pt_techlab/analyst_window.md`) и вызывался только утилитой командной строки:
+    аналитик, собравший инцидент через АРМ, не мог его выполнить, не уходя в консоль.
+    """
+    assert 'id="expandBlock"' in _INDEX
+    assert 'id="expandHostList"' in _INDEX
+    assert "'/cases/assemble/pivot'" in _APP
+    assert "$('#expandHostsButton').addEventListener('click', runExpandToHosts);" in _APP
+
+
+def test_host_expansion_reads_seeds_from_pivot_seed_artifacts() -> None:
+    """Сиды для повторной сборки берутся из уже сохранённых артефактов дела.
+
+    Не набираются заново и не хранятся отдельно от продукта: `case.artifacts` с
+    `source === 'pivot-seed'` — тот же список, что показывает пакет реагирования.
+    """
+    assert "item.source === 'pivot-seed'" in _APP
+    assert "`${item.type}:${item.value}`" in _APP
+
+
+def test_host_expansion_hides_for_a_pipeline_case_without_seeds() -> None:
+    """Дело конвейера расширять до узла нечего: узел уже и есть его ключ группировки."""
+    assert "block.hidden = true;" in _APP
+    assert "if (!seeds.length) {" in _APP
+
+
+def test_host_expansion_is_hidden_from_a_read_only_role() -> None:
+    assert "$('#expandHostsButton').hidden = !canWrite;" in _APP
+    assert "$('#expandHostsRoleNote').hidden = canWrite;" in _APP
+
+
+def test_host_expansion_has_a_help_entry() -> None:
+    assert 'data-help="expand_hosts"' in _INDEX
+    assert re.search(r"^  expand_hosts: \{$", _APP, re.MULTILINE)

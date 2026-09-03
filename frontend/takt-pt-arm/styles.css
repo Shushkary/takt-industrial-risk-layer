@@ -737,6 +737,27 @@ tr.row-expanded {
   cursor: pointer;
 }
 
+/* Список узлов для расширения разбора: чекбокс + узел + число событий/уже включённых.
+   Тот же принцип, что у .core-only-toggle, но столбцом — узлов бывает несколько. */
+.host-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 8px;
+}
+
+.host-checklist label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.host-checklist .muted {
+  font-size: 11px;
+}
+
 .entity-link {
   border: 0;
   background: none;
