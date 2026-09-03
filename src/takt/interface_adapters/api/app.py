@@ -9,14 +9,20 @@ import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from starlette.middleware.gzip import GZipMiddleware
 
 from takt.application.system_defaults import default_clock, default_id_provider
+from takt.application.use_cases.assemble_incident import (
+    AssembleIncidentUseCase,
+    IncidentEventSearchPort,
+)
+from takt.application.use_cases.assembly_on_ingest import AssembleOnIngest
 from takt.application.use_cases.audit_engagement import ManageAuditEngagementUseCase
 from takt.application.use_cases.audit_ledger_facade import AuditLedgerFacade
+from takt.application.use_cases.auto_assemble_incidents import AutoAssembleIncidentsUseCase
 from takt.application.use_cases.backtest import RunBacktestUseCase
 from takt.application.use_cases.build_forensic_bundle import BuildForensicBundleUseCase
 from takt.application.use_cases.case_actions_facade import CaseActionsFacade
@@ -44,6 +50,7 @@ from takt.application.use_cases.verify_forensic_bundle import VerifyForensicBund
 from takt.domain.entities.case import Case
 from takt.domain.entities.event import EventSource, NormalizedEvent
 from takt.domain.ports.audit_engagement_repository import AuditEngagementRepositoryPort
+from takt.domain.ports.case_repository import CaseRepositoryPort
 from takt.infrastructure.config.pipeline import build_assessment_pipeline
 from takt.infrastructure.config.settings_helpers import (
     apply_storage_env_overrides,
@@ -324,6 +331,41 @@ _app_lifespan = build_app_lifespan(
 )
 
 
+def _assembly_on_ingest(
+    weights: dict[str, Any],
+    *,
+    repo: CaseRepositoryPort,
+    events: SqliteRecentEventStore | None,
+) -> AssembleOnIngest | None:
+    """Сборка инцидента по мере приёма — настройка `incident_assembly` в YAML.
+
+    Без постоянного хранилища событий (`storage.backend: memory`) собирать не из чего:
+    сборка ищет события по сущностям, а окно в памяти хранит только последние. В этом
+    режиме приём заканчивается делом конвейера, как и раньше.
+    """
+    if events is None:
+        return None
+    raw = weights.get("incident_assembly")
+    cfg: dict[str, Any] = raw if isinstance(raw, dict) else {}
+    if not bool(cfg.get("on_ingest", True)):
+        return None
+    # Порт поиска объявлен как `search_events(**criteria)`, а хранилище перечисляет критерии
+    # поимённо — формально это разные сигнатуры, хотя набор критериев сборки хранилище
+    # покрывает целиком. Тот же шов у `POST /cases/assemble/pivot`, только там хранилище
+    # приходит из `app.state` и типа не имеет вовсе.
+    search: IncidentEventSearchPort = cast(IncidentEventSearchPort, events)
+    return AssembleOnIngest(
+        assemble=AutoAssembleIncidentsUseCase(
+            assemble=AssembleIncidentUseCase(events=search, repo=repo, weights=weights),
+            repo=repo,
+            events=events,
+            distinctive_max_events=int(cfg.get("distinctive_max_events", 12)),
+        ),
+        hits_between_runs=int(cfg.get("hits_between_runs", 1)),
+        on_error=lambda exc: _LOGGER.warning("assembly on ingest failed: %s", exc),
+    )
+
+
 def _coerce_event_source(raw: str | None) -> EventSource:
     return coerce_event_source(raw)
 
@@ -374,6 +416,7 @@ def create_app() -> FastAPI:
     demo_edges = pipeline.graph_edges
     app.state.event_window = []
     recent_event_store = SqliteRecentEventStore(repo.database_path) if isinstance(repo, SqliteCaseStore) else None
+    assembly_on_ingest = _assembly_on_ingest(weights, repo=repo, events=recent_event_store)
     ingest_facade = IngestAssessmentFacade(
         process=process,
         repo=repo,
@@ -383,6 +426,7 @@ def create_app() -> FastAPI:
         polling_intervals_us=list(pipeline.polling_intervals_us),
         raw_row_to_normalized=raw_row_to_normalized,
         recent_event_store=recent_event_store,
+        assembly=assembly_on_ingest,
     )
     compliance_report_uc = BuildComplianceDataQualityReportUseCase(repo, default_clock)
     forensic_readiness_uc = BuildForensicReadinessReportUseCase(repo, default_clock)

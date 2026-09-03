@@ -56,6 +56,9 @@ class AutoAssembleResponse(BaseModel):
     incidents: list[AutoAssembledIncidentOut]
     considered_cases: list[str]
     skipped_cases: list[str]
+    # Редакции инцидента, собранные по неполному потоку и этим прогоном не воспроизведённые:
+    # закрыты как MERGED. Пустой список — прогон ничего не снимал.
+    retired_case_ids: list[str] = []
 
 
 def register_assemble_routes(ctx: ApiContext) -> None:
@@ -104,7 +107,11 @@ def register_assemble_routes(ctx: ApiContext) -> None:
 
     @app.post("/cases/assemble/auto", response_model=AutoAssembleResponse, tags=["Cases"])
     def assemble_auto_endpoint(request: AutoAssembleRequest) -> AutoAssembleResponse:
-        """Собирает ядро инцидентов из дел конвейера, не дожидаясь действий аналитика.
+        """Повторяет сборку ядра инцидентов по требованию — с другим порогом отличительности.
+
+        Тот же шаг конвейер выполняет сам при приёме событий (`incident_assembly.on_ingest`),
+        поэтому обычно вызывать этот метод не нужно: он существует для повторного разбора с
+        другим порогом и для установок, где сборка на приёме выключена.
 
         Отбор — по отличительным сущностям дел, где сработал инвариант. Расширение до уровня
         узла сюда не входит: оно добирает штатную активность и остаётся решением аналитика.
@@ -136,4 +143,5 @@ def register_assemble_routes(ctx: ApiContext) -> None:
             ],
             considered_cases=list(report.considered_cases),
             skipped_cases=list(report.skipped_cases),
+            retired_case_ids=list(report.retired_case_ids),
         )

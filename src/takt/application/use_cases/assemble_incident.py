@@ -58,7 +58,7 @@ _SEED_KINDS = ("host", "user", "address", "artifact")
 
 # Метка в журнале собранного кейса. По ней сборка отличает кейсы конвейера от кейсов,
 # собранных ранее ею же: иначе повторная сборка агрегировала бы риск сама с себя.
-_ASSEMBLY_MARKER = "incident assembled by pivot"
+ASSEMBLY_MARKER = "incident assembled by pivot"
 
 # Ключи весов, без которых нельзя посчитать F(R, G, C, U, DQ).
 _RISK_VECTOR_WEIGHTS = frozenset({"rhythm", "graph", "context", "user", "data_quality"})
@@ -333,7 +333,7 @@ class AssembleIncidentUseCase:
             invariant_hit_records=_hit_records(contributing, set(event_ids)),
         )
         case.append_audit(
-            _ASSEMBLY_MARKER
+            ASSEMBLY_MARKER
             + f" seeds={','.join(str(seed) for seed in seeds)}"
             f" core={len(core_ids)} expanded={len(expanded_ids)}"
             f" hosts={','.join(expand_hosts) if expand_hosts else '-'}",
@@ -373,7 +373,7 @@ class AssembleIncidentUseCase:
 
 def _is_assembled(case: Case) -> bool:
     """Кейс собран этим же use case — по метке в журнале."""
-    return any(_ASSEMBLY_MARKER in line for line in case.audit_log)
+    return any(ASSEMBLY_MARKER in line for line in case.audit_log)
 
 
 def _evidence(

@@ -27,6 +27,17 @@ class RecentEventStorePort(Protocol):
     def list_recent_events(self, *, limit: int) -> list[NormalizedEvent]: ...
 
 
+class IncidentAssemblyPort(Protocol):
+    """Доводит принятый поток до инцидента. Реализация — `AssembleOnIngest` (L2).
+
+    Приём знает только момент, когда событие принято и сохранено, и что на нём сработало.
+    Решение, запускать ли сборку, принимает реализация: приём не должен знать ни про пороги
+    отличительности, ни про хранилище дел.
+    """
+
+    def after_ingest(self, *, invariant_hits: Sequence[str]) -> None: ...
+
+
 @dataclass(slots=True)
 class IngestAssessmentFacade:
     process: ProcessEventUseCase
@@ -37,6 +48,9 @@ class IngestAssessmentFacade:
     polling_intervals_us: Sequence[float]
     raw_row_to_normalized: Callable[..., NormalizedEvent]
     recent_event_store: RecentEventStorePort | None = None
+    # Сборка инцидента по мере приёма. Пусто — приём заканчивается делом конвейера, и
+    # связанный инцидент собирается только по команде (кнопка АРМ, загрузка датасета).
+    assembly: IncidentAssemblyPort | None = None
 
     def assess_normalized_event(
         self,
@@ -65,6 +79,11 @@ class IngestAssessmentFacade:
             else:
                 self.event_window.append(event)
                 self._trim_event_window()
+            # Сборка идёт после сохранения события: она ищет по хранилищу и обязана видеть
+            # событие, которым вызвана. Пробный прогон (`persist_case=False`) состояния не
+            # меняет, и собирать по нему нечего.
+            if self.assembly is not None:
+                self.assembly.after_ingest(invariant_hits=out.assessment.invariant_hits)
         return out
 
     def build_raw_evidence_ref(

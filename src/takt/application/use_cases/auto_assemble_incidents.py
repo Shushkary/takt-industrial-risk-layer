@@ -59,6 +59,7 @@ from typing import Protocol
 
 from takt.application.system_defaults import default_hasher
 from takt.application.use_cases.assemble_incident import (
+    ASSEMBLY_MARKER,
     AssembleIncidentUseCase,
     CaseEventIndex,
     IncidentSeed,
@@ -86,6 +87,9 @@ _HOST_LIKE_ARTIFACTS = frozenset({"host"})
 # Метка автоматической сборки в журнале дела.
 _AUTO_MARKER = "incident assembled automatically after ingest"
 
+# Причина, по которой снимается редакция, не воспроизведённая на выросшем потоке.
+_RETIRED_REASON = "retired: не воспроизведён на выросшем потоке"
+
 
 class IncidentEventReadPort(Protocol):
     """Чтение принятых событий по идентификаторам. Реализуется хранилищем событий (L4)."""
@@ -105,11 +109,12 @@ class AssembledIncidentSummary:
 
 @dataclass(frozen=True, slots=True)
 class AutoAssemblyReport:
-    """Итог прогона: что собрано и что осталось без отличительных сущностей."""
+    """Итог прогона: что собрано, что осталось без отличительных сущностей и что снято."""
 
     incidents: tuple[AssembledIncidentSummary, ...]
     considered_cases: tuple[str, ...]
     skipped_cases: tuple[str, ...]
+    retired_case_ids: tuple[str, ...] = ()
 
     @property
     def assembled_events(self) -> int:
@@ -131,6 +136,12 @@ class AutoAssembleIncidentsUseCase:
     _occurrences: dict[str, int] = field(default_factory=dict, repr=False, init=False)
 
     def execute(self, *, actor: str = "auto-assembly", now: datetime | None = None) -> AutoAssemblyReport:
+        # Кэш встречаемости живёт ровно один прогон. Поток растёт, и сущность, встречавшаяся
+        # три раза, к следующему прогону встречается сорок: сохранённое число превращает
+        # отличительность в свойство момента, когда её впервые измерили. Замер на INC-002 при
+        # переиспользовании кэша: внутренний адрес остаётся сидом до конца потока и приводит
+        # в инцидент 24 фоновых события.
+        self._occurrences.clear()
         # Хранилище дел читается один раз на прогон. Раньше его обходили трижды плюс ещё по
         # разу на каждый собранный инцидент: 8000 дел и 40 инцидентов — 20 с на одни обходы.
         snapshot = self.repo.list_all()
@@ -180,14 +191,48 @@ class AutoAssembleIncidentsUseCase:
             )
 
         self._supersede(previous, incidents, actor=actor)
+        retired = self._retire_unconfirmed(previous, incidents, actor=actor)
         return AutoAssemblyReport(
             incidents=tuple(incidents),
             considered_cases=tuple(considered),
             skipped_cases=tuple(skipped),
+            retired_case_ids=tuple(retired),
         )
 
+    def _retire_unconfirmed(
+        self,
+        previous: dict[str, set[str]],
+        incidents: Sequence[AssembledIncidentSummary],
+        *,
+        actor: str,
+    ) -> list[str]:
+        """Снимает редакции, собранные по неполному потоку и этим прогоном не подтверждённые.
+
+        Отличительность сущности зависит от объёма принятого потока: адрес, встречавшийся
+        три раза, к следующему прогону встречается сорок и сидом быть перестаёт. Пока сборка
+        запускалась по кнопке, такую редакцию оставлял позади один прогон. На приёме потока
+        прогонов десятки, и очередь копит карточки, собранные по тому, что было известно
+        минуту назад: замер на INC-002 — рядом с инцидентом цепочки остаётся карточка из
+        12 событий чистого фона.
+
+        `_supersede` закрывает предшественников по общему событию; сюда попадает остаток —
+        редакции, от которых в новой сборке не осталось ничего. Инцидент, которого коснулся
+        аналитик, не трогается: снимается только то, что сборка создала и сама же
+        не подтвердила.
+        """
+        fresh = {item.case_id for item in incidents}
+        stale = [
+            case
+            for case_id in previous
+            if case_id not in fresh and (case := self.repo.get(case_id)) is not None
+        ]
+        retired = retire_unconfirmed_editions(stale, fresh_case_ids=fresh, actor=actor)
+        for case in retired:
+            self.repo.save(case)
+        return [case.case_id for case in retired]
+
     def _previous_incidents(self, snapshot: Iterable[Case]) -> list[Case]:
-        return [case for case in snapshot if case.status in _OPEN_STATUSES and self._is_assembled(case)]
+        return [case for case in snapshot if case.status in _OPEN_STATUSES and _is_auto_assembled(case)]
 
     def _supersede(
         self,
@@ -248,14 +293,10 @@ class AutoAssembleIncidentsUseCase:
                 for case in snapshot
                 if case.status in _OPEN_STATUSES
                 and case.invariant_hit_records
-                and not self._is_assembled(case)
+                and not _is_auto_assembled(case)
             ),
             key=lambda case: case.case_id,
         )
-
-    @staticmethod
-    def _is_assembled(case: Case) -> bool:
-        return any(_AUTO_MARKER in line for line in case.audit_log)
 
     def _distinctive_seeds(self, case: Case) -> set[IncidentSeed]:
         """Сущности событий дела, **на которых сработал инвариант**.
@@ -313,6 +354,59 @@ class AutoAssembleIncidentsUseCase:
         """
         material = "|".join(str(seed) for seed in seeds).encode("utf-8")
         return f"AUTO-{self.hasher.hash_bytes(material)[:12]}"
+
+
+def retire_unconfirmed_editions(
+    cases: Iterable[Case],
+    *,
+    fresh_case_ids: set[str],
+    actor: str = "auto-assembly",
+) -> list[Case]:
+    """Закрывает автоматические редакции инцидента, которых текущий прогон не воспроизвёл.
+
+    Трогается только то, что сборка создала и никто с тех пор не открывал: дело конвейера
+    ей не принадлежит, а инцидент, по которому аналитик уже принял решение, приложил
+    основание или запросил реагирование, остаётся в очереди как есть — даже если сборка
+    его больше не воспроизводит.
+
+    Функция меняет переданные карточки и возвращает изменённые; сохранение — за вызывающим.
+    """
+    retired: list[Case] = []
+    for case in cases:
+        if case.case_id in fresh_case_ids or case.status not in _OPEN_STATUSES:
+            continue
+        if not _is_auto_assembled(case) or _analyst_touched(case):
+            continue
+        case.status = CaseStatus.MERGED
+        case.append_audit(_RETIRED_REASON, case.created_at, actor=actor)
+        retired.append(case)
+    return retired
+
+
+def _is_auto_assembled(case: Case) -> bool:
+    return any(_AUTO_MARKER in line for line in case.audit_log)
+
+
+def _analyst_touched(case: Case) -> bool:
+    """Есть ли в карточке следы работы человека.
+
+    Признак — не статус: сборка создаёт инцидент сразу в `TRIAGE`, и по статусу «взят в
+    работу» неотличим от «только что собран». Следом считается либо запись в журнале,
+    сделанная не сборкой, либо любой из объектов, которые появляются только по действию
+    аналитика.
+    """
+    if (
+        case.decision_records
+        or case.formal_verdict_records
+        or case.remediation_attempts
+        or case.manual_permits
+        or case.findings
+    ):
+        return True
+    return any(
+        ASSEMBLY_MARKER not in line and _AUTO_MARKER not in line and _RETIRED_REASON not in line
+        for line in case.audit_log
+    )
 
 
 def _candidate_seeds(event: NormalizedEvent) -> list[IncidentSeed]:

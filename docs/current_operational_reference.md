@@ -43,7 +43,8 @@
 - `GET /cases/{id}/export/gossopka-transport.json`
 - `GET /cases/{id}/export/gossopka-official.json`
 - `GET /cases/{id}/export/gossopka-official-transport.json` (smoke gate для `gossopka_official_ok`)
-- `POST /cases/assemble/auto` (сборка ядра инцидентов по отличительным сущностям; SQLite backend)
+- `POST /cases/assemble/auto` (повтор сборки ядра инцидентов с другим порогом отличительности; при
+  приёме тот же шаг выполняется сам — `incident_assembly.on_ingest`; SQLite backend)
 - `GET /cases/{id}/audit-ledger/verify` (SQLite backend)
 - `GET /audit-ledger/operations/verify` (SQLite backend)
 
