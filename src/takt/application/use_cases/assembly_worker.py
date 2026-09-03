@@ -27,14 +27,64 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 from takt.application.use_cases.assembly_on_ingest import AssemblyQueuePort
 from takt.application.use_cases.auto_assemble_incidents import (
     AutoAssembleIncidentsUseCase,
     AutoAssemblyReport,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class AssemblyConfigMismatch:
+    """Настройка сборки, в которой API и воркер разошлись."""
+
+    field: str
+    api: str
+    worker: str
+
+    def describe(self) -> str:
+        return f"{self.field}: API={self.api}, воркер={self.worker}"
+
+
+def assembly_config_mismatches(
+    *,
+    api: Mapping[str, Any] | None,
+    worker_mode: str,
+    worker_distinctive_max_events: int,
+) -> list[AssemblyConfigMismatch]:
+    """Сверяет настройку сборки у двух процессов.
+
+    Два процесса читают конфигурацию каждый сам, и разойтись они могут молча. Оба случая
+    выглядят одинаково — «инцидентов нет», — но чинятся по-разному:
+
+    * API в `on_ingest`, воркер запущен — воркер не получит ни одного сигнала, потому что
+      приём их не оставляет;
+    * разный `distinctive_max_events` — инциденты собираются по другому критерию, чем
+      показывает аналитику АРМ, и объяснить это можно только чтением двух файлов.
+
+    Пустой `api` расхождением не считается: воркер могли запустить раньше API, и сравнивать
+    пока не с чем. Отсутствие отпечатка при этом само по себе подозрительно — обычно это
+    значит, что процессы смотрят в разные базы, — но говорит об этом вызывающий, а не
+    правило сравнения.
+    """
+    if not api:
+        return []
+    found: list[AssemblyConfigMismatch] = []
+    api_mode = str(api.get("mode", ""))
+    if api_mode != worker_mode:
+        found.append(AssemblyConfigMismatch("mode", api_mode, worker_mode))
+    api_threshold = api.get("distinctive_max_events")
+    if api_threshold is not None and int(api_threshold) != int(worker_distinctive_max_events):
+        found.append(
+            AssemblyConfigMismatch(
+                "distinctive_max_events", str(api_threshold), str(worker_distinctive_max_events)
+            )
+        )
+    return found
 
 
 @dataclass(slots=True)

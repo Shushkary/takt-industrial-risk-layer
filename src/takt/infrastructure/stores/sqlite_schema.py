@@ -146,6 +146,13 @@ def ensure_assembly_queue_schema(conn: sqlite3.Connection) -> None:
         );
         INSERT OR IGNORE INTO assembly_queue (id, pending, lease_owner, lease_until)
           VALUES (1, 0, '', '');
+        -- Отпечатки настройки сборки лежат в общих метаданных. Очередь открывают и на базе,
+        -- где схема кейсов ещё не создавалась (воркер, поднятый раньше API), поэтому таблица
+        -- заводится здесь же.
+        CREATE TABLE IF NOT EXISTS app_metadata (
+          key TEXT PRIMARY KEY NOT NULL,
+          value TEXT NOT NULL
+        );
         """
     )
 

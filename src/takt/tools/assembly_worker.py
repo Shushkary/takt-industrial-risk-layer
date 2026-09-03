@@ -29,9 +29,15 @@ from datetime import UTC, datetime
 from types import FrameType
 
 from takt.application.use_cases.assemble_incident import AssembleIncidentUseCase
-from takt.application.use_cases.assembly_worker import AssemblyWorkerService
+from takt.application.use_cases.assembly_worker import (
+    AssemblyWorkerService,
+    assembly_config_mismatches,
+)
 from takt.application.use_cases.auto_assemble_incidents import AutoAssembleIncidentsUseCase
-from takt.infrastructure.config.settings_helpers import incident_assembly_settings
+from takt.infrastructure.config.settings_helpers import (
+    IncidentAssemblySettings,
+    incident_assembly_settings,
+)
 from takt.infrastructure.stores.sqlite_assembly_queue import SqliteAssemblyQueue
 from takt.interface_adapters.api.main import create_app
 
@@ -60,6 +66,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="остановиться после стольких прогонов сборки (0 — без ограничения)",
     )
+    parser.add_argument(
+        "--allow-config-mismatch",
+        action="store_true",
+        help=(
+            "запуститься, даже если настройка сборки расходится с той, с которой поднялся API"
+            " (например, догоняющая сборка с другим порогом отличительности)"
+        ),
+    )
     return parser
 
 
@@ -83,7 +97,63 @@ class _StopSignal:
         self.requested = True
 
 
-def run(*, poll_sec: float | None = None, once: bool = False, max_runs: int = 0) -> int:
+def _config_agrees_with_api(
+    queue: SqliteAssemblyQueue,
+    *,
+    settings: IncidentAssemblySettings,
+    allow_mismatch: bool,
+) -> bool:
+    """Сверяет настройку сборки с той, с которой поднялся API.
+
+    Оба процесса читают конфигурацию сами, и разойтись они могут молча: разные файлы, разные
+    монтирования, разные переменные окружения. Итог во всех случаях один — инцидентов нет, —
+    но чинится он по-разному, поэтому расхождение называется на старте, а не остаётся
+    догадкой при разборе жалобы.
+    """
+    api = queue.api_settings()
+    if api is None:
+        # Воркера могли поднять раньше API — но чаще это значит, что процессы смотрят в
+        # разные базы, и тогда воркер будет исправно ждать сигналов, которых там не будет.
+        print(
+            "assembly worker: API с этой базой ещё не запускался — проверьте TAKT_SQLITE_PATH"
+            " и TAKT_CONFIG, если инциденты не появляются"
+        )
+        return True
+
+    mismatches = assembly_config_mismatches(
+        api=api,
+        worker_mode=settings.mode,
+        worker_distinctive_max_events=settings.distinctive_max_events,
+    )
+    if not mismatches:
+        return True
+
+    stream = sys.stdout if allow_mismatch else sys.stderr
+    print("assembly worker: настройка расходится с API", file=stream)
+    for item in mismatches:
+        print(f"  {item.describe()}", file=stream)
+    print(
+        f"  конфигурация API: {api.get('config_path', '?')} (процесс {api.get('owner', '?')},"
+        f" {api.get('at', '?')})",
+        file=stream,
+    )
+    if allow_mismatch:
+        print("  запуск разрешён флагом --allow-config-mismatch", file=stream)
+        return True
+    print(
+        "  приведите конфигурации к одному виду или запустите с --allow-config-mismatch",
+        file=stream,
+    )
+    return False
+
+
+def run(
+    *,
+    poll_sec: float | None = None,
+    once: bool = False,
+    max_runs: int = 0,
+    allow_config_mismatch: bool = False,
+) -> int:
     app = create_app()
     repo = app.state.repo
     events = getattr(app.state, "recent_event_store", None)
@@ -98,10 +168,6 @@ def run(*, poll_sec: float | None = None, once: bool = False, max_runs: int = 0)
     weights = app.state.risk_weights
     settings = incident_assembly_settings(weights)
     interval = float(poll_sec if poll_sec is not None else settings.worker_poll_sec)
-    if not settings.defers_to_worker:
-        # Не ошибка: воркер годится и как догоняющая сборка. Но если приём собирает сам,
-        # сигналов не будет, и молчание воркера объясняется настройкой, а не отсутствием атак.
-        print(f"assembly worker: incident_assembly.mode={settings.mode}, сигналов от приёма не будет")
 
     queue = SqliteAssemblyQueue(database_path)
     owner = f"{socket.gethostname()}:{os.getpid()}"
@@ -109,6 +175,17 @@ def run(*, poll_sec: float | None = None, once: bool = False, max_runs: int = 0)
     stop = _StopSignal()
     stop.install()
     try:
+        if not _config_agrees_with_api(
+            queue, settings=settings, allow_mismatch=allow_config_mismatch
+        ):
+            return 4
+        queue.publish_worker_settings(
+            mode=settings.mode,
+            distinctive_max_events=settings.distinctive_max_events,
+            config_path=str(app.state.takt_config_path),
+            owner=owner,
+            at=datetime.now(UTC),
+        )
         if not queue.acquire_lease(owner=owner, now=datetime.now(UTC), ttl_sec=lease_ttl):
             print("assembly worker: аренда занята другим процессом, выхожу", file=sys.stderr)
             return 3
@@ -155,7 +232,12 @@ def run(*, poll_sec: float | None = None, once: bool = False, max_runs: int = 0)
 
 def main() -> int:
     args = build_parser().parse_args()
-    return run(poll_sec=args.poll_sec, once=args.once, max_runs=args.max_runs)
+    return run(
+        poll_sec=args.poll_sec,
+        once=args.once,
+        max_runs=args.max_runs,
+        allow_config_mismatch=args.allow_config_mismatch,
+    )
 
 
 if __name__ == "__main__":

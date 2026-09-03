@@ -22,6 +22,11 @@ def build_app_lifespan(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         validate_startup_auth_or_raise()
+        # Отпечаток настройки сборки — признак поднявшегося API, а не собранного объекта
+        # приложения: по нему воркер сверяет свою конфигурацию с чужой.
+        publish = getattr(app.state, "publish_assembly_settings", None)
+        if callable(publish):
+            publish()
         slog = getattr(app.state, "security_log", None)
         if slog is not None:
             slog.record_service_start({"config": security_startup_config_snapshot()})

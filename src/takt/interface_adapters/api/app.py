@@ -340,6 +340,7 @@ def _assembly_for_ingest(
     repo: CaseRepositoryPort,
     events: SqliteRecentEventStore | None,
     settings: IncidentAssemblySettings,
+    config_path: Path,
 ) -> tuple[AssembleOnIngest | DeferAssemblyToWorker | None, SqliteAssemblyQueue | None]:
     """Что делает приём со срабатыванием — по настройке `incident_assembly.mode`.
 
@@ -349,14 +350,19 @@ def _assembly_for_ingest(
     Без постоянного хранилища событий (`storage.backend: memory`) собирать не из чего:
     сборка ищет события по сущностям, а окно в памяти хранит только последние. В этом
     режиме приём заканчивается делом конвейера при любом значении `mode`.
+
+    Очередь открывается при любом режиме: в неё же пишется отпечаток настройки, по которому
+    воркер сверяется с API. Пишет его не эта функция, а старт приложения (`lifespan`):
+    `create_app` вызывают и утилиты — в том числе сам воркер, — и отпечаток «настройки API»,
+    оставленный воркером, сверять было бы не с чем.
     """
     if events is None or not isinstance(repo, SqliteCaseStore):
         return None, None
+    queue = SqliteAssemblyQueue(repo.database_path)
     if settings.defers_to_worker:
-        queue = SqliteAssemblyQueue(repo.database_path)
         return DeferAssemblyToWorker(queue=queue), queue
     if not settings.assembles_on_ingest:
-        return None, None
+        return None, queue
     # Порт поиска объявлен как `search_events(**criteria)`, а хранилище перечисляет критерии
     # поимённо — формально это разные сигнатуры, хотя набор критериев сборки хранилище
     # покрывает целиком. Тот же шов у `POST /cases/assemble/pivot`, только там хранилище
@@ -427,9 +433,33 @@ def create_app() -> FastAPI:
     recent_event_store = SqliteRecentEventStore(repo.database_path) if isinstance(repo, SqliteCaseStore) else None
     assembly_settings = incident_assembly_settings(weights)
     app.state.incident_assembly_mode = assembly_settings.mode
+    # Путь к активной конфигурации нужен и воркеру: он печатает его при расхождении, и по
+    # двум путям сразу видно, что процессы читают разные файлы.
+    app.state.takt_config_path = cfg_path
     assembly_on_ingest, assembly_queue = _assembly_for_ingest(
-        weights, repo=repo, events=recent_event_store, settings=assembly_settings
+        weights,
+        repo=repo,
+        events=recent_event_store,
+        settings=assembly_settings,
+        config_path=cfg_path,
     )
+    if assembly_settings.defers_to_worker:
+        # Единственный режим, в котором API сам инцидентов не собирает. Без этой строки
+        # «инцидентов нет» на стенде без воркера выглядит как отказ сборки, а не как
+        # незапущенный процесс.
+        _LOGGER.info(
+            "incident assembly deferred to worker: run `python -m takt.tools.assembly_worker`"
+        )
+    if assembly_queue is not None:
+        # Отпечаток настройки оставляет старт приложения, а не сборка объектов: `create_app`
+        # вызывают и утилиты, и запись из них выдавала бы их настройку за настройку API.
+        app.state.publish_assembly_settings = lambda: assembly_queue.publish_api_settings(
+            mode=assembly_settings.mode,
+            distinctive_max_events=assembly_settings.distinctive_max_events,
+            config_path=str(cfg_path),
+            owner=f"{socket.gethostname()}:{os.getpid()}",
+            at=datetime.now(UTC),
+        )
     ingest_facade = IngestAssessmentFacade(
         process=process,
         repo=repo,

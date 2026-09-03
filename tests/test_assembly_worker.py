@@ -21,7 +21,10 @@ import pytest
 
 from takt.application.use_cases.assemble_incident import AssembleIncidentUseCase
 from takt.application.use_cases.assembly_on_ingest import DeferAssemblyToWorker
-from takt.application.use_cases.assembly_worker import AssemblyWorkerService
+from takt.application.use_cases.assembly_worker import (
+    AssemblyWorkerService,
+    assembly_config_mismatches,
+)
 from takt.application.use_cases.auto_assemble_incidents import AutoAssembleIncidentsUseCase
 from takt.application.use_cases.ingest_facade import IngestAssessmentFacade
 from takt.domain.entities.case import CaseStatus
@@ -250,6 +253,149 @@ def test_worker_assembles_the_same_incident(ingested_for_worker) -> None:
     assert len(case.normalized_event_ids) == EXPECTED_INCIDENT_EVENTS
 
 
+# --- согласованность конфигурации API и воркера ---------------------------
+
+
+def test_matching_settings_have_no_mismatches() -> None:
+    """Одинаково настроенные процессы расхождений не дают."""
+    assert (
+        assembly_config_mismatches(
+            api={"mode": "worker", "distinctive_max_events": 12},
+            worker_mode="worker",
+            worker_distinctive_max_events=12,
+        )
+        == []
+    )
+
+
+def test_mode_mismatch_is_reported() -> None:
+    """API собирает сам, а воркер ждёт сигналов — он не получит ни одного."""
+    found = assembly_config_mismatches(
+        api={"mode": "on_ingest", "distinctive_max_events": 12},
+        worker_mode="worker",
+        worker_distinctive_max_events=12,
+    )
+    assert [item.field for item in found] == ["mode"]
+    assert found[0].api == "on_ingest" and found[0].worker == "worker"
+
+
+def test_threshold_mismatch_is_reported() -> None:
+    """Разный порог отличительности — разные инциденты на одних и тех же данных."""
+    found = assembly_config_mismatches(
+        api={"mode": "worker", "distinctive_max_events": 12},
+        worker_mode="worker",
+        worker_distinctive_max_events=40,
+    )
+    assert [item.field for item in found] == ["distinctive_max_events"]
+
+
+def test_missing_api_settings_are_not_a_mismatch() -> None:
+    """Воркера могли запустить первым: сравнивать пока не с чем."""
+    assert (
+        assembly_config_mismatches(api=None, worker_mode="worker", worker_distinctive_max_events=12)
+        == []
+    )
+
+
+def test_api_publishes_its_assembly_settings(tmp_path: Path, monkeypatch) -> None:
+    """Поднявшийся API оставляет в базе отпечаток настройки — иначе сверять не с чем."""
+    from fastapi.testclient import TestClient
+
+    from takt.interface_adapters.api.main import create_app
+
+    _sqlite_env(monkeypatch, tmp_path, mode="worker")
+    app = create_app()
+    try:
+        assert app.state.assembly_queue.api_settings() is None, "объект приложения — ещё не API"
+        with TestClient(app):
+            pass
+    finally:
+        _close_app(app)
+
+    # Читаем так же, как воркер: своим соединением с той же базой.
+    queue = SqliteAssemblyQueue(tmp_path / "cases.sqlite")
+    try:
+        published = queue.api_settings()
+        assert published is not None
+        assert published["mode"] == "worker"
+        assert published["distinctive_max_events"] == 12
+        assert published["config_path"].endswith(".yaml")
+    finally:
+        queue.close()
+
+
+def test_worker_refuses_a_config_that_disagrees_with_the_api(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Воркер, настроенный иначе, чем API, не делает вид, что всё в порядке."""
+    from takt.tools import assembly_worker
+
+    _sqlite_env(monkeypatch, tmp_path, mode="worker")
+    queue = SqliteAssemblyQueue(tmp_path / "cases.sqlite")
+    try:
+        queue.publish_api_settings(
+            mode="on_ingest",
+            distinctive_max_events=40,
+            config_path="config/other.yaml",
+            owner="host-a:1",
+            at=datetime.now(UTC),
+        )
+    finally:
+        queue.close()
+
+    assert assembly_worker.run(once=True, poll_sec=0.01) == 4
+    err = capsys.readouterr().err
+    assert "mode" in err and "on_ingest" in err
+    assert "distinctive_max_events" in err
+
+
+def test_config_mismatch_can_be_allowed_on_purpose(tmp_path: Path, monkeypatch) -> None:
+    """Догоняющая сборка с другим порогом — законный сценарий, но объявленный явно."""
+    from takt.tools import assembly_worker
+
+    _sqlite_env(monkeypatch, tmp_path, mode="worker")
+    queue = SqliteAssemblyQueue(tmp_path / "cases.sqlite")
+    try:
+        queue.publish_api_settings(
+            mode="on_ingest",
+            distinctive_max_events=40,
+            config_path="config/other.yaml",
+            owner="host-a:1",
+            at=datetime.now(UTC),
+        )
+    finally:
+        queue.close()
+
+    assert assembly_worker.run(once=True, poll_sec=0.01, allow_config_mismatch=True) == 0
+
+
+def test_worker_warns_when_the_api_never_started(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Пустая база — повод проверить путь к ней, а не молча ждать сигналов."""
+    from takt.tools import assembly_worker
+
+    _sqlite_env(monkeypatch, tmp_path, mode="worker")
+    queue = SqliteAssemblyQueue(tmp_path / "cases.sqlite")
+    queue.close()  # база есть, отпечатка API в ней нет
+
+    assert assembly_worker.run(once=True, poll_sec=0.01) == 0
+    assert "TAKT_SQLITE_PATH" in capsys.readouterr().out
+
+
+def test_worker_leaves_its_own_trace(tmp_path: Path, monkeypatch) -> None:
+    """По отметке воркера видно, что процесс сборки жив и с какими настройками."""
+    from takt.tools import assembly_worker
+
+    _sqlite_env(monkeypatch, tmp_path, mode="worker")
+    assembly_worker.run(once=True, poll_sec=0.01)
+
+    queue = SqliteAssemblyQueue(tmp_path / "cases.sqlite")
+    try:
+        trace = queue.worker_settings()
+        assert trace is not None
+        assert trace["mode"] == "worker"
+        assert trace["distinctive_max_events"] == 12
+    finally:
+        queue.close()
+
+
 # --- режим приложения и точка входа ---------------------------------------
 
 
@@ -274,7 +420,9 @@ def test_api_assembles_nothing_in_off_mode(tmp_path: Path, monkeypatch) -> None:
     app = create_app()
     try:
         assert app.state.ingest_facade.assembly is None
-        assert app.state.assembly_queue is None
+        # Очередь всё равно открыта: в ней лежит отпечаток настройки, по которому воркер
+        # поймёт, что API собирать не просили, и скажет об этом вместо молчания.
+        assert app.state.assembly_queue is not None
     finally:
         _close_app(app)
 

@@ -18,10 +18,12 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from takt.infrastructure.stores.sqlite_connection import (
     checkpoint_wal_best_effort as _checkpoint_wal_best_effort,
@@ -33,6 +35,10 @@ from takt.infrastructure.stores.sqlite_connection import (
     dt_to_sql as _dt_to_sql,
 )
 from takt.infrastructure.stores.sqlite_schema import ensure_assembly_queue_schema
+
+# Отпечатки настройки сборки в `app_metadata`: по ним процессы сверяются друг с другом.
+_API_SETTINGS_KEY = "incident_assembly_api"
+_WORKER_SETTINGS_KEY = "incident_assembly_worker"
 
 
 class SqliteAssemblyQueue:
@@ -127,6 +133,89 @@ class SqliteAssemblyQueue:
                 self._conn.execute("ROLLBACK")
                 raise
             return free
+
+    # --- отпечатки настройки ----------------------------------------------
+
+    def publish_api_settings(
+        self,
+        *,
+        mode: str,
+        distinctive_max_events: int,
+        config_path: str,
+        owner: str,
+        at: datetime,
+    ) -> None:
+        """Оставляет в базе, с какой настройкой сборки поднялся процесс API.
+
+        Воркеру не с чем сверяться, кроме этой записи: конфигурацию каждый процесс читает
+        сам, и разойтись они могут молча — разные файлы, разные монтирования, разные
+        переменные окружения.
+        """
+        self._put_metadata(
+            _API_SETTINGS_KEY,
+            {
+                "mode": mode,
+                "distinctive_max_events": int(distinctive_max_events),
+                "config_path": config_path,
+                "owner": owner,
+                "at": _dt_to_sql(at),
+            },
+        )
+
+    def publish_worker_settings(
+        self,
+        *,
+        mode: str,
+        distinctive_max_events: int,
+        config_path: str,
+        owner: str,
+        at: datetime,
+    ) -> None:
+        """То же со стороны воркера: по отметке видно, что процесс сборки жив."""
+        self._put_metadata(
+            _WORKER_SETTINGS_KEY,
+            {
+                "mode": mode,
+                "distinctive_max_events": int(distinctive_max_events),
+                "config_path": config_path,
+                "owner": owner,
+                "at": _dt_to_sql(at),
+            },
+        )
+
+    def api_settings(self) -> dict[str, Any] | None:
+        """Отпечаток API или `None`, если он с этой базой ещё не поднимался."""
+        return self._get_metadata(_API_SETTINGS_KEY)
+
+    def worker_settings(self) -> dict[str, Any] | None:
+        return self._get_metadata(_WORKER_SETTINGS_KEY)
+
+    def _put_metadata(self, key: str, value: dict[str, Any]) -> None:
+        with self._lock:
+            self._raise_if_closed()
+            self._conn.execute(
+                """
+                INSERT INTO app_metadata (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (key, json.dumps(value, ensure_ascii=False)),
+            )
+
+    def _get_metadata(self, key: str) -> dict[str, Any] | None:
+        with self._lock:
+            self._raise_if_closed()
+            row = self._conn.execute(
+                "SELECT value FROM app_metadata WHERE key = ? LIMIT 1", (key,)
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            parsed = json.loads(str(row["value"]))
+        except json.JSONDecodeError:
+            # Испорченный отпечаток — не повод ронять процесс: сверять будет нечего, и об
+            # этом скажут так же, как об отсутствующем.
+            return None
+        return parsed if isinstance(parsed, dict) else None
 
     def release_lease(self, *, owner: str) -> None:
         """Освобождает аренду. Чужую не трогает: снимать её вправе только владелец."""
