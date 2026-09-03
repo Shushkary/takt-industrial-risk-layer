@@ -13,6 +13,7 @@ from takt.domain.entities.case import Case, CorrelationEvidence, InvariantHitRec
 from takt.domain.entities.event import NormalizedEvent
 from takt.domain.entities.maintenance import ServiceTicket
 from takt.domain.ports.case_repository import CaseRepositoryPort
+from takt.domain.services.case_merge import absorb_correlated_case
 from takt.domain.services.event_enrichment import apply_enrichment_rules
 from takt.domain.services.telemetry_hints import apply_telemetry_hints
 
@@ -97,6 +98,9 @@ class ProcessEventUseCase:
         new_case = assessment.suggested_case
         fp = new_case.burst_fingerprint
         candidates = new_case.correlation_fingerprints
+        # Открытые дела, с которыми событие совпало хоть чем-нибудь: сначала по правилам
+        # корреляции в порядке их приоритета, затем по ключу подавления шума. Порядок задаёт
+        # старшинство — первое дело выживает, остальные поглощаются им.
         candidate_matches: list[tuple[Case, str]] = []
         seen_case_ids: set[str] = set()
         for candidate in candidates:
@@ -105,7 +109,11 @@ class ProcessEventUseCase:
                 candidate_matches.append(found)
                 seen_case_ids.add(found[0].case_id)
         match = candidate_matches[0] if candidate_matches else None
-        existing = match[0] if match is not None else self._repo.find_open_by_fingerprint(fp)
+        burst_match = self._repo.find_open_by_fingerprint(fp)
+        if burst_match is not None and burst_match.case_id not in seen_case_ids:
+            candidate_matches.append((burst_match, fp))
+            seen_case_ids.add(burst_match.case_id)
+        existing = candidate_matches[0][0] if candidate_matches else None
         if existing is not None:
             if not persist:
                 existing = deepcopy(existing)
@@ -120,11 +128,9 @@ class ProcessEventUseCase:
                 existing.risk_class = nc
             elif weighted == existing.risk_score:
                 existing.risk_class = worst_risk_class(existing.risk_class, nc)
-            n = len(existing.normalized_event_ids)
             base_title = new_case.title
             if "] " in existing.title:
                 base_title = existing.title.split("] ", 1)[-1]
-            existing.title = f"[x{n}] {base_title}"
             existing.xai_summary = new_case.xai_summary
             existing.trigger_operation = new_case.trigger_operation
             existing.operator_id = new_case.operator_id or existing.operator_id
@@ -136,6 +142,13 @@ class ProcessEventUseCase:
                 existing.primary_asset_id = new_case.primary_asset_id
             _merge_observation(existing, event, t_new)
             _append_hit_records(existing, new_case.invariant_hit_records)
+            # Ключи события переходят делу независимо от того, каким совпадением оно в него
+            # попало. Пока ключи забирались только при совпадении по правилу корреляции,
+            # событие, слитое по ключу подавления шума, приносило в дело свои сущности, но не
+            # свои ключи: дело содержало событие и при этом не находилось по его узлу.
+            existing.correlation_fingerprints = list(
+                dict.fromkeys([*existing.correlation_fingerprints, *candidates])
+            )
             if match is not None:
                 matched_fingerprint = match[1]
                 existing.correlation_evidence.append(
@@ -145,17 +158,15 @@ class ProcessEventUseCase:
                         rule=matched_fingerprint.split(":", 2)[1],
                     )
                 )
-                existing.correlation_fingerprints = list(
-                    dict.fromkeys([*existing.correlation_fingerprints, *candidates])
-                )
+                # Событие совпало сразу с несколькими открытыми делами — значит, дела
+                # описывают одну цепочку и связывающее их событие уже принято. Ссылкой
+                # `related_cases` этого не выразить: аналитик всё равно получал отдельные
+                # дела и собирал цепочку руками.
                 for related, related_fingerprint in candidate_matches[1:]:
-                    existing.related_cases = list(dict.fromkeys([*existing.related_cases, related.case_id]))
-                    related.related_cases = list(dict.fromkeys([*related.related_cases, existing.case_id]))
-                    related.append_audit(
-                        f"correlation overlap with case {existing.case_id} by {related_fingerprint}", clock
-                    )
+                    absorb_correlated_case(existing, related, fingerprint=related_fingerprint, clock=clock)
                     if persist:
                         self._repo.save(related)
+            existing.title = f"[x{len(existing.normalized_event_ids)}] {base_title}"
             existing.append_audit(f"merged burst fingerprint {fp}", clock)
             if persist:
                 self._repo.save(existing)

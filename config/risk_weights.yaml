@@ -1,7 +1,7 @@
 # Метка версии конфигурации. Указывается в отчёте разметки (GET /analytics/invariant-feedback),
 # чтобы предложение изменить правило было привязано к тому, против чего оно посчитано.
 # Поднимается вручную при изменении весов или порогов.
-version: "2026.08.2"
+version: "2026.09.1"
 
 # Веса факторов Risk = F(R, G, C, U, DQ) — ТЗ MPV 2.0
 rhythm: 0.22
@@ -20,22 +20,35 @@ alert_fatigue:
   mode: bucketed
   bucket_sec: 300
 
-# SOC-корреляция. Пока mode=legacy сохраняет byte-to-byte поведение OT-конвейера;
-# правила используются новым обобщённым коррелятором в порядке priority.
+# SOC-корреляция. Ключ слияния `alert_fatigue` (актив + операция + бакет) связывает только
+# повторы одной операции на одном активе. Цепочка атаки по определению состоит из разных
+# операций на разных узлах, поэтому при `mode: legacy` она разбиралась на десятки отдельных
+# дел: 27 связанных событий давали 24 дела, а собрать инцидент мог только аналитик вручную
+# через `POST /cases/assemble/pivot`. Режим `generalized` включает правила ниже.
+#
+# `sources` — область применения правила, и она задана явно. Правило «узел в окне» осмысленно
+# для потока SOC и меняет разбор промышленного контура, где ключом слияния остаются актив и
+# операция: `plc_polling` (опрос ПЛК), `auth_logs` и `service_desk` под корреляцию не
+# попадают. Новый класс источника попадает в правило только решением в этом файле —
+# неизвестное имя источника отбрасывает правило целиком, а не расширяет его молча.
+# Сторож: tests/test_correlation_config_contract.py.
 correlation:
-  mode: legacy
+  mode: generalized
   keys:
     - name: host_window
       fields: [host_id]
       bucket_sec: 600
       priority: 10
+      sources: [edr, siem, ndr, ot, network_events]
     - name: user_destination
       fields: [user_id, dst_address]
       bucket_sec: 300
       priority: 20
+      sources: [edr, siem, ndr, ot, network_events]
     - name: file_hash
       fields: ["artifact:hash"]
       priority: 30
+      sources: [edr, siem, ndr, ot, network_events]
 
 # Асимптотическая отсечка при высоком EPS (нормировка весов)
 eps_soft_cap: 100000

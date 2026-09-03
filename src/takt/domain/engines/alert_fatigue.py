@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from takt.domain.entities.event import ArtifactType, NormalizedEvent
+from takt.domain.entities.event import ArtifactType, EventSource, NormalizedEvent
 from takt.domain.ports.hasher import HasherPort
 
 _ENTITY_FIELDS = frozenset(
@@ -20,6 +20,18 @@ class CorrelationRule:
     bucket_sec: int | None = None
     priority: int = 100
     name: str = ""
+    # Окно правила: **sliding** — событие даёт ключи текущего и предыдущего окна, цепочка
+    # продолжается, пока активность не прервалась дольше длины окна; **calendar** — только
+    # текущее окно, граница жёсткая. Скользящее окно уместно для отличительного ключа и
+    # опасно для ключа, который событие делит с фоном: обход по такому ключу вырождается
+    # и стягивает весь поток в одно дело (то же наблюдение — в `incident_pivot`).
+    window: str = "calendar"
+    # Классы источников, к которым правило применяется. Пустой кортеж — ко всем.
+    #
+    # Область применения задаётся явно, а не выводится: правило `host_id в окне` осмысленно
+    # для потока SOC и меняет разбор промышленного контура, где ключ слияния — актив плюс
+    # операция. Новый класс источника попадает под корреляцию только решением в конфигурации.
+    sources: tuple[str, ...] = ()
 
 
 def correlation_rules_from_config(raw: object) -> tuple[CorrelationRule, ...]:
@@ -47,6 +59,12 @@ def correlation_rules_from_config(raw: object) -> tuple[CorrelationRule, ...]:
             continue
         if bucket is not None and bucket < 1:
             continue
+        sources = _correlation_sources(item.get("sources"))
+        if sources is None:
+            continue
+        window = str(item.get("window") or "calendar").strip().lower()
+        if window not in {"calendar", "sliding"}:
+            continue
         parsed.append(
             (
                 index,
@@ -55,6 +73,8 @@ def correlation_rules_from_config(raw: object) -> tuple[CorrelationRule, ...]:
                     bucket_sec=bucket,
                     priority=priority,
                     name=str(item.get("name") or f"rule_{index + 1}"),
+                    window=window,
+                    sources=sources,
                 ),
             )
         )
@@ -66,20 +86,57 @@ def correlation_fingerprints(
     rules: Sequence[CorrelationRule],
     hasher: HasherPort,
 ) -> list[str]:
-    """Return candidate keys for rules whose every field is present on the event."""
+    """Кандидатные ключи события по правилам, все поля которых у него заполнены.
+
+    Правило со скользящим окном (`window: sliding`) даёт **два** ключа: текущее окно и
+    предыдущее. Без перекрытия граница окна календарная, и два события одного узла в двух
+    минутах друг от друга попадали в разные дела только потому, что одно легло после ровной
+    отметки времени. С перекрытием цепочка продолжается, пока активность не прерывается
+    дольше, чем на длину окна.
+
+    Порядок ключей детерминирован: сначала текущее окно, затем предыдущее.
+    """
     fingerprints: list[str] = []
     for rule in rules:
+        if rule.sources and event.source.value not in rule.sources:
+            continue
         values = [_correlation_value(event, field) for field in rule.fields]
         if any(value is None for value in values):
             continue
         material: dict[str, Any] = {field: value for field, value in zip(rule.fields, values, strict=True)}
-        if rule.bucket_sec is not None:
-            material["bucket"] = int(event.observed_at.timestamp() // rule.bucket_sec)
-        digest = hasher.hash_bytes(
-            json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(", ", ": ")).encode("utf-8")
-        )[:24]
-        fingerprints.append(f"corr:{rule.name}:{digest}")
+        if rule.bucket_sec is None:
+            fingerprints.append(_correlation_key(rule, material, hasher))
+            continue
+        bucket = int(event.observed_at.timestamp() // rule.bucket_sec)
+        buckets = (bucket, bucket - 1) if rule.window == "sliding" else (bucket,)
+        for index in buckets:
+            fingerprints.append(_correlation_key(rule, {**material, "bucket": index}, hasher))
     return fingerprints
+
+
+def _correlation_key(rule: CorrelationRule, material: dict[str, Any], hasher: HasherPort) -> str:
+    digest = hasher.hash_bytes(
+        json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(", ", ": ")).encode("utf-8")
+    )[:24]
+    return f"corr:{rule.name}:{digest}"
+
+
+def _correlation_sources(raw: object) -> tuple[str, ...] | None:
+    """Разбирает область применения правила. `None` — правило непригодно и отбрасывается.
+
+    Неизвестное имя класса источника — это опечатка в конфигурации, а не пустая область:
+    применить такое правило ко всем источникам значило бы молча расширить корреляцию на
+    промышленный контур.
+    """
+    if raw is None:
+        return ()
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
+        return None
+    known = {source.value for source in EventSource}
+    values = tuple(str(item).strip().lower() for item in raw if str(item).strip())
+    if not values or any(value not in known for value in values):
+        return None
+    return tuple(dict.fromkeys(values))
 
 
 def _valid_correlation_field(field: str) -> bool:

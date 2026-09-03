@@ -217,10 +217,12 @@ class AssessRiskUseCase:
         )
         cid = self._ids.new_case_id_short()
         af_mode, af_bucket = self._alert_fatigue_options()
+        # Ключ подавления шума (актив + операция + бакет) и ключи SOC-корреляции — два
+        # независимых механизма группировки, и они складываются, а не заменяют друг друга.
+        # Пока первый ключ корреляции затирал `burst_fingerprint`, включение корреляции
+        # выключало подавление шума: на корпусе INC-002 это давало 223 дела вместо 121.
         fp = compute_burst_fingerprint(event, mode=af_mode, bucket_sec=af_bucket)
         correlation_keys = self._correlation_candidates(event)
-        if correlation_keys:
-            fp = correlation_keys[0]
         trust_val = float(trust.get(event.source.value, 1.0))
         hit_records = [
             InvariantHitRecord(

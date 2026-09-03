@@ -6,6 +6,7 @@ import pytest
 
 from takt.application.use_cases.assess_risk import AssessRiskUseCase
 from takt.application.use_cases.process_event import ProcessEventUseCase
+from takt.domain.entities.case import CaseStatus
 from takt.domain.entities.event import (
     ArtifactType,
     EventArtifact,
@@ -33,6 +34,9 @@ WEIGHTS = {
 
 
 def _event(event_id: str, source: EventSource, *, host: str, hash_value: str) -> NormalizedEvent:
+    # `asset_id` в payload задан намеренно: без него ключ подавления шума вырождается в
+    # `_|OBSERVED|бакет`, одинаковый у всех событий набора, и проверялась бы не корреляция,
+    # а слияние по общему пустому активу.
     return NormalizedEvent(
         event_id=event_id,
         observed_at=datetime(2026, 6, 1, 9, 1, tzinfo=UTC),
@@ -40,7 +44,7 @@ def _event(event_id: str, source: EventSource, *, host: str, hash_value: str) ->
         protocol="test",
         operation="OBSERVED",
         payload_size=1,
-        payload={},
+        payload={"asset_id": host},
         entities=EventEntities(host_id=host),
         artifacts=(EventArtifact(ArtifactType.HASH, hash_value),),
     )
@@ -102,7 +106,14 @@ def test_sqlite_persists_candidates_and_evidence_across_restart(tmp_path) -> Non
         second_store.close()
 
 
-def test_priority_selects_first_case_and_records_other_as_related() -> None:
+def test_priority_selects_survivor_and_absorbs_the_other_case() -> None:
+    """Пересечение по нескольким ключам собирает дела в одно, а не проставляет ссылку.
+
+    Раньше здесь проверялось обратное: событие уходило в дело правила с высшим приоритетом,
+    а пересечение фиксировалось ссылкой `related_cases`. Ссылка не собирает инцидент —
+    аналитик всё равно видел отдельные дела и сводил их руками. Правило старшинства при этом
+    не изменилось: выживает дело правила с высшим приоритетом, ссылки в обе стороны остаются.
+    """
     repo = InMemoryCaseStore()
     process = ProcessEventUseCase(AssessRiskUseCase(WEIGHTS), repo)
     host_case = _execute(process, _event("host-1", EventSource.EDR, host="ws-priority", hash_value="host-only"))
@@ -112,6 +123,10 @@ def test_priority_selects_first_case_and_records_other_as_related() -> None:
 
     assert overlap.case.case_id == host_case.case.case_id
     assert overlap.case.related_cases == [hash_case.case.case_id]
+    assert set(overlap.case.normalized_event_ids) == {"host-1", "hash-1", "both-1"}
     persisted_other = repo.get(hash_case.case.case_id)
     assert persisted_other is not None
+    assert persisted_other.status is CaseStatus.MERGED
     assert persisted_other.related_cases == [host_case.case.case_id]
+    open_cases = [case for case in repo.list_all() if case.status in (CaseStatus.NEW, CaseStatus.TRIAGE)]
+    assert len(open_cases) == 1
