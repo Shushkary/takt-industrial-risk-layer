@@ -52,6 +52,31 @@ python scripts/db_migrate.py --db "<PATH_TO_DB>"
   - для `TAKT_FORENSIC_CRYPTO_MODE=mvp`: `TAKT_FORENSIC_HMAC_SECRET` или внешний signer/verifier
   - для `TAKT_FORENSIC_CRYPTO_MODE=gost_strict`: только `TAKT_FORENSIC_SIGN_URL` + `TAKT_FORENSIC_VERIFY_URL` (без HMAC fallback)
 
+## 4a) Службы на целевой ВМ: их две
+
+При `incident_assembly.mode: worker` (значение по умолчанию) приём событий только отмечает
+работу, а связанный инцидент собирает отдельный процесс. Одного `takt-api.service`
+недостаточно: API будет исправно принимать события и заводить дела, а инцидентов в очереди
+не появится.
+
+Юниты и порядок установки: [`deploy/systemd/README.md`](../../deploy/systemd/README.md).
+
+```bash
+sudo systemctl enable --now takt.target      # поднимает обе службы
+systemctl status takt-api.service takt-assembly-worker.service
+journalctl -u takt-assembly-worker.service -n 20   # ожидается `assembly worker started`
+```
+
+Проверить:
+
+- обе службы `active (running)`;
+- `EnvironmentFile` у них один и тот же — иначе процессы могут читать разные базы;
+- воркер не в `failed` с кодом 4: это расхождение его настройки с настройкой API, коды
+  разобраны в README юнитов.
+
+Если отдельный процесс не нужен, поставьте `incident_assembly.mode: on_ingest` и не включайте
+`takt-assembly-worker.service` — прогон пойдёт внутри приёма, ценой времени ответа приёма.
+
 ## 5) Monitoring артефакты
 
 Подготовить импорт:

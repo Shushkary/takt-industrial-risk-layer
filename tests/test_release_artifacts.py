@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CHECKED_PATHS = [
     ".github",
     "config",
+    "deploy",
     "docs",
     "scripts",
     "src",

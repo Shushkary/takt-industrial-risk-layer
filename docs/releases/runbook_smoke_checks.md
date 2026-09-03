@@ -13,7 +13,28 @@
 5. `GET /cases/<CASE_ID>/export/gossopka-official-transport.json` возвращает `200` (флаг `gossopka_official_ok=true` в operational tails / `release_finalize`).
 6. `POST /audit-engagements` и `GET /audit-engagements/<ENGAGEMENT_ID>/export/report.json` проходят успешно.
 
+7. Служба сборки инцидентов поднята (при `incident_assembly.mode: worker` — значение по
+   умолчанию): `systemctl is-active takt-assembly-worker.service` и строка
+   `assembly worker started` в её журнале.
+
 Если любой шаг падает, релиз не продвигается до выяснения причины.
+
+## 0a) Обе службы, а не одна
+
+Проверка отдельная, потому что её отсутствие ничем не проявляется в шагах выше: приём
+работает, кейсы создаются, экспорт отдаёт файлы — а связанного инцидента в очереди нет.
+
+```bash
+systemctl is-active takt-api.service takt-assembly-worker.service
+journalctl -u takt-assembly-worker.service -n 20
+```
+
+Ожидается:
+
+- обе службы `active`;
+- в журнале воркера — `assembly worker started` с порогом отличительности и путём к базе;
+- нет строки `настройка расходится с API` (выход с кодом 4) и нет `аренда занята`
+  (код 3). Разбор кодов — [`deploy/systemd/README.md`](../../deploy/systemd/README.md).
 
 ## 1) Health/ready/live
 

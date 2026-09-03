@@ -1,0 +1,41 @@
+[Unit]
+Description=ТАКТ — API аналитического слоя (приём событий, кейсы, экспорт)
+# Порядок установки и переменные: deploy/systemd/README.md в репозитории продукта.
+After=network-online.target
+Wants=network-online.target
+# Конфигурация, из-за которой приложение не поднимается (нет TAKT_API_KEY при
+# TAKT_AUTH_REQUIRED=true, неизвестный incident_assembly.mode), должна остаться видимой в
+# `systemctl status`, а не прятаться за бесконечными перезапусками. Директивы предела
+# перезапусков живут в [Unit]: в [Service] systemd их игнорирует.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=takt
+Group=takt
+WorkingDirectory=/opt/takt
+# Один файл переменных на оба процесса. Разные файлы означали бы разные TAKT_CONFIG или
+# TAKT_SQLITE_PATH у API и воркера: приём копил бы сигналы в одной базе, а сборка ждала бы их
+# в другой. Воркер сверяет настройки при старте, но общий файл снимает вопрос заранее.
+EnvironmentFile=/etc/takt/takt.env
+ExecStart=/opt/takt/.venv/bin/uvicorn takt.interface_adapters.api.main:app \
+  --host 127.0.0.1 --port 8090 --timeout-graceful-shutdown 15
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+# Единственное, что служба пишет: файл SQLite (кейсы, события, очередь сборки) и журнал
+# безопасности. Пути должны совпадать с TAKT_SQLITE_PATH и TAKT_SECURITY_LOG_PATH.
+ReadWritePaths=/opt/takt/data
+
+[Install]
+WantedBy=multi-user.target

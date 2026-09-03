@@ -153,3 +153,4 @@
 - Folder for filled cards: `docs/releases/`
 - Audit closure note (локально закрыто / остаток среды): `docs/releases/2026-05-08_audit_closure_note.md`
 - Ops handover checklist (формальное закрытие в среде): `docs/releases/2026-05-08_ops_handover.md`
+- Службы на боевой ВМ (два процесса: API и сборка инцидентов): `deploy/systemd/README.md`

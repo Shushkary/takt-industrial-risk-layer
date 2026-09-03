@@ -420,6 +420,53 @@ def test_compose_starts_the_worker_alongside_the_api() -> None:
     assert "profiles:" not in compose, "воркер под профилем не поднимется обычным `compose up`"
 
 
+def test_systemd_unit_starts_the_worker() -> None:
+    """На боевой ВМ воркер поднимается службой, а не руками после каждой перезагрузки."""
+    unit = (ROOT / "deploy" / "systemd" / "takt-assembly-worker.service").read_text(encoding="utf-8")
+    assert "takt.tools.assembly_worker" in unit
+    assert "EnvironmentFile=" in unit, "API и воркер должны читать одни переменные окружения"
+
+
+def test_systemd_unit_does_not_restart_on_config_error() -> None:
+    """Неверная конфигурация должна остаться видимой, а не крутиться в перезапусках.
+
+    Воркер выходит с кодом 4 при расхождении настроек с API и с кодом 3, когда аренду держит
+    другой процесс. `Restart=always` превратил бы обе ошибки в бесконечный цикл, и служба
+    выглядела бы работающей.
+    """
+    unit = (ROOT / "deploy" / "systemd" / "takt-assembly-worker.service").read_text(encoding="utf-8")
+    prevent = [line for line in unit.splitlines() if line.startswith("RestartPreventExitStatus=")]
+    assert prevent, "коды 3 и 4 не должны приводить к перезапуску"
+    codes = set(prevent[0].split("=", 1)[1].split())
+    assert {"3", "4"} <= codes
+
+
+def test_systemd_units_put_directives_in_the_right_sections() -> None:
+    """Директива не в своей секции игнорируется молча — юнит выглядит настроенным.
+
+    Так и случилось при написании этих юнитов: предел перезапусков стоял в `[Service]`, где
+    systemd его не читает, и служба с неверной конфигурацией перезапускалась бы бесконечно.
+    """
+    import configparser
+
+    for name in ("takt-api.service", "takt-assembly-worker.service"):
+        parser = configparser.ConfigParser(interpolation=None)
+        parser.read(ROOT / "deploy" / "systemd" / name, encoding="utf-8")
+        assert parser.sections() == ["Unit", "Service", "Install"], name
+        for directive in ("StartLimitIntervalSec", "StartLimitBurst"):
+            assert parser.has_option("Unit", directive), f"{name}: {directive} должен быть в [Unit]"
+            assert not parser.has_option("Service", directive), f"{name}: {directive} в [Service]"
+        for directive in ("ExecStart", "EnvironmentFile", "Restart"):
+            assert parser.has_option("Service", directive), f"{name}: нет {directive}"
+
+
+def test_systemd_target_starts_both_processes() -> None:
+    """Одна команда поднимает пару: забыть второй процесс не должно быть возможно."""
+    target = (ROOT / "deploy" / "systemd" / "takt.target").read_text(encoding="utf-8")
+    assert "takt-api.service" in target
+    assert "takt-assembly-worker.service" in target
+
+
 def test_api_says_that_assembly_needs_a_worker(tmp_path: Path, monkeypatch, caplog) -> None:
     """Стенд без воркера иначе выглядит как отказ сборки, а не как незапущенный процесс."""
     import logging

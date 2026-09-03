@@ -1,0 +1,43 @@
+[Unit]
+Description=ТАКТ — сборка связанного инцидента (incident_assembly.mode: worker)
+# Разбор режимов и коды выхода: deploy/systemd/README.md, docs/pt_techlab/correlation_quality.md
+After=network-online.target takt-api.service
+# Не BindsTo и не Requires: воркер работает с базой, а не с API, и переживает его перезапуск.
+# Порядок нужен только чтобы отпечаток настройки API появился до первой сверки.
+Wants=takt-api.service
+# Предел перезапусков объявляется в [Unit]: в [Service] systemd эти директивы игнорирует.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=takt
+Group=takt
+WorkingDirectory=/opt/takt
+# Тот же файл, что у takt-api.service. Разные файлы — разные TAKT_CONFIG или TAKT_SQLITE_PATH,
+# то есть приём отмечает работу в одной базе, а сборка ждёт сигналов в другой.
+EnvironmentFile=/etc/takt/takt.env
+ExecStart=/opt/takt/.venv/bin/python -m takt.tools.assembly_worker
+Restart=on-failure
+RestartSec=5
+# Код 4 — настройка воркера разошлась с настройкой API; код 3 — аренду держит другой процесс.
+# Обе ситуации требуют человека, и перезапуск их только спрячет: служба крутилась бы в цикле
+# и выглядела бы работающей, пока инциденты не собираются.
+RestartPreventExitStatus=3 4
+# SIGTERM воркер обрабатывает сам: дорабатывает цикл и освобождает аренду, иначе сменщик ждал
+# бы её истечения впустую.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/opt/takt/data
+
+[Install]
+WantedBy=multi-user.target

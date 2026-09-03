@@ -44,11 +44,13 @@ docker build --build-arg TAKT_BUILD_REVISION=$(git rev-parse HEAD) -t takt-risk-
 docker compose up --build
 ```
 
-Один контейнер без Compose (том вручную):
+Один контейнер без Compose (том вручную) — только API, без сборки инцидентов:
 
 ```powershell
 docker run --rm -p 8090:8090 -e TAKT_STORAGE=sqlite -e TAKT_SQLITE_PATH=/data/takt.db -v takt-data:/data takt-risk-layer
 ```
+
+**Без Docker (боевая ВМ):** службы `systemd` для обоих процессов — [`deploy/systemd`](deploy/systemd/README.md): `takt-api.service`, `takt-assembly-worker.service` и цель `takt.target`, которая поднимает их одной командой (`systemctl enable --now takt.target`), чтобы второй процесс нельзя было забыть.
 
 Образ объявляет **`HEALTHCHECK`** на **`HEAD /ready`** (проверка SQLite и baseline; без загрузки JSON). В **`CMD`** задано **`--timeout-graceful-shutdown 15`** (секунды): при остановке контейнера (**SIGTERM**) **uvicorn** успевает завершить активные запросы и **lifespan** приложения. В **`docker-compose.yml`** для сервиса **`api`** задан тот же **`healthcheck`** — удобно для `depends_on: condition: service_healthy`.
 

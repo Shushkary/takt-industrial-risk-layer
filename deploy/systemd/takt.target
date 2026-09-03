@@ -1,0 +1,11 @@
+[Unit]
+Description=ТАКТ — приём событий и сборка инцидентов
+# Пара, а не два независимых сервиса: при incident_assembly.mode: worker (значение по
+# умолчанию) API принимает события и заводит дела, но связанного инцидента без воркера не
+# появляется. Цель существует ровно для того, чтобы второй процесс нельзя было забыть:
+#   systemctl enable --now takt.target
+Wants=takt-api.service takt-assembly-worker.service
+After=takt-api.service takt-assembly-worker.service
+
+[Install]
+WantedBy=multi-user.target
