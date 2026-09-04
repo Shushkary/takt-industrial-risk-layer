@@ -1,6 +1,6 @@
 id: polling_jitter
 block_key: rhythm
-block_label_ru: "Блок 1 — Ритмика и протоколы"
+block_label_ru: "Блок 1 — Частота опроса и протоколы"
 title_ru: "Аномальный джиттер интервалов опроса"
 context_window_events: 24
 predicate_ref: builtin:polling_jitter

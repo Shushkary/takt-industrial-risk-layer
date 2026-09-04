@@ -207,12 +207,15 @@ class AssessRiskUseCase:
         xai = build_xai(
             assessment,
             invariant_hits=inv,
-            # Фаза и признак окна ТО — наши обозначения, и объяснение читает человек.
-            # Код фазы (`NIGHT`) и питоновский `True`/`False` в тексте объяснения были
-            # обозначениями для машины, а не для аналитика.
+            # Время суток и признак окна работ — наши обозначения, и объяснение читает
+            # человек. Код фазы (`NIGHT`) и питоновский `True`/`False` в тексте были
+            # обозначениями для машины, а не для аналитика. Слово «фаза» здесь не
+            # используется намеренно: в продукте оно уже занято фазой цепочки атаки
+            # (`KillChainPhase`), и одно слово на два разных понятия читалось бы как
+            # ошибка продукта.
             context_note=(
-                f"Фаза: {WORK_PHASE_RU.get(phase.phase.value, phase.phase.value)},"
-                f" окно ТО: {'да' if ctx.in_maintenance_window else 'нет'}"
+                f"Время суток: {WORK_PHASE_RU.get(phase.phase.value, phase.phase.value)},"
+                f" окно техобслуживания: {'да' if ctx.in_maintenance_window else 'нет'}"
             ),
         )
         cid = self._ids.new_case_id_short()

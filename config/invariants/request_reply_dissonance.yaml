@@ -1,6 +1,6 @@
 id: request_reply_dissonance
 block_key: rhythm
-block_label_ru: "Блок 1 — Ритмика и протоколы"
+block_label_ru: "Блок 1 — Частота опроса и протоколы"
 title_ru: "Расхождение запрос/ответ по протоколу"
 context_window_events: 24
 predicate_ref: builtin:request_reply_dissonance

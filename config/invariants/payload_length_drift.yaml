@@ -1,6 +1,6 @@
 id: payload_length_drift
 block_key: rhythm
-block_label_ru: "Блок 1 — Ритмика и протоколы"
+block_label_ru: "Блок 1 — Частота опроса и протоколы"
 title_ru: "Дрейф размера полезной нагрузки"
 context_window_events: 24
 predicate_ref: builtin:payload_length_drift

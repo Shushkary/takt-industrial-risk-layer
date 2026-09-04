@@ -7,7 +7,7 @@ from enum import StrEnum
 
 
 class InvariantId(StrEnum):
-    # Блок 1 — Ритмика и протоколы
+    # Блок 1 — Частота опроса и протоколы
     POLLING_JITTER = "polling_jitter"
     ILLEGAL_FUNCTION_CODE = "illegal_function_code"
     PAYLOAD_LENGTH_DRIFT = "payload_length_drift"
@@ -46,7 +46,7 @@ class InvariantId(StrEnum):
     POLLING_PERIOD_DOUBLING_SUSPECT = "polling_period_doubling_suspect"
 
 
-_B1 = "Блок 1 — Ритмика и протоколы"
+_B1 = "Блок 1 — Частота опроса и протоколы"
 _B2 = "Блок 2 — Топология"
 _B3 = "Блок 3 — Идентификация"
 _B4 = "Блок 4 — Физическая логика"

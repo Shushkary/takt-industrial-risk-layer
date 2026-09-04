@@ -93,7 +93,7 @@ def test_explanation_text_has_no_machine_designations() -> None:
 
     assert "NIGHT" not in summary and "WORK_SHIFT" not in summary and "WEEKEND" not in summary
     assert "True" not in summary and "False" not in summary
-    assert "окно ТО: " in summary
+    assert "окно техобслуживания: " in summary
     # Класс риска в объяснении — словом, а не кодом.
     assert "класс LOW" not in summary and "класс HIGH" not in summary
     assert "класс " in summary

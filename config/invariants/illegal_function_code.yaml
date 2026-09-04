@@ -1,6 +1,6 @@
 id: illegal_function_code
 block_key: rhythm
-block_label_ru: "Блок 1 — Ритмика и протоколы"
+block_label_ru: "Блок 1 — Частота опроса и протоколы"
 title_ru: "Недопустимый код функции / IEC ASDU type id"
 context_window_events: 5
 predicate_ref: builtin:illegal_function_code

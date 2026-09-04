@@ -40,7 +40,7 @@ def test_build_xai_strings_include_scores_and_hits():
     # Идентификаторы остаются ключами выбора рекомендации и контрфакта, но в текст не идут.
     assert "jump_server_bypass" not in out.why_unusual
     assert "Фаза: NIGHT." in out.why_unusual
-    assert "ритм=0.50" in out.why_unusual
+    assert "частота=0.50" in out.why_unusual
     assert len(out.recommendation) > 10
     assert len(out.counterfactual) > 10
 
@@ -52,4 +52,4 @@ def test_build_xai_no_hits_placeholder():
         breakdown=RiskBreakdown(0.1, 0.1, 0.1, 0.1, 0.1),
     )
     out = build_xai(assessment, invariant_hits=[], context_note="Контекст ок.")
-    assert "нет срабатываний инвариантов" in out.why_unusual
+    assert "Правила: срабатываний нет" in out.why_unusual

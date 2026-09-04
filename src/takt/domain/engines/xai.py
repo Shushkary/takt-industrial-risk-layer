@@ -75,7 +75,7 @@ _CF_MAP: dict[str, str] = {
     InvariantId.BRUTE_FORCE.value: "Событие было бы нормальным при количестве неудач ниже порога.",
     InvariantId.PROTOCOL_ESCALATION.value: "Событие было бы нормальным при том же уровне протокола.",
     InvariantId.POLLING_PERIOD_DOUBLING_SUSPECT.value: "Событие было бы нормальным при стабильных интервалах опроса.",
-    InvariantId.POLLING_JITTER.value: "Событие было бы нормальным при стабильном ритме опроса.",
+    InvariantId.POLLING_JITTER.value: "Событие было бы нормальным при стабильной частоте опроса.",
     InvariantId.STALE_DATA.value: "Событие было бы нормальным при обновлении данных датчика.",
     InvariantId.TELEMETRY_GAP.value: "Событие было бы нормальным при отсутствии разрывов в телеметрии.",
     InvariantId.SOURCE_REPUTATION_DRIFT.value: "Событие было бы нормальным при trust источника ≥ 0.85.",
@@ -99,19 +99,21 @@ def build_xai(
     invariant_hits: list[str],
     context_note: str,
 ) -> XAIReport:
-    # Объяснение читает человек: класс риска и правила называются словами. Идентификаторы
+    # Объяснение читает человек: класс риска, вклады векторов и правила называются словами
+    # словаря аналитика — «частота», «связи», «учётная запись», «качество данных», а не
+    # обозначениями модели («ритм», «граф», «DQ»). Идентификаторы
     # правил остаются ключами `_REC_MAP` и `_CF_MAP` ниже — подменять их названиями нельзя,
     # иначе рекомендация и контрфакт перестанут находиться.
     hits = (
         ", ".join(_invariant_title(iid) for iid in invariant_hits)
         if invariant_hits
-        else "нет срабатываний инвариантов"
+        else "срабатываний нет"
     )
     what = f"Агрегированный риск {assessment.score:.2f}, класс {risk_class_ru(assessment.risk_class)}."
     why = (
-        f"Вклады: ритм={assessment.breakdown.rhythm:.2f}, граф={assessment.breakdown.graph:.2f}, "
-        f"контекст={assessment.breakdown.context:.2f}, пользователь={assessment.breakdown.user:.2f}, "
-        f"DQ={assessment.breakdown.data_quality:.2f}. Инварианты: {hits}. {context_note}"
+        f"Вклады: частота={assessment.breakdown.rhythm:.2f}, связи={assessment.breakdown.graph:.2f}, "
+        f"контекст={assessment.breakdown.context:.2f}, учётная запись={assessment.breakdown.user:.2f}, "
+        f"качество данных={assessment.breakdown.data_quality:.2f}. Правила: {hits}. {context_note}"
     )
     # Контекстная рекомендация: приоритет — первый сработавший инвариант с известным шаблоном
     rec = "Назначить триаж оператору; проверить журналы источника и заявки Service Desk."
