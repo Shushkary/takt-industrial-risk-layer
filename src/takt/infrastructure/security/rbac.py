@@ -6,8 +6,8 @@
 
 Не публичные, не GET/HEAD пути по умолчанию требуют роль `operator`
 (или `admin`); явно перечисленные административные операции (массовый
-импорт кейсов, форвардинг в SIEM, сервисный аудит engagement) требуют
-роль `admin`.
+импорт кейсов, форвардинг в SIEM, сервисный аудит engagement, правка
+весов оценки риска) требуют роль `admin`.
 """
 
 from __future__ import annotations
@@ -19,11 +19,15 @@ _READ_LIKE_METHODS: frozenset[str] = frozenset({"GET", "HEAD", "OPTIONS"})
 _READ_EQUIVALENT_PATHS: frozenset[str] = frozenset({"/forensic-bundle/verify"})
 
 # Административные операции: массовый импорт, исходящая пересылка в SIEM,
-# сервисный workflow аудита (engagement).
+# сервисный workflow аудита (engagement), правка весов оценки риска.
+#
+# Веса здесь потому, что правка меняет оценку всех последующих дел, а не одного открытого:
+# это настройка продукта, а не шаг расследования.
 _ADMIN_ONLY_PREFIXES: tuple[str, ...] = (
     "/cases/import/full.json",
     "/integrations/siem/forward",
     "/audit-engagements",
+    "/config/risk-weights",
 )
 
 ROLE_RANK: dict[str, int] = {

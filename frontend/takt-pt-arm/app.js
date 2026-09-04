@@ -148,20 +148,6 @@ const HELP = {
     action: 'Начинать смену с фильтра по классу риска и статусу «новое». Поток однотипных одиночных срабатываний с одинаковым баллом — материал для правки правила, а не для разбора поштучно.',
     doc: 'docs/customer_value_map.md',
   },
-  event_search: {
-    title: 'Поиск по событиям всех источников',
-    what: 'Отбор по всем принятым событиям, а не только по событиям открытого дела: источник, узел, учётная запись, процесс, адрес, артефакт, подстрока в содержимом и период.',
-    source: 'Отбор выполняет продукт: признаки уходят параметрами запроса, а не применяются к загруженной странице. Четыре класса источников приведены к одной модели события при приёме — поэтому поиск один, а не по консоли на каждый источник.',
-    action: 'Проверять, встречались ли узел, учётная запись или адрес вне дела. Найденное событие можно прицепить к открытому делу — причина берётся из панели состава дела на вкладке расследования.',
-    doc: 'docs/pt_techlab/data_contract.md',
-  },
-  decode: {
-    title: 'Разбор закодированного значения',
-    what: 'Раскрытие значения, спрятанного кодировкой: base64, процентное кодирование адреса, шестнадцатеричная строка.',
-    source: 'Разбор выполняет продукт, а не браузер: результат приводится как довод, и он обязан совпадать с тем, что видит сам продукт. Неудачные попытки показаны тоже — «не является base64» это ответ, а молчание выглядит как несработавшая кнопка.',
-    action: 'Скопировать значение из цепочки событий кликом и разобрать здесь. Раскрытый адрес или команда — довод, который проверяется по внутренним спискам, а не вывод продукта.',
-    doc: 'docs/api_reference.md',
-  },
   queue_groups: {
     title: 'Сведение однотипных дел',
     what: '«Дела» — очередь как она есть. «По узлам» — однотипные срабатывания одного узла одной строкой. «По правилам» — то же без учёта узла: сколько дел породила каждая операция.',
@@ -369,11 +355,11 @@ const HELP = {
     source: 'Большое число само по себе не означает опасность: расширение разбора до уровня узла намеренно добирает и штатную активность этих узлов.',
     action: 'Смотреть не количество, а состав по источникам и цепочку.',
   },
-  confidence: {
-    title: 'Обоснованность вывода',
-    what: 'Одна величина вместо четырёх разбросанных признаков достоверности: полнота организационного контекста (вес 0.40), качество данных (0.25), доверие к источникам (0.20) и обоснование корреляции (0.15). Рядом — вердикт триады и разложение по составляющим с причинами, по которым составляющая не равна единице.',
-    source: 'Величину считает продукт, интерфейс её не пересчитывает. Организационный контекст весит больше остальных: без него безупречные по качеству данные всё равно не дают вывода о легитимности. Доверие к источникам считается по слабейшему звену — вывод не крепче худшего из каналов.',
-    action: 'Называть эту величину в разговоре с руководителем и регулятором вместо перечисления отдельных метрик. Пока перечень «Чего не хватает» полон, обоснованность не бывает высокой, каким бы ни было качество данных.',
+  verdict: {
+    title: 'Вердикт по делу',
+    what: 'Триада исходов: легитимное, нелегитимное, неопределённое. Третий означает, что данных для вывода недостаточно, — это ответ, а не отказ.',
+    source: 'Вердикт считает продукт (`verdict_confidence` в GET /cases/{id}), интерфейс его не пересчитывает: второй, «свой» расчёт разошёлся бы с доказательным контуром. Повторный прогон на тех же данных даёт тот же вердикт.',
+    action: 'Неопределённый вердикт разбирать по перечню «Чего не хватает»: он называет, какого именно контекста не достаёт для вывода.',
     doc: 'docs/product_boundary.md',
   },
   missing: {
@@ -445,19 +431,19 @@ const HELP = {
     action: 'Различать «ложное срабатывание» и «штатное действие»: первое правится в правиле, второе — добором организационного документа. Слив их в одну кучу ослабляет работающее правило. Перед правкой конфигурации смотреть отчёт по правилам: поток однотипных срабатываний одного правила — материал для правки, а не для разбора поштучно.',
     doc: 'docs/detection_quality.md',
   },
+  risk_weights: {
+    title: 'Веса оценки риска',
+    what: 'Пять весов модели Risk = F(R, G, C, U, DQ) — ритмика, связи, контекст, пользователь, качество данных — и пороги классов риска долями шкалы 0..1.',
+    source: 'Это тот же файл `config/risk_weights.yaml`, что правится на сервере, и та же метка версии: окно не заводит второго набора весов. Сумма весов держится равной единице — иначе балл перестаёт быть долей шкалы, на которой откалиброваны пороги. Версия поднимается при каждой записи, иначе два разных набора назывались бы в отчёте разметки одинаково.',
+    action: 'Менять веса после разбора потока однотипных срабатываний, а не по одному делу, и записывать причину: она уходит в журнал безопасности вместе с версией. Уже собранные дела не пересчитываются — новый набор действует на последующие.',
+    doc: 'docs/customer_value_map.md',
+  },
   access: {
     title: 'Роль и права доступа',
     what: 'Ключ доступа определяет, кто работает в окне и что ему позволено: первая линия, вторая линия, руководитель, администратор. Роль и имя показаны в шапке рядом с ключом.',
     source: 'Права приходят от продукта (маршрут /session), интерфейс своей копии матрицы ролей не держит: она разошлась бы с проверкой на стороне продукта — и разошлась бы молча. Ключ хранится в браузере и уходит заголовком запроса: в адресе он попал бы в журналы прокси. Он же определяет автора действий в журнале дела — без ключа в журнале остаётся адрес клиента, а для доказательного пакета это не автор.',
     action: 'Работать под своим ключом, а не под общим: журнал дела — доказательный материал, и по нему должно быть видно, кто и почему менял состав. Роль только на чтение прячет действия правки, а не отвечает отказом после нажатия: если нужного действия нет на месте, дело в роли, а не в сбое.',
     doc: 'docs/pt_techlab/rbac_matrix.md',
-  },
-  enrichment: {
-    title: 'Обогащение артефактов: что проверяется здесь',
-    what: 'В окне закрывается та часть проверки артефактов, которая не требует выхода за периметр: разбор закодированного значения — base64, процентное кодирование, шестнадцатеричная строка — и сведения об артефакте по уже принятым событиям: где встречался, в каких делах, как часто.',
-    source: 'Репутация адресов и хешей и вердикт песочницы — внешние проверки. Их в поставке нет, и интерфейс их не изображает: каждое такое обращение выносит признак инцидента за периметр, поэтому требует согласованной интеграции и разрешённого списка адресатов в конфигурации, а не кнопки в окне.',
-    action: 'Репутацию и песочницу проверять своими инструментами и возвращать результат в дело находкой — тогда он попадёт в журнал и в отчёт вместе с автором и временем. Разбор значения делать здесь: его выполняет продукт, и результат обязан совпадать с тем, что видит сам продукт, иначе довод в разборе не устоит.',
-    doc: 'docs/threat_model.md',
   },
   glossary: {
     title: 'Словарь понятий',
@@ -666,7 +652,6 @@ function fillFilterOptions() {
   };
   fill($('#queueRisk'), 'risk_class');
   fill($('#queueStatus'), 'case_status');
-  fill($('#searchSource'), 'event_source');
 }
 
 function invariantTitle(id) {
@@ -956,26 +941,18 @@ async function verifyAuditLedger() {
   }
 }
 
-// --- Обоснованность вывода -------------------------------------------------
+// --- Вердикт по делу -------------------------------------------------------
 //
-// Одна величина вместо четырёх разбросанных признаков достоверности плюс маршрут добора
-// контекста. Расчёт целиком на стороне продукта (`verdict_confidence` в GET /cases/{id});
-// здесь только показ — второй, «свой» расчёт в интерфейсе разошёлся бы с доказательным
-// контуром и с тем, что уходит руководителю.
+// Вердикт считает продукт (`verdict_confidence` в GET /cases/{id}); здесь только показ —
+// второй, «свой» расчёт в интерфейсе разошёлся бы с доказательным контуром и с тем, что
+// уходит руководителю. Вместе с вердиктом приходит маршрут добора контекста.
 
 function renderConfidence(confidence) {
   const badge = $('#verdictBadge');
-  const grade = $('#confidenceGrade');
-  const scoreBox = $('#confidenceScore');
-  const components = $('#confidenceComponents');
-  components.replaceChildren();
 
   if (!confidence) {
     badge.textContent = '—';
     badge.className = 'verdict';
-    grade.textContent = '—';
-    grade.className = 'grade';
-    scoreBox.textContent = 'показатель недоступен';
     lastCaseMissing = [];
     renderMissing([]);
     return;
@@ -984,37 +961,9 @@ function renderConfidence(confidence) {
   const verdict = String(confidence.verdict || 'UNDET');
   badge.textContent = term('verdict', verdict);
   badge.className = `verdict ${verdict.toLowerCase()}`;
-  grade.textContent = confidence.grade || '—';
-  grade.className = `grade ${gradeClass(confidence.grade)}`;
-  scoreBox.textContent = `${score(confidence.score)} из 1.00`;
-
-  for (const part of confidence.components || []) {
-    const row = document.createElement('div');
-    row.className = 'component';
-    const share = Math.max(0, Math.min(1, Number(part.value) || 0));
-    // Вес показан рядом с долей: без него две составляющие с одинаковым заполнением
-    // выглядели бы равнозначными, хотя вклад в итог у них разный.
-    row.innerHTML = `
-      <span class="component-name">${escapeHtml(part.title_ru || part.key)}</span>
-      <span class="component-bar"><span class="component-fill" style="width:${(share * 100).toFixed(0)}%"></span></span>
-      <span class="component-value mono small">${score(part.value)} × ${score(part.weight)}</span>`;
-    if ((part.reasons || []).length) {
-      const why = document.createElement('p');
-      why.className = 'component-reasons muted small';
-      why.textContent = part.reasons.join('; ');
-      row.appendChild(why);
-    }
-    components.appendChild(row);
-  }
 
   lastCaseMissing = confidence.missing || [];
   renderMissing(lastCaseMissing);
-}
-
-function gradeClass(grade) {
-  if (grade === 'высокая') return 'high';
-  if (grade === 'средняя') return 'medium';
-  return 'low';
 }
 
 function renderMissing(items) {
@@ -2314,6 +2263,181 @@ function applyPermissions() {
     $('#changeStatusButton').hidden = true;
     $('#statusForm').hidden = true;
   }
+  // Веса меняют оценку всех последующих дел: это настройка продукта, а не шаг разбора.
+  const canAdminister = permissions().administration;
+  $('#configOpen').hidden = !canAdminister;
+  $('#configHelp').hidden = !canAdminister;
+}
+
+// --- Конфигурация: веса оценки риска ---------------------------------------
+//
+// Веса — конфигурация, а не состояние обучаемой модели: автоматического пересчёта в продукте
+// нет намеренно. Правит их человек, и до сих пор единственным способом была правка файла на
+// сервере. Окно даёт тот же механизм, а не другой: тот же `config/risk_weights.yaml`, та же
+// метка версии, та же роль администратора.
+
+const WEIGHT_FIELDS = [
+  ['rhythm', 'Ритмика'],
+  ['graph', 'Связи'],
+  ['context', 'Контекст'],
+  ['user', 'Пользователь'],
+  ['data_quality', 'Качество данных'],
+];
+
+const THRESHOLD_FIELDS = [
+  ['critical', 'Критический'],
+  ['high', 'Высокий'],
+  ['medium', 'Средний'],
+];
+
+function configNumberRow(grid, id, label, value, step) {
+  const caption = document.createElement('label');
+  caption.setAttribute('for', id);
+  caption.textContent = label;
+  const input = document.createElement('input');
+  input.id = id;
+  input.type = 'number';
+  input.min = '0';
+  input.max = '1';
+  input.step = step;
+  input.value = Number(value).toFixed(2);
+  grid.appendChild(caption);
+  grid.appendChild(input);
+  return input;
+}
+
+async function openRiskWeightsConfig() {
+  let current;
+  try {
+    current = await api('/config/risk-weights');
+  } catch (error) {
+    toast(`Конфигурация не прочитана: ${error.message}`);
+    return;
+  }
+
+  openModal('Конфигурация: веса оценки риска', (body) => {
+    const weightInputs = new Map();
+    const thresholdInputs = new Map();
+
+    const version = document.createElement('p');
+    version.className = 'muted small';
+    version.textContent = `Версия ${current.version || '—'} · ${current.config_path}`;
+    body.appendChild(version);
+
+    const weightsCaption = document.createElement('p');
+    weightsCaption.className = 'modal-section';
+    weightsCaption.textContent = 'Веса факторов';
+    body.appendChild(weightsCaption);
+
+    const weightsGrid = document.createElement('div');
+    weightsGrid.className = 'permit-grid config-grid';
+    for (const [key, label] of WEIGHT_FIELDS) {
+      weightInputs.set(key, configNumberRow(weightsGrid, `weight_${key}`, label, current.weights[key], '0.01'));
+    }
+    body.appendChild(weightsGrid);
+
+    // Сумма показывается на месте: без неё набор, не дающий единицы, выясняется только
+    // отказом после нажатия, и аналитик не видит, какое поле подправить.
+    const sum = document.createElement('p');
+    sum.className = 'muted small';
+    body.appendChild(sum);
+
+    const thresholdsCaption = document.createElement('p');
+    thresholdsCaption.className = 'modal-section';
+    thresholdsCaption.textContent = 'Пороги классов риска';
+    body.appendChild(thresholdsCaption);
+
+    const thresholdsGrid = document.createElement('div');
+    thresholdsGrid.className = 'permit-grid config-grid';
+    for (const [key, label] of THRESHOLD_FIELDS) {
+      thresholdInputs.set(
+        key,
+        configNumberRow(thresholdsGrid, `threshold_${key}`, label, current.thresholds[key], '0.01')
+      );
+    }
+    body.appendChild(thresholdsGrid);
+
+    const reasonGrid = document.createElement('div');
+    reasonGrid.className = 'permit-grid config-grid';
+    const reasonLabel = document.createElement('label');
+    reasonLabel.setAttribute('for', 'configReason');
+    reasonLabel.textContent = 'Причина';
+    const reason = document.createElement('input');
+    reason.id = 'configReason';
+    reason.type = 'text';
+    reason.maxLength = 2000;
+    reason.placeholder = 'обязательна: уходит в журнал вместе с версией';
+    reasonGrid.appendChild(reasonLabel);
+    reasonGrid.appendChild(reason);
+    body.appendChild(reasonGrid);
+
+    const error = document.createElement('p');
+    error.className = 'relink-error small';
+    error.hidden = true;
+    body.appendChild(error);
+
+    const actions = document.createElement('div');
+    actions.className = 'permit-actions';
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'action inline';
+    save.textContent = 'Записать';
+    actions.appendChild(save);
+    const note = document.createElement('span');
+    note.className = 'muted small';
+    note.textContent = 'Уже собранные дела не пересчитываются: набор действует на последующие.';
+    actions.appendChild(note);
+    body.appendChild(actions);
+
+    const readWeights = () => {
+      const values = {};
+      for (const [key, input] of weightInputs) values[key] = Number(input.value);
+      return values;
+    };
+
+    // Сумма считается здесь только для подсказки: набор всё равно проверяет продукт при записи.
+    const refreshSum = () => {
+      const values = readWeights();
+      const total = Object.values(values).reduce((acc, value) => acc + (Number.isFinite(value) ? value : 0), 0);
+      const balanced = Math.abs(total - 1) <= 0.001;
+      sum.textContent = balanced
+        ? `Сумма весов ${total.toFixed(3)}`
+        : `Сумма весов ${total.toFixed(3)} — должна равняться 1.000`;
+      save.disabled = !balanced;
+    };
+
+    for (const input of weightInputs.values()) input.addEventListener('input', refreshSum);
+    refreshSum();
+
+    save.addEventListener('click', async () => {
+      const cause = reason.value.trim();
+      if (!cause) {
+        error.textContent = 'Причина обязательна: она уходит в журнал вместе с версией конфигурации.';
+        error.hidden = false;
+        reason.focus();
+        return;
+      }
+      error.hidden = true;
+      save.disabled = true;
+      const thresholds = {};
+      for (const [key, input] of thresholdInputs) thresholds[key] = Number(input.value);
+      try {
+        const saved = await api('/config/risk-weights', {
+          method: 'PUT',
+          body: JSON.stringify({ weights: readWeights(), thresholds, reason: cause }),
+        });
+        closeHelp();
+        toast(`Веса записаны, версия конфигурации ${saved.version}`);
+      } catch (failure) {
+        error.textContent =
+          failure.status === 403
+            ? 'Недостаточно прав: правка весов доступна администратору.'
+            : `Веса не записаны: ${failure.message}`;
+        error.hidden = false;
+        save.disabled = false;
+      }
+    });
+  });
 }
 
 function openAccessKeyForm() {
@@ -2672,6 +2796,7 @@ $('#accessKeyForget').addEventListener('click', forgetAccessKey);
 $('#accessKeyInput').addEventListener('keydown', (event) => {
   if (event.key === 'Enter') saveAccessKey();
 });
+$('#configOpen').addEventListener('click', openRiskWeightsConfig);
 $('#modalClose').addEventListener('click', closeHelp);
 $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
@@ -2752,164 +2877,6 @@ $('#queueDrillClear').addEventListener('click', clearQueueDrill);
 $('#queueSearchField').addEventListener('change', refresh);
 $('#queueRisk').addEventListener('change', refresh);
 $('#queueStatus').addEventListener('change', refresh);
-
-// --- Единый поиск по событиям всех источников (ТЗ §5) ----------------------
-//
-// Продукт принимает четыре класса источников в одну модель события, и искать по ним можно
-// одним запросом (`GET /events/search`). До сих пор эта возможность существовала только в
-// API: аналитик, которому нужно проверить, встречался ли узел или адрес вне дела, уходил в
-// консоли источников — то есть ровно в ту работу, которую продукт и берётся сократить.
-//
-// Отбор выполняет продукт: фильтры уходят параметрами запроса, а не применяются к
-// загруженной странице.
-
-let searchResults = [];
-
-function searchQueryString() {
-  const params = new URLSearchParams({ limit: '200' });
-  const put = (name, selector) => {
-    const value = $(selector).value.trim();
-    if (value) params.set(name, value);
-  };
-  const source = $('#searchSource').value;
-  if (source) params.set('source', source);
-  put('host_id', '#searchHost');
-  put('user_id', '#searchUser');
-  put('process_id', '#searchProcess');
-  put('address', '#searchAddress');
-  put('artifact_value', '#searchArtifact');
-  put('text', '#searchText');
-  put('observed_from', '#searchFrom');
-  put('observed_to', '#searchTo');
-  return params;
-}
-
-async function runEventSearch() {
-  const params = searchQueryString();
-  // limit стоит всегда, поэтому отбором считается всё остальное. Запрос без отбора вернул бы
-  // весь принятый поток — тысячу событий, из которых аналитик не узнает ничего.
-  if ([...params.keys()].length <= 1) {
-    showSearchError('Задайте хотя бы один признак: запрос без отбора вернёт весь принятый поток.');
-    return;
-  }
-  $('#searchError').hidden = true;
-  try {
-    const { data, headers } = await apiWithHeaders(`/events/search?${params.toString()}`);
-    searchResults = Array.isArray(data) ? data : [];
-    renderSearchResults();
-    const total = headers.get('X-Total-Count');
-    $('#searchCount').textContent =
-      total !== null
-        ? `Найдено ${searchResults.length} из ${total} ${plural(Number(total), 'события', 'событий', 'событий')}`
-        : `Найдено ${searchResults.length}`;
-  } catch (error) {
-    showSearchError(`Поиск не выполнен: ${error.message}`);
-  }
-}
-
-function showSearchError(message) {
-  $('#searchError').textContent = message;
-  $('#searchError').hidden = false;
-}
-
-function resetEventSearch() {
-  for (const id of ['searchHost', 'searchUser', 'searchProcess', 'searchAddress', 'searchArtifact', 'searchText', 'searchFrom', 'searchTo']) {
-    $(`#${id}`).value = '';
-  }
-  $('#searchSource').value = '';
-  searchResults = [];
-  $('#searchBody').replaceChildren();
-  $('#searchCount').textContent = '—';
-  $('#searchError').hidden = true;
-}
-
-function renderSearchResults() {
-  const body = $('#searchBody');
-  body.replaceChildren();
-  $('#searchTimeZone').textContent = zoneLabel();
-  const inCase = new Set(lastWorkspaceEvents.map((event) => event.event_id));
-  for (const event of searchResults) {
-    const entities = event.entities || {};
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td class="mono">${escapeHtml(utc(event.observed_at))}</td>
-      <td><span class="chip sm" title="${escapeHtml(String(event.source))}">${escapeHtml(term('event_source', event.source))}</span></td>
-      <td class="mono">${escapeHtml(event.operation)}</td>
-      <td>${copyable(entities.host_id || '')}</td>
-      <td>${copyable(entities.user_id || '')}</td>
-      <td>${copyable(entities.process_id || '')}</td>
-      <td class="mono small">${addressOf(entities)}</td>
-      <td class="small">${artifactCell(event)}</td>
-      <td class="relink-cell"></td>`;
-    const cell = row.lastElementChild;
-    // Прицепить можно только к открытому делу и только роли второй линии: право приходит из
-    // ответа продукта, а не решается здесь.
-    if (!selectedCaseId || !relinkAllowed()) {
-      cell.innerHTML = '<span class="muted small">—</span>';
-    } else if (inCase.has(event.event_id)) {
-      cell.innerHTML = '<span class="muted small">уже в деле</span>';
-    } else {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'action inline';
-      button.textContent = 'Прицепить';
-      button.addEventListener('click', () => attachFoundEvent(event.event_id, button));
-      cell.replaceChildren(button);
-    }
-    body.appendChild(row);
-  }
-}
-
-// Причина обязательна и здесь: правка состава дела меняет доказательный материал независимо
-// от того, из какого места интерфейса её начали.
-async function attachFoundEvent(eventId, button) {
-  const reason = $('#relinkReason').value.trim();
-  if (!reason) {
-    showSearchError('Причина обязательна: заполните её на вкладке расследования, в панели состава дела.');
-    return;
-  }
-  button.disabled = true;
-  try {
-    await api(`/cases/${encodeURIComponent(selectedCaseId)}/events/attach`, {
-      method: 'POST',
-      body: JSON.stringify({ reason, event_id: eventId }),
-    });
-    toast('Событие прицеплено к открытому делу');
-    await openCase(selectedCaseId);
-    renderSearchResults();
-  } catch (error) {
-    showSearchError(relinkErrorText(error, 'Событие не прицеплено'));
-    button.disabled = false;
-  }
-}
-
-// --- Разбор закодированного значения (ТЗ §5.4) -----------------------------
-//
-// Разбор выполняет продукт (`POST /enrichment/decode`), а не браузер: результат разбора
-// аналитик приводит как довод, и он обязан совпадать с тем, что видит продукт.
-
-async function runDecode() {
-  const list = $('#decodeResults');
-  list.replaceChildren();
-  const value = $('#decodeValue').value.trim();
-  if (!value) return;
-  try {
-    const result = await api('/enrichment/decode', { method: 'POST', body: JSON.stringify({ value }) });
-    for (const item of (result && result.decodings) || []) {
-      const row = document.createElement('li');
-      if (item.success) {
-        row.innerHTML = `<span class="chip sm">${escapeHtml(item.kind)}</span> <span class="mono">${escapeHtml(item.value)}</span>`;
-      } else {
-        // Неудачный разбор показывается тоже: «не является base64» — это ответ на вопрос,
-        // а молчание выглядит как несработавшая кнопка.
-        row.innerHTML = `<span class="chip sm muted">${escapeHtml(item.kind)}</span> <span class="muted">не разобрано: ${escapeHtml(item.error || '—')}</span>`;
-      }
-      list.appendChild(row);
-    }
-  } catch (error) {
-    list.innerHTML = `<li class="relink-error">Разбор не выполнен: ${escapeHtml(error.message)}</li>`;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Вкладка «Симуляция»: хронология цепочки, счётчики трудоёмкости, граф атаки
@@ -3610,7 +3577,6 @@ function togglePlayback() {
 
 const TABS = {
   investigation: { button: '#tabInvestigation', view: '.layout' },
-  search: { button: '#tabSearch', view: '#searchView' },
   simulation: { button: '#tabSimulation', view: '#simulationView' },
 };
 
@@ -3623,23 +3589,10 @@ function showTab(name) {
   }
   if (name === 'simulation') openSimulation();
   else stopPlayback();
-  // Отметка «уже в деле» и доступность прицепления зависят от открытого дела: при возврате
-  // на поиск список обязан отражать состав дела на этот момент, а не на момент запроса.
-  if (name === 'search') renderSearchResults();
 }
 
 $('#tabSimulation').addEventListener('click', () => showTab('simulation'));
-$('#tabSearch').addEventListener('click', () => showTab('search'));
 $('#tabInvestigation').addEventListener('click', () => showTab('investigation'));
-$('#searchRun').addEventListener('click', runEventSearch);
-$('#searchReset').addEventListener('click', resetEventSearch);
-$('#searchText').addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') runEventSearch();
-});
-$('#decodeRun').addEventListener('click', runDecode);
-$('#decodeValue').addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') runDecode();
-});
 $('#playPause').addEventListener('click', togglePlayback);
 $('#stepForward').addEventListener('click', () => {
   stopPlayback();

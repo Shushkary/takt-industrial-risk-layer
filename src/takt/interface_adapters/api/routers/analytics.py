@@ -21,7 +21,7 @@ def register_analytics_routes(ctx: ApiContext) -> None:
         """
         return invariant_feedback(
             ctx.repo.list_all(),
-            weights_version=ctx.risk_weights_version,
+            weights_version=ctx.risk_weights_version(),
         ).to_dict()
 
     @app.post("/backtest/fixture", response_model=BacktestFixtureResponse, tags=["Analytics"])

@@ -46,6 +46,9 @@
 - `POST /cases/assemble/auto` (повтор сборки ядра инцидентов с другим порогом отличительности; при
   приёме тот же шаг выполняется сам — `incident_assembly.mode`: по умолчанию `worker`, отдельным
   процессом `python -m takt.tools.assembly_worker`, либо `on_ingest` в процессе API; SQLite backend)
+- `GET /config/risk-weights` (действующие веса `Risk = F(R, G, C, U, DQ)`, пороги классов и версия конфигурации)
+- `PUT /config/risk-weights` (правка весов и порогов; роль `admin`, причина обязательна, версия конфигурации
+  поднимается при каждой записи, комментарии `config/risk_weights.yaml` сохраняются)
 - `GET /cases/{id}/audit-ledger/verify` (SQLite backend)
 - `GET /audit-ledger/operations/verify` (SQLite backend)
 

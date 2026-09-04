@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260904-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260904-04" />
   </head>
   <body>
     <header class="top">
@@ -15,7 +15,6 @@
       </div>
       <nav class="tabs" aria-label="Режим работы">
         <button id="tabInvestigation" class="tab active" type="button" aria-pressed="true">Расследование</button>
-        <button id="tabSearch" class="tab" type="button" aria-pressed="false">Поиск событий</button>
         <button id="tabSimulation" class="tab" type="button" aria-pressed="false">Симуляция</button>
       </nav>
       <div class="top-state">
@@ -23,6 +22,8 @@
         <button class="link" type="button" data-help="assistant">алгоритм разбора</button>
         <button class="link" type="button" data-help="glossary">словарь понятий</button>
         <span id="sessionActor" class="actor" hidden>—</span>
+        <button id="configOpen" class="link" type="button" hidden>конфиг</button>
+        <button id="configHelp" class="help sm" type="button" data-help="risk_weights" aria-label="Пояснение: веса оценки риска" hidden>?</button>
         <button id="accessKeyToggle" class="link" type="button">ключ доступа</button>
         <button class="help sm" type="button" data-help="access" aria-label="Пояснение: роль и права доступа">?</button>
         <span id="apiVersion" class="muted small" hidden>—</span>
@@ -136,20 +137,17 @@
 
           <div class="block confidence-block">
             <div class="block-head">
-              <h4>Обоснованность вывода</h4>
+              <h4>Вердикт</h4>
               <div class="head-actions">
                 <button id="briefButton" class="link" type="button">Сводка для руководителя</button>
                 <button id="reportButton" class="link" type="button">Паспорт инцидента</button>
                 <button class="help sm" type="button" data-help="report" aria-label="Пояснение: выходные документы по делу">?</button>
-                <button class="help" type="button" data-help="confidence" aria-label="Пояснение: обоснованность вывода">?</button>
+                <button class="help" type="button" data-help="verdict" aria-label="Пояснение: вердикт по делу">?</button>
               </div>
             </div>
             <div class="verdict-line">
               <span id="verdictBadge" class="verdict">—</span>
-              <span id="confidenceGrade" class="grade">—</span>
-              <span id="confidenceScore" class="muted small">—</span>
             </div>
-            <div id="confidenceComponents" class="components"></div>
           </div>
 
           <div id="missingBlock" class="block missing-block" hidden>
@@ -401,72 +399,6 @@
       </section>
     </main>
 
-    <section id="searchView" class="panel search-view" hidden aria-labelledby="searchTitle">
-      <div class="panel-head">
-        <h2 id="searchTitle">Поиск по событиям всех источников</h2>
-        <button class="help" type="button" data-help="event_search" aria-label="Пояснение: поиск по событиям">?</button>
-      </div>
-
-      <div class="search-filters">
-        <label for="searchSource">Источник</label>
-        <select id="searchSource"><option value="">любой</option></select>
-        <label for="searchHost">Узел</label>
-        <input id="searchHost" type="search" />
-        <label for="searchUser">Учётная запись</label>
-        <input id="searchUser" type="search" />
-        <label for="searchProcess">Процесс</label>
-        <input id="searchProcess" type="search" />
-        <label for="searchAddress">Адрес</label>
-        <input id="searchAddress" type="search" />
-        <label for="searchArtifact">Артефакт</label>
-        <input id="searchArtifact" type="search" />
-        <label for="searchText">Подстрока в событии</label>
-        <input id="searchText" type="search" />
-        <label for="searchFrom">С момента</label>
-        <input id="searchFrom" type="search" placeholder="2026-08-17T06:00:00Z" />
-        <label for="searchTo">По момент</label>
-        <input id="searchTo" type="search" placeholder="2026-08-17T07:00:00Z" />
-      </div>
-      <div class="search-actions">
-        <button id="searchRun" class="action inline" type="button">Найти</button>
-        <button id="searchReset" class="action inline" type="button">Очистить</button>
-        <span id="searchCount" class="muted small">—</span>
-      </div>
-      <p id="searchError" class="relink-error small" hidden></p>
-
-      <div class="table-scroll">
-        <table class="chain chain-search">
-          <thead>
-            <tr>
-              <th scope="col">Время, <span id="searchTimeZone">UTC</span></th>
-              <th scope="col">Источник</th>
-              <th scope="col">Операция</th>
-              <th scope="col">Узел</th>
-              <th scope="col">Учётная запись</th>
-              <th scope="col">Процесс</th>
-              <th scope="col">Адрес</th>
-              <th scope="col">Артефакт</th>
-              <th scope="col">В открытое дело</th>
-            </tr>
-          </thead>
-          <tbody id="searchBody"></tbody>
-        </table>
-      </div>
-
-      <div class="panel-head">
-        <h2>Разбор значения</h2>
-        <div class="head-actions">
-          <button class="link" type="button" data-help="enrichment">границы проверки артефактов</button>
-          <button class="help" type="button" data-help="decode" aria-label="Пояснение: разбор закодированного значения">?</button>
-        </div>
-      </div>
-      <div class="search-actions">
-        <input id="decodeValue" type="search" placeholder="значение из события или артефакта" />
-        <button id="decodeRun" class="action inline" type="button">Разобрать</button>
-      </div>
-      <ul id="decodeResults" class="plain small pad"></ul>
-    </section>
-
     <section id="simulationView" class="panel simulation" hidden aria-labelledby="simTitle">
       <div class="panel-head">
         <h2 id="simTitle">Симуляция цепочки атаки</h2>
@@ -599,7 +531,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260904-02"></script>
-    <script src="./app.min.js?v=20260904-02"></script>
+    <script src="./env.js?v=20260904-04"></script>
+    <script src="./app.min.js?v=20260904-04"></script>
   </body>
 </html>

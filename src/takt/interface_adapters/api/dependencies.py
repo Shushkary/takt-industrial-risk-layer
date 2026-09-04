@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
@@ -102,7 +102,13 @@ class ApiContext:
     trust_by_source: Mapping[str, float]
     invariant_catalog: InvariantCatalogFromYaml
     siem_webhook_prefixes: Sequence[str]
-    risk_weights_version: str
+
+    # Веса оценки риска правятся из окна (`PUT /config/risk-weights`), поэтому версия берётся
+    # вызовом, а не значением: снимок на старте после первой же правки называл бы в отчёте
+    # разметки набор, против которого отчёт уже не посчитан.
+    risk_weights_version: Callable[[], str]
+    risk_weights: MutableMapping[str, Any]
+    risk_weights_path: Path
 
     # Сценарии и фасады слоя приложения.
     backtest_uc: RunBacktestUseCase | None = None

@@ -465,10 +465,7 @@ body {
   color: var(--accent);
 }
 
-/* Обоснованность вывода и маршрут добора контекста.
-   Вердикт и оценка стоят рядом намеренно: «нелегитимное» с низкой обоснованностью и
-   «нелегитимное» с высокой — разные основания для решения, и различать их надо без
-   прокрутки к составляющим. */
+/* Вердикт по делу и маршрут добора контекста. */
 .verdict-line {
   display: flex;
   align-items: baseline;
@@ -496,56 +493,6 @@ body {
 .verdict.undet {
   color: var(--warn);
   border-color: var(--warn);
-}
-
-.grade {
-  font-family: var(--mono);
-  font-size: 15px;
-}
-
-.grade.high {
-  color: var(--low);
-}
-.grade.medium {
-  color: var(--med);
-}
-.grade.low {
-  color: var(--warn);
-}
-
-.components {
-  display: grid;
-  gap: 6px;
-}
-
-.component {
-  display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(80px, 2fr) auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.component-reasons {
-  grid-column: 1 / -1;
-  margin: 0 0 2px;
-}
-
-.component-name {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.component-bar {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--line);
-  overflow: hidden;
-}
-
-.component-fill {
-  display: block;
-  height: 100%;
-  background: var(--accent);
 }
 
 .missing-block {
@@ -606,25 +553,12 @@ table.chain-case th:nth-last-child(3), table.chain-case td:nth-last-child(3) { w
 table.chain-case th:nth-last-child(2), table.chain-case td:nth-last-child(2) { width: 9%; }
 table.chain-case th:nth-last-child(1), table.chain-case td:nth-last-child(1) { width: 7%; }
 
-/* Поиск по событиям: колонки другие (нет основания, последняя — кнопка «Прицепить»), и
-   необязательных колонок нет, поэтому доли считаются от начала. */
-table.chain-search th:nth-child(1), table.chain-search td:nth-child(1) { width: 18%; }
-table.chain-search th:nth-child(2), table.chain-search td:nth-child(2) { width: 11%; }
-table.chain-search th:nth-child(3), table.chain-search td:nth-child(3) { width: 15%; }
-table.chain-search th:nth-child(4), table.chain-search td:nth-child(4) { width: 11%; }
-table.chain-search th:nth-child(5), table.chain-search td:nth-child(5) { width: 10%; }
-table.chain-search th:nth-child(6), table.chain-search td:nth-child(6) { width: 9%; }
-table.chain-search th:nth-child(7), table.chain-search td:nth-child(7) { width: 9%; }
-table.chain-search th:nth-child(8), table.chain-search td:nth-child(8) { width: 10%; }
-table.chain-search th:nth-child(9), table.chain-search td:nth-child(9) { width: 7%; }
-
 /* Колонка отметки не участвует в долях: её ширина задана в пикселях под флажок. */
 table.chain th.relink-cell, table.chain td.relink-cell { width: 28px; }
 
 /* Метка времени — 19 знаков моноширинным: на 14px она не помещается в свою долю и усекалась
    бы многоточием, а это первичный ключ доказательства. */
-table.chain-case td:nth-last-child(9),
-table.chain-search td:nth-child(1) {
+table.chain-case td:nth-last-child(9) {
   font-size: 12px;
 }
 
@@ -1432,6 +1366,21 @@ ol.steps {
   font-size: 12px;
 }
 
+/* Форма конфигурации в модальном окне. Раскладка та же «подпись — поле», что у наряда:
+   два разных вида формы в одном интерфейсе читались бы как два разных продукта. Отступы
+   снимаются: их уже даёт тело окна. */
+.modal-body .config-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 10px;
+  padding: 0 0 10px;
+}
+
+.modal-body .permit-actions {
+  padding: 0;
+}
+
 .permit-actions {
   display: flex;
   align-items: center;
@@ -1535,60 +1484,6 @@ ol.steps {
 
 .group-count {
   font-weight: 600;
-}
-
-/* Поиск по событиям всех источников. Раскладка та же сетка «подпись — поле», что у наряда:
-   два разных вида формы в одном интерфейсе читались бы как два разных продукта. */
-.search-view {
-  margin: 12px;
-}
-
-.search-filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  align-items: center;
-  gap: 6px 10px;
-  padding: 0 12px 10px;
-}
-
-.search-filters label {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.search-filters input,
-.search-filters select {
-  width: 100%;
-  padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 12px;
-}
-
-.search-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 12px 10px;
-}
-
-.search-actions input {
-  flex: 1 1 280px;
-  min-width: 200px;
-  padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-}
-
-#decodeResults li {
-  padding: 3px 0;
 }
 
 .chip.sm.muted {

@@ -67,6 +67,8 @@ EXPECTED_ROUTE_CONTRACTS = [
     ("GET", "/compliance/data-quality-report", ("Analytics",), None),
     ("GET", "/compliance/forensic-readiness", ("Analytics",), None),
     ("GET", "/compliance/mode", ("Analytics",), None),
+    ("GET", "/config/risk-weights", ("Config",), "RiskWeightsResponse"),
+    ("PUT", "/config/risk-weights", ("Config",), "RiskWeightsResponse"),
     ("GET", "/compliance/remediation-kinds", ("Analytics",), None),
     ("GET", "/compliance/remediations", ("Analytics",), None),
     ("GET", "/data-quality", ("System",), "DataQualityResponse"),

@@ -26,7 +26,7 @@ _STYLES = (_ARM / "styles.css").read_text(encoding="utf-8")
 # Виды сущностей, для которых продукт отдаёт карточку истории.
 CARD_TYPES = ("host", "user", "process")
 
-# Колонки таблицы состава дела и таблицы поиска — по девять в каждой.
+# Колонки таблицы состава дела.
 CHAIN_COLUMNS = 9
 
 
@@ -36,9 +36,9 @@ def test_backend_card_type_is_reachable_from_the_chain_table(entity_type: str) -
     assert f"entityButton('{entity_type}'" in _APP, entity_type
 
 
-def test_process_column_exists_in_both_tables() -> None:
-    """Колонка процесса есть и в составе дела, и в результатах поиска."""
-    assert _INDEX.count(">Процесс ") + _INDEX.count(">Процесс<") >= 2
+def test_process_column_exists_in_the_chain_table() -> None:
+    """Колонка процесса есть в составе дела: без неё карточка процесса недостижима."""
+    assert _INDEX.count(">Процесс ") + _INDEX.count(">Процесс<") >= 1
 
 
 def test_process_column_has_a_help_entry() -> None:
@@ -46,13 +46,7 @@ def test_process_column_has_a_help_entry() -> None:
     assert re.search(r"^  entity_process: \{$", _APP, re.MULTILINE)
 
 
-def test_search_results_show_the_process_of_the_event() -> None:
-    """Фильтр по процессу в поиске был, а самого значения в выдаче не было."""
-    assert "put('process_id', '#searchProcess')" in _APP
-    assert "copyable(entities.process_id" in _APP
-
-
-@pytest.mark.parametrize("table", ["chain-case", "chain-search"])
+@pytest.mark.parametrize("table", ["chain-case"])
 def test_column_widths_cover_every_column(table: str) -> None:
     """Доли покрывают все девять колонок и дают в сумме 100%.
 

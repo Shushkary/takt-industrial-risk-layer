@@ -158,6 +158,7 @@ from takt.interface_adapters.api.routers.case_groups import register_case_group_
 from takt.interface_adapters.api.routers.cases import register_case_routes
 from takt.interface_adapters.api.routers.catalog import register_catalog_routes
 from takt.interface_adapters.api.routers.compliance import register_compliance_routes
+from takt.interface_adapters.api.routers.config import register_config_routes
 from takt.interface_adapters.api.routers.correlation import register_correlation_routes
 from takt.interface_adapters.api.routers.enrichment import register_enrichment_routes
 from takt.interface_adapters.api.routers.entities import register_entity_routes
@@ -411,6 +412,7 @@ def create_app() -> FastAPI:
     cfg_path = _resolve_config_path()
     _ensure_explicit_takt_config_under_project(cfg_path)
     weights = load_risk_weights(cfg_path)
+    app.state.risk_weights_path = cfg_path
     apply_storage_env_overrides(weights)
     raw_storage = weights.get("storage")
     stor: dict[str, Any] = raw_storage if isinstance(raw_storage, dict) else {}
@@ -743,7 +745,9 @@ def create_app() -> FastAPI:
         trust_by_source=dict(pipeline.trust_by_source or {}),
         invariant_catalog=inv_catalog,
         siem_webhook_prefixes=tuple(app.state.siem_webhook_prefixes),
-        risk_weights_version=app.state.risk_weights_version,
+        risk_weights_version=lambda: str(getattr(app.state, "risk_weights_version", "") or ""),
+        risk_weights=weights,
+        risk_weights_path=cfg_path,
         backtest_uc=backtest_uc,
         audit_ledger_facade=audit_ledger_facade,
         forensic_uc=forensic_uc,
@@ -782,6 +786,7 @@ def create_app() -> FastAPI:
     )
     register_system_routes(api_ctx)
     register_catalog_routes(api_ctx)
+    register_config_routes(api_ctx)
     register_event_routes(api_ctx)
     register_assemble_routes(api_ctx)
     register_entity_routes(api_ctx)
