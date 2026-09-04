@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260904-05" />
+    <link rel="stylesheet" href="./styles.css?v=20260904-06" />
   </head>
   <body>
     <header class="top">
@@ -18,17 +18,22 @@
         <button id="tabSimulation" class="tab" type="button" aria-pressed="false">Симуляция</button>
       </nav>
       <div class="top-state">
-        <button id="timeZoneToggle" class="link" type="button">время: UTC</button>
-        <button class="link" type="button" data-help="assistant">алгоритм разбора</button>
-        <button class="link" type="button" data-help="glossary">словарь понятий</button>
-        <span id="sessionActor" class="actor" hidden>—</span>
-        <button id="configOpen" class="link" type="button" hidden>конфиг</button>
-        <button id="configHelp" class="help sm" type="button" data-help="risk_weights" aria-label="Пояснение: веса оценки риска" hidden>?</button>
-        <button id="accessKeyToggle" class="link" type="button">ключ доступа</button>
-        <button class="help sm" type="button" data-help="access" aria-label="Пояснение: роль и права доступа">?</button>
-        <span id="apiVersion" class="muted small" hidden>—</span>
-        <span id="connection" class="conn">подключение</span>
-        <span id="lastSync" class="muted small">—</span>
+        <div class="top-group" role="group" aria-label="Справка">
+          <button class="link" type="button" data-help="assistant">алгоритм разбора</button>
+          <button class="link" type="button" data-help="glossary">словарь понятий</button>
+        </div>
+        <div class="top-group" role="group" aria-label="Доступ и настройки">
+          <span id="sessionActor" class="actor" hidden>—</span>
+          <button id="accessKeyToggle" class="link" type="button">ключ доступа</button>
+          <button class="help sm" type="button" data-help="access" aria-label="Пояснение: роль и права доступа">?</button>
+          <button id="configOpen" class="link" type="button" hidden>конфиг</button>
+        </div>
+        <div class="top-group top-status" role="group" aria-label="Состояние">
+          <button id="timeZoneToggle" class="link" type="button">время: UTC</button>
+          <span id="connection" class="conn">подключение</span>
+          <span id="lastSync" class="muted small">—</span>
+          <span id="apiVersion" class="muted small" hidden>—</span>
+        </div>
       </div>
     </header>
 
@@ -37,7 +42,7 @@
       <input id="accessKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="ключ выдаёт администратор продукта" />
       <button id="accessKeySave" class="action inline" type="button">Сохранить</button>
       <button id="accessKeyForget" class="action inline" type="button">Забыть</button>
-      <span class="muted small">Ключ хранится в этом браузере и уходит заголовком запроса. Он же определяет автора действий в журнале кейса.</span>
+      <span class="muted small">Ключ хранится в этом браузере и уходит заголовком запроса. Он же определяет автора действий в журнале инцидента.</span>
     </div>
 
     <main class="layout">
@@ -49,16 +54,13 @@
         <div class="queue-actions">
           <button id="assembleAuto" class="action inline" type="button">Собрать инциденты</button>
           <button class="help sm" type="button" data-help="assemble_auto" aria-label="Пояснение: сборка инцидентов">?</button>
-          <label for="assembleThreshold" class="muted small">порог отличительности</label>
-          <input id="assembleThreshold" type="number" min="1" max="1000" step="1" placeholder="12" />
-          <button class="help sm" type="button" data-help="assemble_threshold" aria-label="Пояснение: порог отличительности">?</button>
         </div>
         <p id="assembleRoleNote" class="muted small pad" hidden>Роль работает только на чтение: сборка инцидентов недоступна.</p>
         <div class="queue-modes" role="group" aria-label="Вид очереди">
-          <button id="queueModeCases" class="mode active" type="button">дела</button>
+          <button id="queueModeCases" class="mode active" type="button">инциденты</button>
           <button id="queueModeAsset" class="mode" type="button">по узлам</button>
           <button id="queueModeRule" class="mode" type="button">по правилам</button>
-          <button class="help sm" type="button" data-help="queue_groups" aria-label="Пояснение: сведение однотипных дел">?</button>
+          <button class="help sm" type="button" data-help="queue_groups" aria-label="Пояснение: сведение однотипных инцидентов">?</button>
         </div>
         <p id="queueDrill" class="queue-drill small" hidden>
           <span id="queueDrillText"></span>
@@ -77,7 +79,7 @@
         </div>
         <p id="queueCount" class="muted small pad">—</p>
         <div id="queueList" class="queue-list"></div>
-        <p id="queueEmpty" class="muted pad">Кейсов нет.</p>
+        <p id="queueEmpty" class="muted pad">Инцидентов нет.</p>
       </section>
 
       <section class="panel work" aria-labelledby="workTitle">
@@ -86,11 +88,11 @@
           <button class="help" type="button" data-help="summary" aria-label="Пояснение: сводка инцидента">?</button>
         </div>
 
-        <p id="workEmpty" class="muted pad">Выберите кейс в очереди.</p>
+        <p id="workEmpty" class="muted pad">Выберите инцидент в очереди.</p>
 
         <div id="workBody" hidden>
           <div id="staleCaseBanner" class="stale-banner" hidden>
-            <span>Данные кейса изменились с момента открытия.</span>
+            <span>Данные инцидента изменились с момента открытия.</span>
             <button id="staleCaseRefresh" class="link" type="button">Обновить</button>
           </div>
           <div class="summary">
@@ -99,7 +101,7 @@
               <span id="caseStatus" class="chip">—</span>
               <button id="changeStatusButton" class="link" type="button">изменить статус</button>
               <span id="statusTerminalNote" class="muted small" hidden>конечный статус, дальше не меняется</span>
-              <button class="help sm" type="button" data-help="status" aria-label="Пояснение: статус кейса">?</button>
+              <button class="help sm" type="button" data-help="status" aria-label="Пояснение: статус инцидента">?</button>
             </div>
             <div id="statusForm" class="status-form" hidden>
               <select id="statusFormSelect" aria-label="Новый статус"></select>
@@ -131,7 +133,7 @@
             <p id="dqReasons" class="muted small" hidden></p>
 
             <p id="caseXai" class="xai"></p>
-            <button class="link" type="button" data-help="xai">как собран кейс</button>
+            <button class="link" type="button" data-help="xai">как собран инцидент</button>
             <button class="link" type="button" data-help="clicks">почему кликов меньше</button>
           </div>
 
@@ -141,8 +143,8 @@
               <div class="head-actions">
                 <button id="briefButton" class="link" type="button">Сводка для руководителя</button>
                 <button id="reportButton" class="link" type="button">Паспорт инцидента</button>
-                <button class="help sm" type="button" data-help="report" aria-label="Пояснение: выходные документы по делу">?</button>
-                <button class="help" type="button" data-help="verdict" aria-label="Пояснение: вердикт по делу">?</button>
+                <button class="help sm" type="button" data-help="report" aria-label="Пояснение: выходные документы по инциденту">?</button>
+                <button class="help" type="button" data-help="verdict" aria-label="Пояснение: вердикт по инциденту">?</button>
               </div>
             </div>
             <div class="verdict-line">
@@ -192,7 +194,7 @@
             <div class="permit-actions">
               <button id="permitSubmit" class="action inline" type="button">Приложить</button>
               <button id="permitCancel" class="action inline" type="button">Отмена</button>
-              <span class="muted small">Сверку документа с делом выполняет продукт: совпадение актива, операции, исполнителя и окна работ. Интерфейс вердикт не считает.</span>
+              <span class="muted small">Сверку документа с инцидентом выполняет продукт: совпадение актива, операции, исполнителя и окна работ. Интерфейс вердикт не считает.</span>
             </div>
             <p id="permitError" class="relink-error small" hidden></p>
           </div>
@@ -251,23 +253,23 @@
             <div id="relinkPanel" class="relink" hidden>
               <div class="relink-row">
                 <span id="relinkSelected" class="muted small">Событий отмечено: 0</span>
-                <button id="detachButton" class="action inline" type="button" disabled>Отцепить от дела</button>
-                <button id="splitButton" class="action inline" type="button" disabled>Выделить в отдельное дело</button>
+                <button id="detachButton" class="action inline" type="button" disabled>Отцепить от инцидента</button>
+                <button id="splitButton" class="action inline" type="button" disabled>Выделить в отдельный инцидент</button>
                 <button id="attachOpen" class="action inline" type="button">Добавить событие</button>
-                <button id="mergeOpen" class="action inline" type="button">Присоединить дело</button>
-                <button class="help sm" type="button" data-help="relink" aria-label="Пояснение: корректировка состава дела">?</button>
+                <button id="mergeOpen" class="action inline" type="button">Присоединить инцидент</button>
+                <button class="help sm" type="button" data-help="relink" aria-label="Пояснение: корректировка состава инцидента">?</button>
               </div>
               <div class="relink-row">
                 <label for="relinkReason">Причина</label>
-                <input id="relinkReason" type="text" placeholder="обязательна: она уходит в журнал дела" maxlength="2000" />
+                <input id="relinkReason" type="text" placeholder="обязательна: она уходит в журнал инцидента" maxlength="2000" />
               </div>
               <p id="relinkError" class="relink-error small" hidden></p>
             </div>
 
             <div id="attachPanel" class="relink-form" hidden>
               <div class="relink-row">
-                <label for="attachQuery">Событие вне дела</label>
-                <select id="attachEntity" aria-label="Отбор по сущности дела"></select>
+                <label for="attachQuery">Событие вне инцидента</label>
+                <select id="attachEntity" aria-label="Отбор по сущности инцидента"></select>
                 <input id="attachQuery" type="search" placeholder="подстрока в содержимом события" />
                 <button id="attachSearch" class="action inline" type="button">Найти</button>
                 <button id="attachClose" class="action inline" type="button">Закрыть</button>
@@ -278,12 +280,12 @@
 
             <div id="mergePanel" class="relink-form" hidden>
               <div class="relink-row">
-                <label for="mergeSource">Присоединяемое дело</label>
+                <label for="mergeSource">Присоединяемый инцидент</label>
                 <select id="mergeSource" aria-label="Дело, которое вливается в открытое"></select>
                 <button id="mergeSubmit" class="action inline" type="button">Присоединить</button>
                 <button id="mergeClose" class="action inline" type="button">Закрыть</button>
               </div>
-              <p class="muted small">События выбранного дела переходят в открытое, а само оно получает статус «объединено». Действие записывается в журнал обоих дел и не отменяется — журнал только дополняется.</p>
+              <p class="muted small">События выбранного инцидента переходят в открытый, а сам он получает статус «объединено». Действие записывается в журнал обоих инцидентов и не отменяется — журнал только дополняется.</p>
             </div>
 
             <div class="table-scroll">
@@ -292,14 +294,14 @@
                   <tr>
                     <th id="relinkHeadCell" scope="col" class="relink-cell" hidden><span class="visually-hidden">Отметка события</span></th>
                     <th scope="col">Время, <span id="chainTimeZone">UTC</span> <button class="help sm" type="button" data-help="time_utc" aria-label="Пояснение: время события">?</button></th>
-                    <th scope="col">Основание <button class="help sm" type="button" data-help="evidence" aria-label="Пояснение: основание попадания события в кейс">?</button></th>
+                    <th scope="col">Основание <button class="help sm" type="button" data-help="evidence" aria-label="Пояснение: основание попадания события в инцидент">?</button></th>
                     <th scope="col">Источник <button class="help sm" type="button" data-help="source" aria-label="Пояснение: источник события">?</button></th>
-                    <th scope="col">Операция <button class="help sm" type="button" data-help="operation" aria-label="Пояснение: операция">?</button></th>
-                    <th scope="col">Узел <button class="help sm" type="button" data-help="entity_host" aria-label="Пояснение: узел">?</button></th>
-                    <th scope="col">Учётная запись <button class="help sm" type="button" data-help="entity_user" aria-label="Пояснение: учётная запись">?</button></th>
-                    <th scope="col">Процесс <button class="help sm" type="button" data-help="entity_process" aria-label="Пояснение: процесс">?</button></th>
-                    <th scope="col">Адрес <button class="help sm" type="button" data-help="entity_address" aria-label="Пояснение: адрес">?</button></th>
-                    <th scope="col">Артефакт <button class="help sm" type="button" data-help="artifact" aria-label="Пояснение: артефакт">?</button></th>
+                    <th scope="col" data-col="operation">Операция <button class="help sm" type="button" data-help="operation" aria-label="Пояснение: операция">?</button></th>
+                    <th scope="col" data-col="host">Узел <button class="help sm" type="button" data-help="entity_host" aria-label="Пояснение: узел">?</button></th>
+                    <th scope="col" data-col="user">Учётная запись <button class="help sm" type="button" data-help="entity_user" aria-label="Пояснение: учётная запись">?</button></th>
+                    <th scope="col" data-col="process">Процесс <button class="help sm" type="button" data-help="entity_process" aria-label="Пояснение: процесс">?</button></th>
+                    <th scope="col" data-col="address">Адрес <button class="help sm" type="button" data-help="entity_address" aria-label="Пояснение: адрес">?</button></th>
+                    <th scope="col" data-col="artifact">Артефакт <button class="help sm" type="button" data-help="artifact" aria-label="Пояснение: артефакт">?</button></th>
                   </tr>
                 </thead>
                 <tbody id="chainBody"></tbody>
@@ -322,13 +324,13 @@
             </div>
             <p id="reconstructionEntry" class="muted small pad">—</p>
             <ol id="reconstructionSteps" class="plain"></ol>
-            <p class="muted small">Реконструкция строится по событиям кейса и требует проверки аналитиком: связь по времени и узлу не означает причинности.</p>
+            <p class="muted small">Реконструкция строится по событиям инцидента и требует проверки аналитиком: связь по времени и узлу не означает причинности.</p>
           </div>
 
           <div class="block">
             <div class="block-head">
-              <h4>Связанные кейсы</h4>
-              <button class="help" type="button" data-help="related_cases" aria-label="Пояснение: связанные кейсы">?</button>
+              <h4>Связанные инциденты</h4>
+              <button class="help" type="button" data-help="related_cases" aria-label="Пояснение: связанные инциденты">?</button>
             </div>
             <div id="relatedCasesList" class="chips"></div>
           </div>
@@ -385,7 +387,7 @@
           <input id="findingComment" type="text" placeholder="комментарий (необязательно)" maxlength="2000" />
           <button id="addFinding" class="action" type="button">Добавить в находки</button>
           <p id="findingRoleNote" class="muted small" hidden>Роль работает только на чтение: находки записывает первая линия.</p>
-          <h3 class="entity-subhead">Связанные кейсы</h3>
+          <h3 class="entity-subhead">Связанные инциденты</h3>
           <div id="entityRelatedCases" class="chips"></div>
           <h3 class="entity-subhead">Окружение</h3>
           <ul id="entityEnvironment" class="plain small"></ul>
@@ -405,7 +407,7 @@
         <button class="help" type="button" data-help="simulation" aria-label="Пояснение: вкладка симуляции">?</button>
       </div>
 
-      <p id="simEmpty" class="muted pad">Выберите кейс в очереди на вкладке «Расследование».</p>
+      <p id="simEmpty" class="muted pad">Выберите инцидент в очереди на вкладке «Расследование».</p>
 
       <div id="simBody" hidden>
         <div class="block">
@@ -517,6 +519,69 @@
       </div>
     </section>
 
+
+    <!-- Настройки продукта. Отдельным окном, а не полями в панели очереди: их правят раз в
+         несколько смен, а место в рабочей области они занимали бы всю смену. Разметка стоит
+         здесь, а не собирается кодом, чтобы у каждого поля была кнопка пояснения из реестра. -->
+    <section id="configPanel" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="configTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3 id="configTitle">Конфигурация продукта</h3>
+          <button id="configClose" class="modal-close" type="button" aria-label="Закрыть">×</button>
+        </div>
+        <div class="modal-body">
+          <p id="configVersion" class="muted small">—</p>
+
+          <p class="modal-section">Веса факторов риска
+            <button class="help sm" type="button" data-help="risk_weights" aria-label="Пояснение: веса оценки риска">?</button>
+          </p>
+          <div class="permit-grid config-grid">
+            <label for="weightRhythm">Частота возникновения</label>
+            <input id="weightRhythm" type="number" min="0" max="1" step="0.01" />
+            <label for="weightGraph">Связи</label>
+            <input id="weightGraph" type="number" min="0" max="1" step="0.01" />
+            <label for="weightContext">Контекст</label>
+            <input id="weightContext" type="number" min="0" max="1" step="0.01" />
+            <label for="weightUser">Учётная запись</label>
+            <input id="weightUser" type="number" min="0" max="1" step="0.01" />
+            <label for="weightDataQuality">Качество данных</label>
+            <input id="weightDataQuality" type="number" min="0" max="1" step="0.01" />
+          </div>
+          <p id="configWeightSum" class="muted small">—</p>
+
+          <p class="modal-section">Пороги классов риска</p>
+          <div class="permit-grid config-grid">
+            <label for="thresholdCritical">Критический</label>
+            <input id="thresholdCritical" type="number" min="0" max="1" step="0.01" />
+            <label for="thresholdHigh">Высокий</label>
+            <input id="thresholdHigh" type="number" min="0" max="1" step="0.01" />
+            <label for="thresholdMedium">Средний</label>
+            <input id="thresholdMedium" type="number" min="0" max="1" step="0.01" />
+          </div>
+
+          <p class="modal-section">Причина правки</p>
+          <div class="permit-grid config-grid">
+            <label for="configReason">Причина</label>
+            <input id="configReason" type="text" maxlength="2000" placeholder="обязательна: уходит в журнал вместе с версией" />
+          </div>
+          <p id="configError" class="relink-error small" hidden></p>
+          <div class="permit-actions">
+            <button id="configSave" class="action inline" type="button">Записать веса и пороги</button>
+            <span id="configSaveNote" class="muted small">Уже собранные инциденты не пересчитываются: набор действует на последующие.</span>
+          </div>
+
+          <p class="modal-section">Сборка инцидентов
+            <button class="help sm" type="button" data-help="assemble_threshold" aria-label="Пояснение: порог отличительности">?</button>
+          </p>
+          <div class="permit-grid config-grid">
+            <label for="assembleThreshold">Порог редкости сущности</label>
+            <input id="assembleThreshold" type="number" min="1" max="1000" step="1" placeholder="12" />
+          </div>
+          <p class="muted small">Значение уходит параметром в запрос сборки и в конфигурацию продукта не записывается: кнопка «Записать» его не касается.</p>
+        </div>
+      </div>
+    </section>
+
     <div id="modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-card">
         <div class="modal-head">
@@ -531,7 +596,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260904-05"></script>
-    <script src="./app.min.js?v=20260904-05"></script>
+    <script src="./env.js?v=20260904-06"></script>
+    <script src="./app.min.js?v=20260904-06"></script>
   </body>
 </html>

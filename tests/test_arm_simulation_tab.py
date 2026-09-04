@@ -131,7 +131,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260904-05"}, versions
+    assert versions >= {"20260904-06"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -353,7 +353,7 @@ def test_assistant_entry_describes_the_pipeline_as_an_ordered_algorithm() -> Non
     block = app[start : app.index(chr(10) + "  },", start)]
 
     assert "steps: [" in block, "алгоритм подан не по шагам"
-    for stage in ("Приём", "Оценка риска", "Сборка дела", "вердикт", "Пакет реагирования"):
+    for stage in ("Приём", "Оценка риска", "Сборка инцидента", "вердикт", "Пакет реагирования"):
         assert stage in block, f"в алгоритме нет шага «{stage}»"
     # Ассистент не должен выглядеть исполнителем: реагирование остаётся рекомендацией.
     assert "не выполняет" in block
@@ -758,11 +758,11 @@ def test_group_filter_does_not_pretend_to_be_the_search_field() -> None:
 
 
 def test_counters_agree_with_russian_numerals() -> None:
-    """«284 дела» и «1 дело» — подпись собирается интерфейсом и в ответе продукта не приходит."""
+    """«284 инцидента» и «1 инцидент» — подпись собирается интерфейсом и в ответе продукта не приходит."""
     app = _app()
 
     assert "function plural(" in app
-    assert "'дело', 'дела', 'дел'" in app
+    assert "'инцидент', 'инцидента', 'инцидентов'" in app
 
 # --- Выходные документы по делу (P3-4) --------------------------------------
 

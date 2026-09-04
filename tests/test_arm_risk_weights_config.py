@@ -25,19 +25,32 @@ def test_config_button_is_in_the_header() -> None:
     assert "$('#configOpen').addEventListener('click', openRiskWeightsConfig)" in _APP
 
 
-def test_config_button_is_shown_only_to_the_administrator() -> None:
-    """Недоступное роли действие скрывается, а не отвечает отказом после нажатия."""
+def test_only_the_administrator_can_write_the_weights() -> None:
+    """Окно открыто любой роли: порог сборки — настройка рабочего места.
+
+    Скрывается не окно, а запись. Поля весов остаются видимыми: по ним аналитик понимает,
+    как считается балл, который он разбирает, — а недоступное роли действие не должно
+    отвечать отказом после нажатия.
+    """
     start = _APP.index("function applyPermissions(")
     block = _APP[start : _APP.index("\n}", start)]
 
     assert "permissions().administration" in block
-    assert "$('#configOpen').hidden" in block
-    assert "$('#configHelp').hidden" in block
+    assert "$('#configSave').hidden = !canAdminister" in block
+    assert "disabled = !canAdminister" in block
+
+
+def test_settings_live_in_their_own_window_not_in_the_queue() -> None:
+    """Порог сборки правят раз в несколько смен, а место в панели очереди занимал бы всю смену."""
+    assert 'id="configPanel"' in _INDEX
+    assert 'id="assembleThreshold"' in _INDEX
+    queue = _INDEX[_INDEX.index('<div class="queue-actions">') : _INDEX.index('id="assembleRoleNote"')]
+    assert "assembleThreshold" not in queue
 
 
 def test_form_reads_and_writes_the_product_route() -> None:
     """Тот же файл конфигурации, что правится на сервере, а не копия набора в браузере."""
-    start = _APP.index("async function openRiskWeightsConfig(")
+    start = _APP.index("// --- Конфигурация: веса оценки риска ---")
     block = _APP[start : _APP.index("\nfunction openAccessKeyForm(", start)]
 
     assert "api('/config/risk-weights')" in block
@@ -47,7 +60,7 @@ def test_form_reads_and_writes_the_product_route() -> None:
 
 def test_reason_is_required_before_writing() -> None:
     """Причина уходит в журнал вместе с версией: без неё правка не объяснена ничем."""
-    start = _APP.index("async function openRiskWeightsConfig(")
+    start = _APP.index("// --- Конфигурация: веса оценки риска ---")
     block = _APP[start : _APP.index("\nfunction openAccessKeyForm(", start)]
 
     assert "Причина обязательна" in block
@@ -56,7 +69,7 @@ def test_reason_is_required_before_writing() -> None:
 
 def test_sum_of_weights_is_shown_before_the_answer() -> None:
     """Иначе несбалансированный набор выясняется только отказом, и непонятно, что править."""
-    start = _APP.index("async function openRiskWeightsConfig(")
+    start = _APP.index("// --- Конфигурация: веса оценки риска ---")
     block = _APP[start : _APP.index("\nfunction openAccessKeyForm(", start)]
 
     assert "Сумма весов" in block
@@ -65,10 +78,10 @@ def test_sum_of_weights_is_shown_before_the_answer() -> None:
 
 def test_window_says_that_collected_cases_are_not_recomputed() -> None:
     """Новый набор действует на последующие дела: молчание об этом читалось бы как пересчёт."""
-    start = _APP.index("async function openRiskWeightsConfig(")
+    start = _APP.index("// --- Конфигурация: веса оценки риска ---")
     block = _APP[start : _APP.index("\nfunction openAccessKeyForm(", start)]
 
-    assert "не пересчитываются" in block
+    assert "не пересчитываются" in block or "не пересчитываются" in _INDEX
 
 
 def test_help_entry_explains_the_version_and_the_sum() -> None:

@@ -495,6 +495,74 @@ body {
   border-color: var(--warn);
 }
 
+/* Скрытая колонка цепочки: пустая во всех показанных событиях. Прячется по метке
+   `data-col`, а не по позиции — позиция сдвигается вместе с колонкой отметки. */
+table.chain.hide-host [data-col="host"],
+table.chain.hide-user [data-col="user"],
+table.chain.hide-process [data-col="process"],
+table.chain.hide-address [data-col="address"],
+table.chain.hide-artifact [data-col="artifact"] {
+  display: none;
+}
+
+/* Свёрнутая серия одинаковых событий. */
+.series-toggle {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px 0 0;
+}
+
+.series-toggle:hover {
+  color: var(--accent);
+}
+
+.series-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+table.chain tr.row-series-member td:first-child {
+  padding-left: 18px;
+}
+
+/* Актив дела в карточке очереди: аналитик ищет очередь по активу, а не по коду правила. */
+.queue-where {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Шапка: три группы вместо ряда равнозначных элементов — справка, доступ, состояние.
+   Одиннадцать кнопок одним весом читались как один длинный список, в котором состояние связи
+   стоит рядом с настройками. Блок названия не переносится: на 800 px он ломался на три
+   строки и превращал левый угол в лестницу. */
+.top-title {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.top-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-group + .top-group {
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.top-status {
+  color: var(--muted);
+}
+
 .missing-block {
   border-left: 2px solid var(--warn);
 }
@@ -791,12 +859,28 @@ ul.plain li {
 }
 
 .journal-item {
-  display: block;
+  /* Время, автор и действие — тремя колонками: взгляд идёт по автору сверху вниз, а не ищет
+     его в середине строки. */
+  display: grid;
+  grid-template-columns: minmax(auto, 12.5em) minmax(auto, 8em) minmax(0, 1fr);
+  gap: 2px 10px;
+  align-items: baseline;
   /* Записи журнала несут неразрывные значения — доменные имена, идентификаторы артефактов,
      контрольные суммы. Без принудительного переноса строка вылезает за панель, а
      `.panel { overflow: hidden }` её обрезает: на узком экране конец записи недостижим,
      и по журналу нельзя прочитать, кто и что сделал. */
   overflow-wrap: anywhere;
+}
+
+.journal-action {
+  min-width: 0;
+}
+
+/* Узкая панель: колонки складываются в строки, иначе действие остаётся без места. */
+@media (max-width: 1200px) {
+  .journal-item {
+    grid-template-columns: 1fr;
+  }
 }
 
 .journal-time {
