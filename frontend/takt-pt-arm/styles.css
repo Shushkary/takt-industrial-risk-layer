@@ -812,19 +812,31 @@ table.chain {
    Колонок девять: к узлу и учётной записи добавлен процесс — третья сущность, по которой
    продукт отдаёт карточку истории. Место под неё взято у времени и операции, а не у узла и
    учётной записи: усечь идентификатор узла значило бы усечь то, по чему принимается
-   решение. */
+   решение.
+
+   Адрес и процесс сначала делили долю поровну, и адрес не помещался: `203.0.113.77` — двенадцать
+   знаков, и на 9 % колонка обрывала его на середине. Доля перенесена к адресу дважды: 4 % от
+   процесса и 4 % от класса источника, итого 17 %. Основание: адрес — то, что аналитик
+   предъявляет как признак внешнего участника и по чему ищет в соседних системах, и у сетевого
+   сенсора он приходит парой `источник → назначение` (около 25 знаков), которая в меньшую долю
+   не помещается вовсе — на 17 % не хватало шестнадцати пикселей, и перенос был оплачен без
+   результата. Итог: 19 % — 4 % от процесса, 4 % от класса источника, 2 % от основания.
+   Имя процесса узнаётся по началу строки (`powershell.exe`, `lsass.exe`), у класса источника
+   всего четыре значения и любое опознаётся по первому слову, а у основания их четыре коротких
+   («ядро», «расширение», «правка аналитика», «—»); полные значения всех трёх остаются в
+   подсказке. Отступы у ячейки адреса уже нулевые — сокращать было нечего. */
 /* Состав дела: доли считаются от конца ряда. Слева у этой таблицы стоит необязательная
    колонка отметки — она появляется только у роли, которая вправе править состав дела. При
    счёте от начала эта колонка забирала долю времени (161 px под флажок), всё смещалось на
    один шаг, и последняя колонка оставалась без ширины: «Артефакт» схлопывался в ноль. */
 table.chain-case th:nth-last-child(9), table.chain-case td:nth-last-child(9) { width: 18%; }
-table.chain-case th:nth-last-child(8), table.chain-case td:nth-last-child(8) { width: 11%; }
-table.chain-case th:nth-last-child(7), table.chain-case td:nth-last-child(7) { width: 10%; }
+table.chain-case th:nth-last-child(8), table.chain-case td:nth-last-child(8) { width: 9%; }
+table.chain-case th:nth-last-child(7), table.chain-case td:nth-last-child(7) { width: 6%; }
 table.chain-case th:nth-last-child(6), table.chain-case td:nth-last-child(6) { width: 15%; }
 table.chain-case th:nth-last-child(5), table.chain-case td:nth-last-child(5) { width: 11%; }
 table.chain-case th:nth-last-child(4), table.chain-case td:nth-last-child(4) { width: 10%; }
-table.chain-case th:nth-last-child(3), table.chain-case td:nth-last-child(3) { width: 9%; }
-table.chain-case th:nth-last-child(2), table.chain-case td:nth-last-child(2) { width: 9%; }
+table.chain-case th:nth-last-child(3), table.chain-case td:nth-last-child(3) { width: 5%; }
+table.chain-case th:nth-last-child(2), table.chain-case td:nth-last-child(2) { width: 19%; }
 table.chain-case th:nth-last-child(1), table.chain-case td:nth-last-child(1) { width: 7%; }
 
 /* Колонка отметки не участвует в долях: её ширина задана в пикселях под флажок. */
