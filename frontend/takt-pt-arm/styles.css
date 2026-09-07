@@ -814,6 +814,10 @@ table.chain {
    учётной записи: усечь идентификатор узла значило бы усечь то, по чему принимается
    решение.
 
+   Доля процесса потом частично вернулась: на 5 % колонка не вмещала даже собственное название
+   и показывала «Процес». Два процента взяты у операции — её коды длиннее любой доли и
+   усекаются при любой ширине.
+
    Адрес и процесс сначала делили долю поровну, и адрес не помещался: `203.0.113.77` — двенадцать
    знаков, и на 9 % колонка обрывала его на середине. Доля перенесена к адресу дважды: 4 % от
    процесса и 4 % от класса источника, итого 17 %. Основание: адрес — то, что аналитик
@@ -832,10 +836,10 @@ table.chain {
 table.chain-case th:nth-last-child(9), table.chain-case td:nth-last-child(9) { width: 21ch; }
 table.chain-case th:nth-last-child(8), table.chain-case td:nth-last-child(8) { width: 9%; }
 table.chain-case th:nth-last-child(7), table.chain-case td:nth-last-child(7) { width: 6%; }
-table.chain-case th:nth-last-child(6), table.chain-case td:nth-last-child(6) { width: 15%; }
+table.chain-case th:nth-last-child(6), table.chain-case td:nth-last-child(6) { width: 13%; }
 table.chain-case th:nth-last-child(5), table.chain-case td:nth-last-child(5) { width: 11%; }
 table.chain-case th:nth-last-child(4), table.chain-case td:nth-last-child(4) { width: 10%; }
-table.chain-case th:nth-last-child(3), table.chain-case td:nth-last-child(3) { width: 5%; }
+table.chain-case th:nth-last-child(3), table.chain-case td:nth-last-child(3) { width: 7%; }
 table.chain-case th:nth-last-child(2), table.chain-case td:nth-last-child(2) { width: 19%; }
 table.chain-case th:nth-last-child(1), table.chain-case td:nth-last-child(1) { width: 7%; }
 
@@ -895,6 +899,14 @@ table.chain thead th {
    Переносить нельзя: перенос рвал `PROCESS_START` на «PROCESS_S / TART», а адрес — на пять
    строк, то есть портил именно то значение, которое аналитик предъявляет как доказательство. */
 table.chain td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Заголовок усекается многоточием так же, как значение. Без этого «Процесс» на узкой колонке
+   превращался в «Процес» — обрубок без знака продолжения читается как опечатка в продукте, а
+   не как нехватка места. */
+table.chain th {
   overflow: hidden;
   text-overflow: ellipsis;
 }
