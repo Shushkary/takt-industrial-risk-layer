@@ -271,3 +271,113 @@ def test_effort_counters_show_the_total_before_the_player_is_touched() -> None:
     assert "alongPlayer(effort.takt_actions)" in block
     # Ход за плеером сохраняется: это по-прежнему накопительные счётчики.
     assert "cumulative(total || 0, steps, simCursor)" in block
+
+
+# --- Работа за смену -------------------------------------------------------
+
+
+def test_decision_bar_stays_visible_while_scrolling() -> None:
+    """Экран расследования — тринадцать блоков: вердикт уходит с экрана первым.
+
+    К «Вариантам реагирования» аналитик уже не видел, какой вердикт он обосновывает.
+    """
+    assert 'id="caseBar"' in _INDEX
+    rule = re.search(r"\.case-bar \{(.*?)\}", _STYLES, re.DOTALL)
+    assert rule is not None
+    assert "position: sticky" in rule.group(1)
+    # `overflow: hidden` на панели сделал бы её контейнером прокрутки, и полоса не липла бы.
+    panel = re.findall(r"\n\.panel \{(.*?)\}", _STYLES, re.DOTALL)
+    assert panel, "правило .panel не найдено"
+    assert any("overflow: clip" in block for block in panel)
+
+
+def test_decision_buttons_reuse_the_domain_transitions() -> None:
+    """Свой список статусов предлагал бы переходы, которые домен отклонит."""
+    start = _APP.index("function openDecision(")
+    block = _APP[start : _APP.index("\n}", start)]
+    assert "openStatusForm()" in block
+
+    bar = _APP[_APP.index("function renderCaseBar(") : _APP.index("\n// Блоки, которые")]
+    # Кнопки строятся по переходам домена, а не по списку статусов, записанному в окне:
+    # свой список предлагал бы тупиковые варианты и завёл бы второй словарь статусов.
+    assert "for (const code of currentCaseTransitions)" in bar
+    assert "term('case_status', code)" in bar
+
+
+def test_empty_blocks_collapse_but_the_answer_stays_open() -> None:
+    """Половина из тринадцати блоков пуста, и заголовки занимали столько же места."""
+    assert "function refreshBlockCollapse(" in _APP
+    assert "ALWAYS_OPEN_BLOCKS" in _APP
+    start = _APP.index("const ALWAYS_OPEN_BLOCKS")
+    line = _APP[start : start + 200]
+    for title in ("Вердикт", "Чего не хватает", "Цепочка событий"):
+        assert title in line, f"блок «{title}» может свернуться сам"
+
+
+def test_queue_can_be_paged_past_the_first_hundred() -> None:
+    """«Показано 100 из 500» было честным, но тупиковым: остальные доставались только фильтром."""
+    assert 'id="queueMore"' in _INDEX
+    assert "queueLimit += QUEUE_PAGE_LIMIT" in _APP
+    assert "function resetQueueLimit(" in _APP
+    # Смена отбора возвращает к первой странице, иначе окно тянет страницы под прежний набор.
+    assert "refreshFromFirstPage" in _APP
+
+
+def test_keyboard_walks_the_queue() -> None:
+    """Разбор очереди — самый частый жест за смену, и он был весь мышью."""
+    start = _APP.index("// --- Клавиатура ---")
+    block = _APP[start : _APP.index("// --- Полоса решения", start)]
+
+    assert "ArrowDown" in block and "ArrowUp" in block
+    assert "QUEUE_STEP_DELAY_MS" in block, "удержанная стрелка слала бы запрос на каждый шаг"
+    assert "keyboardIsBusy" in block, "«/» в поле поиска — символ, а не команда"
+
+
+def test_bulk_decision_reads_the_selection_from_the_product() -> None:
+    """Размечать «то, что видно» значило бы размечать случайный срез дозагруженной очереди."""
+    start = _APP.index("async function submitBulkDecision(")
+    block = _APP[start : _APP.index("\n}\n", start)]
+
+    assert "queueQueryString()" in block
+    assert "BULK_DECISION_MAX" in block
+    # Решение по каждому инциденту — отдельная запись журнала со своей причиной.
+    assert "/decision" in block
+    assert "failures" in block, "отказ по одному инциденту должен быть назван"
+
+
+def test_side_column_gives_its_width_back_when_empty() -> None:
+    """Треть ширины экрана простаивала под две строки «нет»."""
+    assert "function refreshSideColumn(" in _APP
+    assert ".layout.side-idle" in _STYLES
+
+
+def test_new_incidents_are_marked() -> None:
+    """Очередь опрашивается раз в 15 с, и вернувшийся к экрану не знал, что прибыло."""
+    assert "function markFreshCases(" in _APP
+    assert "queueFreshIds" in _APP
+    assert "fresh-dot" in _INDEX or "fresh-dot" in _APP
+    # Открытый инцидент перестаёт быть новостью.
+    start = _APP.index("async function openCase(")
+    assert "queueFreshIds.delete(caseId)" in _APP[start : start + 300]
+
+
+def test_entity_card_says_how_the_entity_was_marked_before() -> None:
+    """«Этот адрес трижды признавали штатным» — самый дешёвый способ закрыть инцидент."""
+    assert "function renderEntityDecisions(" in _APP
+    start = _APP.index("function renderEntityDecisions(")
+    block = _APP[start : _APP.index("\n}", start)]
+    assert "статус известен у" in block, "неполнота выборки должна быть названа"
+
+
+def test_effort_caveats_are_shown_next_to_the_numbers() -> None:
+    """Продукт возвращает оговорки в том же ответе, что и числа, а окно показывало только числа.
+
+    Отдельно называется то, чего в счётчиках не видно: числитель соотношения измерен по
+    журналу, а знаменатель посчитан моделью.
+    """
+    assert 'id="effortCaveats"' in _INDEX
+    start = _APP.index("function renderEffortCaveats(")
+    block = _APP[start : _APP.index("\n}", start)]
+
+    assert "effort.caveats" in block
+    assert "current_actions_measured" in block and "takt_actions_measured" in block

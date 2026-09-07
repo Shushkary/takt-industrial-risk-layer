@@ -157,6 +157,49 @@ body {
   align-items: start;
 }
 
+/* Пока сущность не выбрана и находок нет, третья колонка держит 300 px под две строки «нет».
+   Место отдаётся разбору: панель сворачивается в узкую полосу с заголовками и разворачивается
+   сама, как только в ней появляется содержимое. */
+.layout.side-idle {
+  grid-template-columns: 300px minmax(0, 1fr) 44px;
+}
+
+.layout.side-idle .panel.side {
+  overflow: clip;
+}
+
+.layout.side-idle .panel.side .panel-head h2,
+.layout.side-idle .panel.side .entity-subhead {
+  writing-mode: vertical-rl;
+  white-space: nowrap;
+}
+
+.layout.side-idle .panel.side .muted,
+.layout.side-idle .panel.side .help,
+.layout.side-idle .panel.side ul,
+.layout.side-idle .panel.side p {
+  display: none;
+}
+
+@media (max-width: 1200px) {
+  /* На узком экране колонки идут одна под другой, и сворачивать нечего. */
+  .layout.side-idle {
+    grid-template-columns: 1fr;
+  }
+
+  .layout.side-idle .panel.side .panel-head h2,
+  .layout.side-idle .panel.side .entity-subhead {
+    writing-mode: horizontal-tb;
+  }
+
+  .layout.side-idle .panel.side .muted,
+  .layout.side-idle .panel.side .help,
+  .layout.side-idle .panel.side ul,
+  .layout.side-idle .panel.side p {
+    display: revert;
+  }
+}
+
 @media (max-width: 1200px) {
   .layout {
     grid-template-columns: 1fr;
@@ -578,6 +621,152 @@ table.chain tr.row-series-member td:first-child {
 
 .top-status {
   color: var(--muted);
+}
+
+/* Панель клипует углы, но не должна быть контейнером прокрутки: при `overflow: hidden`
+   `position: sticky` внутри неё разрешается относительно самой панели, которая не
+   прокручивается, и полоса решения никуда не липнет. `clip` режет то же самое, но
+   контейнера прокрутки не создаёт. */
+.panel {
+  overflow: clip;
+}
+
+/* Полоса решения: держится у верхнего края, пока аналитик идёт по инциденту вниз. */
+.case-bar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.case-bar-facts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.case-bar-facts .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 22ch;
+}
+
+.case-bar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.verdict.sm {
+  font-size: 11px;
+  padding: 1px 8px;
+}
+
+/* Сворачивание блоков. Блок без содержимого сворачивается сам: тринадцать заголовков подряд,
+   под половиной из которых написано «нет», — это не состав инцидента, а список того, чего в
+   нём не нашлось. */
+.block-toggle {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px 0 0;
+}
+
+.block-toggle:hover {
+  color: var(--accent);
+}
+
+.block.collapsed .block-body {
+  display: none;
+}
+
+.block.collapsed .block-head {
+  margin-bottom: 0;
+}
+
+/* Кнопка сворачивания встала первым элементом шапки, и `space-between` развёл уже три
+   элемента по краям — заголовок оказался посередине строки. Заголовок прижимается влево,
+   действия блока остаются справа. */
+.block-head h4 {
+  margin-right: auto;
+}
+
+.block-empty-note {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Дозагрузка очереди: продукт честно возвращает общее число, но до остальных инцидентов
+   без этой кнопки было не добраться — только сужением фильтра. */
+.queue-more {
+  display: flex;
+  justify-content: center;
+  padding-top: 0;
+}
+
+/* Разметка отбора целиком: действие редкое и необратимое, поэтому не кнопка в ряду с
+   фильтрами, а ссылка, разворачивающая форму с причиной и числом инцидентов. */
+.bulk-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 0;
+}
+
+.bulk-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 0;
+}
+
+.bulk-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Инцидент, появившийся после открытия окна. Очередь опрашивается раз в 15 с, и без метки
+   вернувшийся к экрану аналитик не знает, что прибыло. */
+.queue-item .fresh-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.queue-fresh {
+  color: var(--accent);
+}
+
+/* Оговорки продукта под счётчиками: читаются как сноска, а не как предупреждение об ошибке —
+   это условия расчёта, а не сбой. */
+.caveats {
+  margin: 10px 0 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.caveats li {
+  margin-bottom: 2px;
 }
 
 .missing-block {

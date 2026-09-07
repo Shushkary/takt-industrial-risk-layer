@@ -148,10 +148,27 @@ const HELP = {
     action: 'Начинать смену с фильтра по классу риска и статусу «новое». Поток однотипных одиночных срабатываний с одинаковым баллом — материал для правки правила, а не для разбора поштучно.',
     doc: 'docs/customer_value_map.md',
   },
+  decision: {
+    title: 'Решение по инциденту',
+    what: 'Кнопки в полосе наверху — переходы статуса, разрешённые из текущего состояния инцидента. Нажатие открывает форму с выбранным статусом; причина обязательна.',
+    source: 'Список переходов считает домен и отдаёт в карточке инцидента (`allowed_status_transitions`). Своего списка окно не держит: он предлагал бы варианты, которые продукт отклонит.',
+    action: 'Закрывать инцидент тем статусом, который отвечает на вопрос «что это было»: подтверждено, ложное срабатывание или штатное действие. Причина уходит в журнал и остаётся в доказательном пакете.',
+    doc: 'docs/pt_techlab/analyst_window.md',
+  },
+
+  bulk_decision: {
+    title: 'Разметка отбора целиком',
+    what: 'Одно решение на все инциденты текущего отбора очереди: статус и причина уходят в каждый инцидент отдельно.',
+    source: 'Состав отбора берётся у продукта тем же запросом, что и очередь, а не по тому, что видно на экране: список мог быть дозагружен частично. За один раз размечается не более 200 инцидентов.',
+    action: 'Сначала сузить отбор до однотипных срабатываний — разрезом «по правилам» или фильтрами — и убедиться по списку, что в нём именно они. Отменить разметку нельзя: журнал инцидента только дополняется.',
+    doc: 'docs/pt_techlab/analyst_window.md',
+  },
+
   queue_groups: {
     title: 'Сведение однотипных инцидентов',
     what: '«Инциденты» — очередь как она есть. «По узлам» — однотипные срабатывания одного узла одной строкой. «По правилам» — то же без учёта узла: сколько инцидентов породила каждая операция.',
     source: 'Сведение выполняет продукт, а не браузер: очередь показывается страницами, и группировка загруженной страницы считала бы сотню инцидентов из нескольких сотен и молча ошибалась бы в счётчике. Однотипность определяется активом, операцией и классом риска; время в ключ не входит намеренно — собственная дедупликация продукта работает по корзине времени и одинаковые срабатывания в разные минуты не сводит.',
+    keys: '↑ и ↓ — следующий и предыдущий инцидент с открытием, Enter — открыть выбранный, «/» — перейти в поле поиска.',
     action: 'Начинать смену с разреза «по правилам»: строка на несколько десятков инцидентов — это материал для правки правила, а не для разбора поштучно. Переход по строке открывает инциденты за ней. Ни один инцидент при этом не меняется и ни с чем не сливается: сведение — способ показа, а не сборки.',
     doc: 'docs/customer_value_map.md',
   },
@@ -777,7 +794,7 @@ function renderQueue() {
     button.title = String(item.title || '');
     button.innerHTML = `
       <span class="queue-top">
-        <span class="case-id">${escapeHtml(item.case_id)}</span>
+        <span class="case-id">${queueFreshIds.has(item.case_id) ? '<span class="fresh-dot" title="Появился после открытия окна"></span>' : ''}${escapeHtml(item.case_id)}</span>
         <span class="risk ${escapeHtml(String(item.risk_class || '').toLowerCase())}">${escapeHtml(term('risk_class', item.risk_class))}</span>
       </span>
       <span class="queue-title${headline.code ? ' mono' : ''}">${escapeHtml(headline.text)}</span>
@@ -803,6 +820,7 @@ function updateActiveQueueItem() {
 
 async function openCase(caseId) {
   selectedCaseId = caseId;
+  queueFreshIds.delete(caseId);
   // Сущность принадлежит кейсу, из которого её открыли: при смене кейса панель очищается,
   // иначе «Добавить в находки» запишет в новый кейс сущность из прежнего.
   resetEntityPanel();
@@ -812,6 +830,9 @@ async function openCase(caseId) {
   try {
     const workspace = await api(`/cases/${encodeURIComponent(caseId)}/workspace`);
     renderCase(workspace);
+    // Пустота блока определяется по отрисованному составу, а не по ответу продукта: часть
+    // блоков собирается несколькими запросами и наполняется позже отрисовки карточки.
+    refreshBlockCollapse();
   } catch (error) {
     $('#workBody').hidden = true;
     $('#workEmpty').hidden = false;
@@ -832,6 +853,7 @@ function renderCase(workspace) {
   closePermitForm();
   $('#caseId').textContent = item.case_id || '—';
   $('#caseStatus').textContent = term('case_status', item.status);
+  renderCaseBar(item, null);
   // Заголовок раскладывается тем же правилом, что и в очереди: класс риска стоит рядом
   // отдельным полем, повторять его в заголовке незачем. Полный заголовок продукта остаётся
   // в подсказке.
@@ -868,6 +890,7 @@ function renderCase(workspace) {
   renderExpandBlock();
   renderPermits(item.manual_permits || []);
   renderFindings(item.findings || []);
+  refreshSideColumn();
   renderJournal(item.audit_log || []);
 }
 
@@ -1005,6 +1028,9 @@ async function verifyAuditLedger() {
 
 function renderConfidence(confidence) {
   const badge = $('#verdictBadge');
+  // Полоса решения показывает тот же вердикт, что и блок: считает его продукт, здесь
+  // только перенос значения.
+  renderCaseBar(lastCaseSummary, confidence);
 
   if (!confidence) {
     badge.textContent = '—';
@@ -2110,12 +2136,17 @@ function resetEntityPanel() {
   $('#entityId').textContent = '';
   $('#entityType').textContent = '—';
   $('#entityFacts').replaceChildren();
+  $('#entityDecisions').hidden = true;
   $('#entityRelatedCases').replaceChildren();
   $('#entityEnvironment').replaceChildren();
   $('#findingComment').value = '';
+  refreshSideColumn();
 }
 
 async function openEntity(type, id) {
+  // Колонка разворачивается заранее: содержимое приедет ответом продукта, а ширина нужна уже
+  // сейчас, иначе карточка отрисуется в свёрнутой полосе.
+  document.querySelector('.layout')?.classList.remove('side-idle');
   selectedEntity = { type, id };
   $('#entityEmpty').hidden = true;
   $('#entityBody').hidden = false;
@@ -2160,6 +2191,7 @@ async function openEntity(type, id) {
     }
     // Связанные кейсы — отдельным блоком во всю ширину панели, а не ячейкой списка фактов:
     // в колонке 127 px чипы встают в столбец и растягивают карточку на 660 px.
+    renderEntityDecisions(card.related_cases || []);
     fillCaseChips($('#entityRelatedCases'), card.related_cases || [], 'связанных инцидентов нет');
     const recent = (card.environment || []).slice(0, 10);
     if (!recent.length) {
@@ -2295,6 +2327,7 @@ const HELP_SECTIONS = [
   ['what', 'Что это'],
   ['source', 'Откуда'],
   ['action', 'Что делать'],
+  ['keys', 'Клавиши'],
 ];
 
 // База адресов документации. Документы лежат в репозитории рядом с продуктом; на стенде их
@@ -2447,6 +2480,445 @@ function applyPermissions() {
   $('#configSaveNote').textContent = canAdminister
     ? 'Уже собранные инциденты не пересчитываются: набор действует на последующие.'
     : 'Правка весов и порогов доступна администратору. Порог сборки ниже правится любой ролью.';
+}
+
+// Как эту сущность размечали раньше. Самый дешёвый способ закрыть инцидент — увидеть, что по
+// этому же адресу или учётной записи решение уже принимали: «трижды признавали штатным» — это
+// ответ, за которым иначе идут в чужие заметки.
+//
+// Статусы берутся из уже загруженной очереди, а не запрашиваются по одному: очередь и так
+// содержит разбираемый поток, а отдельный запрос на каждый связанный инцидент превратил бы
+// открытие карточки сущности в десяток обращений. Поэтому подпись честно называет, у скольких
+// связанных инцидентов статус известен.
+function renderEntityDecisions(relatedCases) {
+  const line = $('#entityDecisions');
+  const ids = relatedCases || [];
+  if (!ids.length) {
+    line.hidden = true;
+    return;
+  }
+  const byId = new Map(cases.map((item) => [item.case_id, item]));
+  const counts = new Map();
+  let known = 0;
+  for (const id of ids) {
+    const found = byId.get(id);
+    if (!found || !found.status) continue;
+    known += 1;
+    counts.set(found.status, (counts.get(found.status) || 0) + 1);
+  }
+  if (!known) {
+    line.hidden = true;
+    return;
+  }
+  // Порядок — тот же, в котором статусы объявлены в словаре продукта: свой порядок здесь был
+  // бы вторым словарём статусов в окне.
+  const order = Object.keys(vocabulary.case_status || {});
+  const parts = [...counts.entries()]
+    .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+    .map(([status, count]) => `${term('case_status', status)}: ${count}`);
+  const tail = known < ids.length ? ` (статус известен у ${known} из ${ids.length})` : '';
+  line.textContent = `Решения по этой сущности — ${parts.join(' · ')}${tail}`;
+  line.hidden = false;
+}
+
+// --- Пустая колонка сущности и отметка нового -------------------------------
+
+// Колонка сущности заполняется только по клику, а находки на большинстве инцидентов пусты:
+// треть ширины экрана простаивала под две строки «нет». Панель сворачивается, пока в ней
+// нечего показать, и разворачивается сама, как только содержимое появляется.
+function refreshSideColumn() {
+  const hasEntity = !$('#entityBody').hidden;
+  // «Находок нет» рисуется пунктом с классом muted — это подпись пустоты, а не содержимое.
+  const hasFindings = $('#findingList').querySelectorAll('li:not(.muted)').length > 0;
+  document.querySelector('.layout')?.classList.toggle('side-idle', !hasEntity && !hasFindings);
+}
+
+// Инциденты, которых не было при открытии окна. Набор берётся один раз — при первой удачной
+// загрузке очереди; дальше всё, чего в нём нет, помечается как новое. Метка снимается, когда
+// инцидент открыли: он перестал быть новостью.
+let queueSeenIds = null;
+const queueFreshIds = new Set();
+
+function markFreshCases(list) {
+  if (queueSeenIds === null) {
+    queueSeenIds = new Set(list.map((item) => item.case_id));
+    return;
+  }
+  for (const item of list) {
+    if (!queueSeenIds.has(item.case_id)) {
+      queueSeenIds.add(item.case_id);
+      queueFreshIds.add(item.case_id);
+    }
+  }
+}
+
+function freshCountLabel() {
+  const count = queueFreshIds.size;
+  if (!count) return '';
+  return ` · ${count} ${plural(count, 'новый', 'новых', 'новых')} с открытия окна`;
+}
+
+// --- Разметка отбора целиком -----------------------------------------------
+//
+// Разрезы «по узлам» и «по правилам» сводят однотипные срабатывания в строку, но решение всё
+// равно принималось по одному инциденту: тридцать три `DOVECOT_AUTHENTICATION_SUCCESS`
+// закрывались тридцатью тремя проходами. Действие идёт по тому же отбору, который сейчас
+// стоит в очереди, — аналитик сначала видит список, а потом размечает.
+//
+// Массового маршрута у продукта нет, и заводить его здесь нельзя: решение по каждому
+// инциденту — отдельная запись доказательного журнала со своей причиной и своим автором.
+// Поэтому окно отправляет решения по одному и отчитывается, сколько прошло и сколько нет.
+
+// Верхняя граница на одно действие. Без неё промах по отбору («любой статус», пустой поиск)
+// разметил бы всю очередь одним нажатием, а отменить это нечем: журнал только дополняется.
+const BULK_DECISION_MAX = 200;
+
+function bulkSelectionSize() {
+  const total = Number($('#queueCount').textContent.match(/из (\d+)/)?.[1] ?? cases.length);
+  return Number.isFinite(total) ? total : cases.length;
+}
+
+function updateBulkRow() {
+  // Действие показывается только там, где оно осмысленно: очередь инцидентов, право на
+  // запись, и в отборе больше одного инцидента.
+  const size = bulkSelectionSize();
+  const shown = queueMode === 'cases' && permissions().case_write && size > 1;
+  $('#bulkRow').hidden = !shown;
+  if (!shown) closeBulkForm();
+}
+
+// Варианты решения для отбора берутся у первого инцидента в нём: список переходов считает
+// домен, и собирать его здесь во второй раз значило бы завести в окне свой словарь статусов.
+// Инциденты отбора могут допускать разные переходы — те, где выбранный переход невозможен,
+// продукт отклонит, и они будут названы в отчёте о разметке.
+async function fillBulkStatuses() {
+  const select = $('#bulkStatus');
+  select.replaceChildren();
+  const first = cases[0];
+  if (!first) return false;
+  // В списке очереди переходов нет — их отдаёт карточка инцидента. Спрашивается один
+  // инцидент, а не весь отбор: набор переходов у однотипных инцидентов один и тот же, а
+  // расхождения продукт отклонит, и они будут названы в отчёте о разметке.
+  let detail;
+  try {
+    detail = await api(`/cases/${encodeURIComponent(first.case_id)}`);
+  } catch (error) {
+    return false;
+  }
+  for (const code of detail.allowed_status_transitions || []) {
+    const option = document.createElement('option');
+    option.value = code;
+    option.textContent = term('case_status', code);
+    select.appendChild(option);
+  }
+  return select.options.length > 0;
+}
+
+async function openBulkForm() {
+  const size = bulkSelectionSize();
+  // Отбор мог опустеть, пока форма открывалась: размечать нечего, и предлагать это незачем.
+  if (size < 2 || !(await fillBulkStatuses())) {
+    closeBulkForm();
+    return;
+  }
+  $('#bulkRow').hidden = true;
+  $('#bulkForm').hidden = false;
+  $('#bulkReason').value = '';
+  $('#bulkError').hidden = true;
+  $('#bulkSubmit').disabled = true;
+  const capped = Math.min(size, BULK_DECISION_MAX);
+  $('#bulkNote').textContent =
+    capped < size
+      ? `В отборе ${size} ${plural(size, 'инцидент', 'инцидента', 'инцидентов')}; за один раз размечается ${capped}.`
+      : `Будет размечено ${capped} ${plural(capped, 'инцидент', 'инцидента', 'инцидентов')}. Отменить нельзя: журнал только дополняется.`;
+  $('#bulkReason').focus();
+}
+
+function closeBulkForm() {
+  $('#bulkForm').hidden = true;
+  updateBulkRowVisibility();
+}
+
+// Отдельная функция, чтобы закрытие формы не звало updateBulkRow() и не закрывало само себя.
+function updateBulkRowVisibility() {
+  const size = bulkSelectionSize();
+  $('#bulkRow').hidden = !(queueMode === 'cases' && permissions().case_write && size > 1);
+}
+
+async function submitBulkDecision() {
+  const status = $('#bulkStatus').value;
+  const reason = $('#bulkReason').value.trim();
+  if (!reason) return;
+  const submit = $('#bulkSubmit');
+  submit.disabled = true;
+  $('#bulkError').hidden = true;
+
+  // Состав отбора берётся у продукта тем же запросом, что и очередь: список на экране мог быть
+  // дозагружен частично, и размечать «то, что видно» значило бы размечать случайный срез.
+  let targets = [];
+  try {
+    const params = new URLSearchParams(queueQueryString());
+    params.set('limit', String(BULK_DECISION_MAX));
+    const { data } = await apiWithHeaders(`/cases?${params.toString()}`);
+    targets = (Array.isArray(data) ? data : data.items || []).map((entry) => entry.case_id);
+  } catch (error) {
+    $('#bulkError').textContent = `Отбор не прочитан: ${error.message}`;
+    $('#bulkError').hidden = false;
+    submit.disabled = false;
+    return;
+  }
+
+  let done = 0;
+  const failures = [];
+  for (const caseId of targets) {
+    $('#bulkNote').textContent = `Размечено ${done} из ${targets.length}…`;
+    try {
+      await api(`/cases/${encodeURIComponent(caseId)}/decision`, {
+        method: 'POST',
+        body: JSON.stringify({ status, reason }),
+      });
+      done += 1;
+    } catch (error) {
+      // Отказ по одному инциденту не отменяет остальные: каждое решение — своя запись
+      // журнала, и уже записанные не откатываются. Названы те, что не прошли.
+      failures.push(caseId);
+    }
+  }
+
+  toast(
+    failures.length
+      ? `Размечено ${done} из ${targets.length}; не прошли: ${failures.slice(0, 5).join(', ')}${failures.length > 5 ? '…' : ''}`
+      : `Размечено ${done} ${plural(done, 'инцидент', 'инцидента', 'инцидентов')}: ${term('case_status', status)}`
+  );
+  closeBulkForm();
+  await refreshFromFirstPage();
+  if (selectedCaseId && targets.includes(selectedCaseId)) await openCase(selectedCaseId);
+}
+
+// --- Клавиатура ------------------------------------------------------------
+//
+// Разбор очереди — самый частый жест за смену, и он весь был мышью: стрелки не двигали
+// очередь, горячих клавиш не было вовсе. Набор намеренно маленький и повторяет привычки
+// почтового клиента: стрелки идут по списку и открывают инцидент, Enter открывает
+// немедленно, «/» уводит в поиск.
+
+// Открытие по стрелке отложено: удержанная стрелка иначе отправила бы запрос на каждый шаг
+// списка. Enter открывает сразу — им пользуются, когда инцидент уже выбран.
+const QUEUE_STEP_DELAY_MS = 250;
+let queueStepTimer = null;
+
+function queueButtons() {
+  return [...document.querySelectorAll('#queueList .queue-item')];
+}
+
+function moveQueueSelection(delta) {
+  const buttons = queueButtons();
+  if (!buttons.length) return;
+  const current = buttons.findIndex((button) => button.dataset.caseId === selectedCaseId);
+  // Пока ничего не выбрано, стрелка вниз встаёт на первый инцидент, а не на второй.
+  const next = current < 0 ? (delta > 0 ? 0 : buttons.length - 1) : current + delta;
+  if (next < 0 || next >= buttons.length) return;
+  const button = buttons[next];
+  button.focus();
+  button.scrollIntoView({ block: 'nearest' });
+  const caseId = button.dataset.caseId;
+  clearTimeout(queueStepTimer);
+  queueStepTimer = setTimeout(() => openCase(caseId), QUEUE_STEP_DELAY_MS);
+}
+
+// Клавиша принадлежит полю ввода, пока курсор в нём: «/» в подстроке поиска — это символ, а
+// не команда. Окна поверх экрана тоже забирают клавиатуру себе.
+function keyboardIsBusy(event) {
+  const node = event.target;
+  if (node instanceof HTMLElement && node.isContentEditable) return true;
+  const tag = node instanceof HTMLElement ? node.tagName : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  return !$('#modal').hidden || !$('#configPanel').hidden;
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+  if (keyboardIsBusy(event)) return;
+
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveQueueSelection(event.key === 'ArrowDown' ? 1 : -1);
+    return;
+  }
+  if (event.key === 'Enter') {
+    const focused = event.target instanceof HTMLElement ? event.target.closest('.queue-item') : null;
+    if (!focused) return;
+    event.preventDefault();
+    clearTimeout(queueStepTimer);
+    openCase(focused.dataset.caseId);
+    return;
+  }
+  if (event.key === '/') {
+    event.preventDefault();
+    $('#queueSearch').focus();
+    $('#queueSearch').select();
+  }
+});
+
+// --- Полоса решения и сворачивание блоков ----------------------------------
+//
+// Экран расследования — тринадцать блоков и около десяти экранов прокрутки на один инцидент.
+// Два следствия, которые здесь и лечатся: главные факты уходят с экрана первыми, а блоки, в
+// которых ничего не нашлось, занимают столько же места, сколько блоки с содержимым.
+
+// Решение, которым заканчивается разбор. Кнопки строятся по переходам, которые разрешил домен
+// (`allowed_status_transitions`), а не по списку статусов, записанному здесь: свой список
+// предлагал бы тупиковые варианты и завёл бы в окне второй словарь статусов.
+//
+// Причина остаётся обязательной: кнопка не отправляет решение сама, она открывает форму с
+// выбранным статусом и ставит курсор в поле причины — решение уходит в журнал вместе с ней.
+
+function renderCaseBar(item, verdict) {
+  const bar = $('#caseBar');
+  bar.hidden = !item;
+  if (!item) return;
+  $('#barCaseId').textContent = item.case_id || '—';
+  const riskClass = String(item.risk_class || '').toLowerCase();
+  $('#barRisk').textContent = term('risk_class', item.risk_class);
+  $('#barRisk').className = `risk ${escapeHtml(riskClass)}`;
+  const verdictCode = verdict && verdict.verdict;
+  $('#barVerdict').textContent = verdictCode ? term('verdict', verdictCode) : '—';
+  $('#barVerdict').className = `verdict sm ${escapeHtml(String(verdictCode || '').toLowerCase())}`;
+  $('#barAsset').textContent = item.primary_asset_id || '—';
+  $('#barAsset').title = item.primary_asset_id || '';
+  // Решение недоступно там, где недоступна смена статуса: та же роль, тот же конечный статус.
+  const locked = !permissions().case_write || currentCaseTransitions.length === 0;
+  const actions = $('#caseBarActions');
+  for (const button of [...actions.querySelectorAll('.decision-button')]) button.remove();
+  if (locked) return;
+  for (const code of currentCaseTransitions) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'action inline decision-button';
+    button.textContent = term('case_status', code);
+    button.addEventListener('click', () => openDecision(code));
+    actions.insertBefore(button, actions.firstChild);
+  }
+}
+
+// Блоки, которые не сворачиваются сами никогда: с них начинается ответ на вопрос «что
+// произошло и чего не хватает», и пустыми они тоже значимы.
+const ALWAYS_OPEN_BLOCKS = new Set(['Вердикт', 'Чего не хватает', 'Цепочка событий']);
+
+function blockTitle(block) {
+  return (block.querySelector('.block-head h4')?.textContent || '').trim();
+}
+
+// Разметка блоков в index.html писалась без обёртки содержимого: обёртка ставится один раз
+// при запуске, чтобы сворачивание не требовало править тринадцать мест разметки.
+function prepareCollapsibleBlocks() {
+  for (const block of document.querySelectorAll('.panel.work .block')) {
+    const head = block.querySelector('.block-head');
+    if (!head || block.querySelector(':scope > .block-body')) continue;
+    const body = document.createElement('div');
+    body.className = 'block-body';
+    let node = head.nextSibling;
+    while (node) {
+      const next = node.nextSibling;
+      body.appendChild(node);
+      node = next;
+    }
+    block.appendChild(body);
+
+    const title = blockTitle(block);
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'block-toggle';
+    toggle.textContent = '▾';
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.setAttribute('aria-label', `Свернуть блок «${title}»`);
+    toggle.addEventListener('click', () => toggleBlock(block, !block.classList.contains('collapsed')));
+    head.insertBefore(toggle, head.firstChild);
+  }
+}
+
+function toggleBlock(block, collapse) {
+  block.classList.toggle('collapsed', collapse);
+  const toggle = block.querySelector('.block-toggle');
+  if (toggle) {
+    toggle.textContent = collapse ? '▸' : '▾';
+    toggle.setAttribute('aria-expanded', String(!collapse));
+    const title = blockTitle(block);
+    toggle.setAttribute('aria-label', `${collapse ? 'Развернуть' : 'Свернуть'} блок «${title}»`);
+  }
+  storeBlockState(blockTitle(block), collapse);
+}
+
+// Состояние сворачивания держится в этом браузере: аналитик складывает окно под себя один
+// раз, а не заново на каждом инциденте. Хранилище может быть недоступно (приватное окно,
+// запрет на данные сайта) — тогда блоки просто открываются по умолчанию.
+const BLOCK_STATE_KEY = 'takt.arm.blocks';
+
+function readBlockState() {
+  try {
+    return JSON.parse(localStorage.getItem(BLOCK_STATE_KEY) || '{}') || {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function storeBlockState(title, collapsed) {
+  if (!title) return;
+  try {
+    const state = readBlockState();
+    state[title] = collapsed;
+    localStorage.setItem(BLOCK_STATE_KEY, JSON.stringify(state));
+  } catch (error) {
+    /* хранилище недоступно — состояние живёт до перезагрузки */
+  }
+}
+
+// Пустой блок опознаётся по содержимому, а не по названию: строк таблицы нет, пунктов списка
+// нет, полей ввода нет, а текста меньше строки. Признак намеренно строгий — свернуть блок, в
+// котором что-то есть, хуже, чем оставить развёрнутым пустой.
+function blockIsEmpty(block) {
+  const body = block.querySelector(':scope > .block-body');
+  if (!body) return false;
+  if (body.querySelector('tbody tr, li, input, select, textarea, .chip, .entity-link')) return false;
+  return body.innerText.trim().length < 120;
+}
+
+function refreshBlockCollapse() {
+  const stored = readBlockState();
+  for (const block of document.querySelectorAll('.panel.work .block')) {
+    const title = blockTitle(block);
+    if (Object.prototype.hasOwnProperty.call(stored, title)) {
+      toggleBlockSilently(block, Boolean(stored[title]));
+      continue;
+    }
+    if (ALWAYS_OPEN_BLOCKS.has(title)) {
+      toggleBlockSilently(block, false);
+      continue;
+    }
+    toggleBlockSilently(block, blockIsEmpty(block));
+  }
+}
+
+// То же переключение, но без записи в хранилище: иначе автоматическое сворачивание пустого
+// блока запомнилось бы как выбор аналитика и не разворачивалось бы, когда содержимое появится.
+function toggleBlockSilently(block, collapse) {
+  block.classList.toggle('collapsed', collapse);
+  const toggle = block.querySelector('.block-toggle');
+  if (!toggle) return;
+  toggle.textContent = collapse ? '▸' : '▾';
+  toggle.setAttribute('aria-expanded', String(!collapse));
+  toggle.setAttribute('aria-label', `${collapse ? 'Развернуть' : 'Свернуть'} блок «${blockTitle(block)}»`);
+}
+
+function openDecision(status) {
+  if (!selectedCaseId) return;
+  // Форма заполняется тем же кодом, что и по ссылке «изменить статус»: список переходов
+  // считает домен, и собирать его здесь во второй раз значило бы предлагать тупиковые
+  // варианты. Кнопка только выбирает статус в готовом списке.
+  openStatusForm();
+  $('#statusFormSelect').value = status;
+  $('#statusFormReason').focus();
+  $('#statusForm').scrollIntoView({ block: 'center' });
 }
 
 // --- Конфигурация: веса оценки риска ---------------------------------------
@@ -2654,6 +3126,15 @@ let accessKeyPromptShown = false;
 
 const QUEUE_PAGE_LIMIT = 100;
 
+// Сколько инцидентов очередь просит сейчас. Растёт нажатием «Показать ещё» и возвращается к
+// странице при любой смене отбора: иначе после сужения фильтра окно продолжало бы тянуть
+// тысячу строк ради двадцати подходящих.
+let queueLimit = QUEUE_PAGE_LIMIT;
+
+function resetQueueLimit() {
+  queueLimit = QUEUE_PAGE_LIMIT;
+}
+
 // --- Очередь: дела или сведённые строки ------------------------------------
 //
 // Собственная дедупликация продукта работает по `burst_fingerprint`, а в него входит корзина
@@ -2685,6 +3166,7 @@ let groups = [];
 
 function setQueueMode(mode) {
   queueMode = mode;
+  resetQueueLimit();
   try {
     localStorage.setItem(QUEUE_MODE_STORAGE, mode);
   } catch (error) {
@@ -2800,7 +3282,7 @@ function drillIntoGroup(group) {
 }
 
 function queueQueryString() {
-  const params = new URLSearchParams({ sort: 'risk_score_desc', limit: String(QUEUE_PAGE_LIMIT) });
+  const params = new URLSearchParams({ sort: 'risk_score_desc', limit: String(queueLimit) });
   const risk = $('#queueRisk').value;
   const status = $('#queueStatus').value;
   const search = $('#queueSearch').value.trim();
@@ -2834,10 +3316,21 @@ async function refresh() {
     }
     const { data, headers } = await apiWithHeaders(`/cases?${queueQueryString()}`);
     cases = Array.isArray(data) ? data : data.items || [];
+    markFreshCases(cases);
     renderQueue();
     const total = headers.get('X-Total-Count');
     $('#queueCount').textContent =
-      total !== null ? `Показано ${cases.length} из ${total}` : `Показано ${cases.length}`;
+      (total !== null ? `Показано ${cases.length} из ${total}` : `Показано ${cases.length}`) +
+      freshCountLabel();
+    // Кнопка появляется ровно тогда, когда продукт сказал, что показано не всё. Без неё
+    // «Показано 100 из 500» было честным, но тупиковым: остальные четыреста доставались
+    // только сужением фильтра.
+    updateBulkRow();
+    const hidden = total === null ? 0 : Number(total) - cases.length;
+    $('#queueMoreRow').hidden = hidden <= 0;
+    if (hidden > 0) {
+      $('#queueMore').textContent = `Показать ещё ${Math.min(hidden, QUEUE_PAGE_LIMIT)} из ${hidden}`;
+    }
     setConnection('ok');
     // Только время: дата опроса — это «сегодня», и в шапке она занимает место, вытесняя
     // состояние связи на вторую строку.
@@ -2937,6 +3430,24 @@ $('#modalClose').addEventListener('click', closeHelp);
 $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
 $('#reportButton').addEventListener('click', openCaseReport);
+$('#queueMore').addEventListener('click', async () => {
+  const button = $('#queueMore');
+  button.disabled = true;
+  queueLimit += QUEUE_PAGE_LIMIT;
+  try {
+    await refresh();
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('#bulkOpen').addEventListener('click', openBulkForm);
+$('#bulkCancel').addEventListener('click', closeBulkForm);
+$('#bulkSubmit').addEventListener('click', submitBulkDecision);
+$('#bulkReason').addEventListener('input', () => {
+  $('#bulkSubmit').disabled = !$('#bulkReason').value.trim();
+});
+
 $('#changeStatusButton').addEventListener('click', openStatusForm);
 $('#statusFormCancel').addEventListener('click', closeStatusForm);
 $('#statusFormSubmit').addEventListener('click', submitStatusForm);
@@ -3000,9 +3511,17 @@ async function runAutoAssembly() {
 }
 
 let queueSearchTimer = null;
+// Любая смена отбора возвращает очередь к первой странице: дозагруженные страницы относятся к
+// прежнему набору, и тянуть их под новый фильтр — лишний запрос ради строк, которые всё равно
+// не подойдут.
+function refreshFromFirstPage() {
+  resetQueueLimit();
+  return refresh();
+}
+
 $('#queueSearch').addEventListener('input', () => {
   clearTimeout(queueSearchTimer);
-  queueSearchTimer = setTimeout(refresh, 300);
+  queueSearchTimer = setTimeout(refreshFromFirstPage, 300);
 });
 $('#assembleAuto').addEventListener('click', runAutoAssembly);
 $('#expandHostsButton').addEventListener('click', runExpandToHosts);
@@ -3010,9 +3529,9 @@ $('#queueModeCases').addEventListener('click', () => setQueueMode('cases'));
 $('#queueModeAsset').addEventListener('click', () => setQueueMode('asset'));
 $('#queueModeRule').addEventListener('click', () => setQueueMode('operation'));
 $('#queueDrillClear').addEventListener('click', clearQueueDrill);
-$('#queueSearchField').addEventListener('change', refresh);
-$('#queueRisk').addEventListener('change', refresh);
-$('#queueStatus').addEventListener('change', refresh);
+$('#queueSearchField').addEventListener('change', refreshFromFirstPage);
+$('#queueRisk').addEventListener('change', refreshFromFirstPage);
+$('#queueStatus').addEventListener('change', refreshFromFirstPage);
 
 // ---------------------------------------------------------------------------
 // Вкладка «Симуляция»: хронология цепочки, счётчики трудоёмкости, граф атаки
@@ -3582,6 +4101,31 @@ function renderSavedActions() {
   }
 }
 
+// Оговорки к счётчикам трудоёмкости. Продукт возвращает их в том же ответе, что и числа, и
+// они ограничивают именно эти числа: ручной процесс посчитан моделью, действия в ТАКТ взяты из
+// журнала, время не рассчитывалось. Окно показывало числа и молчало об оговорках — то есть
+// выдавало оценку за замер. Формулировки не переписываются: их пишет продукт.
+function renderEffortCaveats(effort) {
+  const list = $('#effortCaveats');
+  const notes = [...(effort.caveats || [])];
+
+  // Отдельно называется то, что в самих счётчиках не видно: числитель и знаменатель
+  // соотношения получены по-разному.
+  if (effort.current_actions_measured === false && effort.takt_actions_measured === true) {
+    notes.unshift(
+      'Числа в соотношении получены по-разному: ручной процесс — модель, действия в ТАКТ — замер по журналу инцидента.'
+    );
+  }
+
+  list.replaceChildren();
+  list.hidden = notes.length === 0;
+  for (const note of notes) {
+    const item = document.createElement('li');
+    item.textContent = note;
+    list.appendChild(item);
+  }
+}
+
 function updateCounters() {
   const effort = simulation.effort || {};
   const steps = (simulation.steps || []).length;
@@ -3596,6 +4140,7 @@ function updateCounters() {
   const takt = alongPlayer(effort.takt_actions);
   $('#manualActions').textContent = String(manual);
   $('#taktActions').textContent = String(takt);
+  renderEffortCaveats(effort);
   const reduction = effort.reduction_actions_percent;
   $('#reductionValue').textContent =
     reduction === null || reduction === undefined ? '—' : `${reduction.toFixed(1)}%`;
@@ -3758,6 +4303,9 @@ $('#resetPlayer').addEventListener('click', () => {
 fillHelpHints();
 applyTimeZone();
 applyQueueMode();
+// Обёртка содержимого блоков ставится один раз: сворачивание не должно требовать правки
+// тринадцати мест разметки.
+prepareCollapsibleBlocks();
 
 loadVocabulary().then(() => {
   loadSession();

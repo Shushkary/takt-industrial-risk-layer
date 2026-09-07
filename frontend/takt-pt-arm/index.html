@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f14" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260907-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260907-03" />
   </head>
   <body>
     <header class="top">
@@ -78,7 +78,29 @@
           <button class="help sm" type="button" data-help="queue_filters" aria-label="Пояснение: фильтры очереди">?</button>
         </div>
         <p id="queueCount" class="muted small pad">—</p>
+
+        <!-- Разметка отбора целиком. Тридцать три однотипных срабатывания закрывались по
+             одному, хотя разрез «по правилам» показывает их одной строкой. Действие идёт по
+             тому же отбору, который сейчас в очереди: аналитик сначала видит список, потом
+             размечает — не наоборот. -->
+        <div id="bulkRow" class="bulk-row pad" hidden>
+          <button id="bulkOpen" class="link" type="button">разметить отбор целиком</button>
+          <button class="help sm" type="button" data-help="bulk_decision" aria-label="Пояснение: разметка отбора целиком">?</button>
+        </div>
+        <div id="bulkForm" class="bulk-form pad" hidden>
+          <select id="bulkStatus" aria-label="Решение по отбору"></select>
+          <input id="bulkReason" type="text" maxlength="2000" placeholder="причина (обязательна, уходит в журнал каждого инцидента)" />
+          <div class="bulk-actions">
+            <button id="bulkSubmit" class="action inline" type="button" disabled>Разметить</button>
+            <button id="bulkCancel" class="action inline" type="button">Отмена</button>
+          </div>
+          <p id="bulkNote" class="muted small">—</p>
+          <p id="bulkError" class="relink-error small" hidden></p>
+        </div>
         <div id="queueList" class="queue-list"></div>
+        <div class="queue-more pad" hidden id="queueMoreRow">
+          <button id="queueMore" class="action inline" type="button">Показать ещё</button>
+        </div>
         <p id="queueEmpty" class="muted pad">Инцидентов нет.</p>
       </section>
 
@@ -86,6 +108,24 @@
         <div class="panel-head">
           <h2 id="workTitle">Инцидент</h2>
           <button class="help" type="button" data-help="summary" aria-label="Пояснение: сводка инцидента">?</button>
+        </div>
+
+
+        <!-- Полоса решения. Экран расследования — тринадцать блоков и порядка десяти экранов
+             прокрутки: вердикт и класс риска уходят наверх первыми, и к «Вариантам
+             реагирования» аналитик уже не видит, что именно он обосновывает. Полоса держится
+             у верхнего края и несёт то, что нужно всё время: чем инцидент опознаётся и чем
+             разбор заканчивается. -->
+        <div id="caseBar" class="case-bar" hidden>
+          <div class="case-bar-facts">
+            <span id="barCaseId" class="case-id">—</span>
+            <span id="barRisk" class="risk">—</span>
+            <span id="barVerdict" class="verdict sm">—</span>
+            <span id="barAsset" class="mono muted small">—</span>
+          </div>
+          <div id="caseBarActions" class="case-bar-actions" role="group" aria-label="Решение по инциденту">
+            <button class="help sm" type="button" data-help="decision" aria-label="Пояснение: решение по инциденту">?</button>
+          </div>
         </div>
 
         <p id="workEmpty" class="muted pad">Выберите инцидент в очереди.</p>
@@ -388,6 +428,7 @@
           <button id="addFinding" class="action" type="button">Добавить в находки</button>
           <p id="findingRoleNote" class="muted small" hidden>Роль работает только на чтение: находки записывает первая линия.</p>
           <h3 class="entity-subhead">Связанные инциденты</h3>
+          <p id="entityDecisions" class="muted small" hidden>—</p>
           <div id="entityRelatedCases" class="chips"></div>
           <h3 class="entity-subhead">Окружение</h3>
           <ul id="entityEnvironment" class="plain small"></ul>
@@ -446,6 +487,11 @@
               <span class="counter-sub muted small">итог совпадает с ответом продукта</span>
             </div>
           </div>
+
+          <!-- Оговорки продукта. Они приходят в том же ответе, что и числа, и ограничивают
+               именно их: часть значений получена моделью, часть измерена, время не считалось
+               вовсе. Показывать числа и молчать об оговорках — выдавать оценку за замер. -->
+          <ul id="effortCaveats" class="plain caveats" hidden></ul>
         </div>
 
         <div class="block">
@@ -596,7 +642,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260907-02"></script>
-    <script src="./app.min.js?v=20260907-02"></script>
+    <script src="./env.js?v=20260907-03"></script>
+    <script src="./app.min.js?v=20260907-03"></script>
   </body>
 </html>
