@@ -48,15 +48,49 @@ def test_process_column_has_a_help_entry() -> None:
 
 @pytest.mark.parametrize("table", ["chain-case"])
 def test_column_widths_cover_every_column(table: str) -> None:
-    """Доли покрывают все девять колонок и дают в сумме 100%.
+    """Ширина задана всем девяти колонкам.
 
-    Колонка без доли схлопывается в ноль: при `table-layout: fixed` браузер не возвращает ей
+    Колонка без ширины схлопывается в ноль: при `table-layout: fixed` браузер не возвращает ей
     место по содержимому. Так и произошло с «Артефактом», когда доли считались от начала ряда,
     а слева появлялась необязательная колонка отметки события.
     """
-    widths = re.findall(rf"table\.{table} th:nth-(?:last-)?child\(\d+\).*?width: (\d+)%", _STYLES)
-    assert len(widths) == CHAIN_COLUMNS, f"{table}: доли заданы для {len(widths)} колонок"
-    assert sum(int(value) for value in widths) == 100, f"{table}: сумма долей {widths}"
+    widths = re.findall(
+        rf"table\.{table} th:nth-(?:last-)?child\(\d+\).*?width: (\d+)(%|ch)", _STYLES
+    )
+    assert len(widths) == CHAIN_COLUMNS, f"{table}: ширина задана для {len(widths)} колонок"
+
+
+def test_timestamp_column_is_measured_in_characters() -> None:
+    """Метка времени не может потерять секунды ни в каком браузере.
+
+    Доля в процентах этого не даёт: ширина знака зависит от моноширинного шрифта, который
+    подставит браузер. `min-width` тоже не даёт — при `table-layout: fixed` браузер берёт
+    ширины из первой строки и ограничение на ячейке не применяет. Остаётся ширина в `ch`.
+
+    Секунды здесь не деталь оформления: по ним читается порядок событий внутри одной минуты.
+    """
+    assert re.search(
+        r"table\.chain-case th:nth-last-child\(9\), table\.chain-case td:nth-last-child\(9\) \{ width: \d+ch; \}",
+        _STYLES,
+    ), "ширина колонки времени задана не в ch"
+
+    percents = [
+        int(value)
+        for value in re.findall(
+            r"table\.chain-case th:nth-last-child\(\d\), table\.chain-case td:nth-last-child\(\d\) \{ width: (\d+)%",
+            _STYLES,
+        )
+    ]
+    assert len(percents) == CHAIN_COLUMNS - 1, f"колонок в процентах {len(percents)}"
+    assert sum(percents) == 82, f"сумма долей остальных колонок {sum(percents)}"
+
+
+def test_series_row_shows_the_whole_time_range() -> None:
+    """Урезать диапазон до начала значило бы скрыть, сколько серия длилась."""
+    assert re.search(
+        r"table\.chain-case tr\.row-series td:nth-last-child\(9\) \{\s*white-space: normal;",
+        _STYLES,
+    ), "диапазон в строке серии не переносится и обрезается"
 
 
 def test_case_table_counts_columns_from_the_end() -> None:
