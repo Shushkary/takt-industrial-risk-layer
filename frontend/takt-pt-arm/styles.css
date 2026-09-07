@@ -57,6 +57,12 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  /* Перенос разрешён на любой ширине. Пока элементов было одиннадцать по отдельности, строка
+     состояния сжималась между любыми двумя; после разбивки на группы она стала неразрывной
+     и на 900 px растягивала страницу до 1475 px — рабочее место возилось по горизонтали.
+     Двухэтажная шапка дешевле: перенос идёт между группами, а не посреди списка. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 /* Состояние связи и метка опроса не переносятся: перенос делал шапку двухэтажной и сдвигал
@@ -326,8 +332,16 @@ body {
 }
 
 .queue-title {
-  display: block;
+  /* Две строки и многоточие: коды операций длинные, и обрыв на середине слова без знака
+     продолжения читается как полное значение. Различающая часть кода часто в конце
+     (`..._FROM_SAME_SOURCE_IP`), поэтому одной строки мало. Полное значение — в подсказке. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
   margin: 4px 0;
+  overflow-wrap: anywhere;
 }
 
 .queue-meta {
@@ -361,7 +375,9 @@ body {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  /* 132 px, а не 150: при 150 четвёртая плитка не помещалась в колонку разбора и вставала
+     на свою строку — «три и одна» вместо ряда. */
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 10px;
 }
 
@@ -551,6 +567,7 @@ table.chain tr.row-series-member td:first-child {
 .top-group {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -637,6 +654,16 @@ table.chain td {
   text-align: left;
   vertical-align: top;
   white-space: nowrap;
+}
+
+/* Шапка держится при прокрутке: таблица прокручивается внутри своей рамки, и к середине
+   списка колонки оказывались без подписей — «192.168.188.179» в третьей колонке это узел
+   или адрес, по неподписанной таблице не сказать. */
+table.chain thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
 }
 
 /* Операция, узел, учётная запись, адрес и артефакт — значения источника переменной длины

@@ -174,3 +174,61 @@ def test_product_name_does_not_wrap() -> None:
     rule = re.search(r"\.top-title \{(.*?)\}", _STYLES, re.DOTALL)
     assert rule is not None
     assert "nowrap" in rule.group(1)
+
+
+# --- Раскладка, замеченная на живом стенде ---------------------------------
+
+
+def test_queue_title_shows_that_it_continues() -> None:
+    """Код обрывался на середине слова без знака продолжения и читался как полное значение."""
+    rule = re.search(r"\.queue-title \{(.*?)\}", _STYLES, re.DOTALL)
+    assert rule is not None
+    assert "line-clamp: 2" in rule.group(1)
+    assert "overflow: hidden" in rule.group(1)
+
+
+def test_chain_header_stays_visible_while_scrolling() -> None:
+    """Таблица прокручивается внутри рамки: без закреплённой шапки колонки без подписей."""
+    rule = re.search(r"table\.chain thead th \{(.*?)\}", _STYLES, re.DOTALL)
+    assert rule is not None, "шапка цепочки не закреплена"
+    assert "position: sticky" in rule.group(1)
+    assert "background: var(--panel)" in rule.group(1), "прозрачная шапка наложится на строки"
+
+
+def test_four_metrics_fit_one_row() -> None:
+    """Четвёртая плитка уходила на свою строку — ряд читался как «три и одна»."""
+    rule = re.search(r"\.metrics \{(.*?)\}", _STYLES, re.DOTALL)
+    assert rule is not None
+    assert "minmax(132px" in rule.group(1)
+
+
+def test_settings_window_is_reachable_for_every_role() -> None:
+    """Порог сборки — настройка рабочего места: скрытая кнопка оставила бы окно недостижимым.
+
+    Прецедент: после переноса прав кнопка осталась с атрибутом `hidden` в разметке, показывать
+    её стало некому, и на стенде без настроенной аутентификации настройки были недоступны
+    вообще никому.
+    """
+    button = re.search(r"<button id=\"configOpen\"[^>]*>", _INDEX)
+    assert button is not None, "кнопки настроек нет в шапке"
+    assert "hidden" not in button.group(0), "кнопка настроек скрыта разметкой"
+
+    start = _APP.index("function applyPermissions(")
+    block = _APP[start : _APP.index(chr(10) + "}", start)]
+    assert "$('#configOpen').hidden" not in block, "видимость кнопки снова решается ролью"
+
+
+def test_header_wraps_instead_of_stretching_the_page() -> None:
+    """Прецедент: группы сделали строку состояния неразрывной.
+
+    Пока элементов было одиннадцать по отдельности, строка сжималась между любыми двумя.
+    После разбивки на группы она перестала переноситься и на 900 px растянула страницу до
+    1475 px — рабочее место возилось по горизонтали.
+    """
+    rule = re.search(r"\.top-state \{(.*?)\}", _STYLES, re.DOTALL)
+    assert rule is not None
+    assert "flex-wrap: wrap" in rule.group(1), "строка состояния не переносится"
+
+    group = re.search(r"\.top-group \{(.*?)\}", _STYLES, re.DOTALL)
+    assert group is not None
+    assert "flex-wrap: wrap" in group.group(1)
