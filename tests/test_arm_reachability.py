@@ -60,29 +60,46 @@ def test_column_widths_cover_every_column(table: str) -> None:
     assert len(widths) == CHAIN_COLUMNS, f"{table}: ширина задана для {len(widths)} колонок"
 
 
-def test_timestamp_column_is_measured_in_characters() -> None:
-    """Метка времени не может потерять секунды ни в каком браузере.
+def test_every_chain_column_is_measured_in_characters() -> None:
+    """Ширина колонки не может зависеть от того, какой шрифт подставит браузер.
 
-    Доля в процентах этого не даёт: ширина знака зависит от моноширинного шрифта, который
-    подставит браузер. `min-width` тоже не даёт — при `table-layout: fixed` браузер берёт
-    ширины из первой строки и ограничение на ячейке не применяет. Остаётся ширина в `ch`.
+    Доля в процентах этого не даёт: ширина знака зависит от шрифта, и на одной и той же доле
+    значение то помещается, то теряет хвост. С метки времени это и началось — в разных
+    браузерах у неё пропадали секунды. `min-width` тоже не помогает: при `table-layout: fixed`
+    браузер берёт ширины из первой строки и ограничение на ячейке не применяет.
 
-    Секунды здесь не деталь оформления: по ним читается порядок событий внутри одной минуты.
+    Секунды в метке — не деталь оформления: по ним читается порядок событий внутри минуты.
     """
-    assert re.search(
-        r"table\.chain-case th:nth-last-child\(9\), table\.chain-case td:nth-last-child\(9\) \{ width: \d+ch; \}",
-        _STYLES,
-    ), "ширина колонки времени задана не в ch"
+    pattern = (
+        r"table\.chain-case th:nth-last-child\((\d)\), "
+        r"table\.chain-case td:nth-last-child\(\d\) \{ width: (\d+)ch"
+    )
+    widths = re.findall(pattern, _STYLES)
+    assert len(widths) == CHAIN_COLUMNS, f"в знаках заданы {len(widths)} колонок из {CHAIN_COLUMNS}"
 
-    percents = [
-        int(value)
-        for value in re.findall(
-            r"table\.chain-case th:nth-last-child\(\d\), table\.chain-case td:nth-last-child\(\d\) \{ width: (\d+)%",
-            _STYLES,
-        )
-    ]
-    assert len(percents) == CHAIN_COLUMNS - 1, f"колонок в процентах {len(percents)}"
-    assert sum(percents) == 82, f"сумма долей остальных колонок {sum(percents)}"
+    leftover = (
+        r"table\.chain-case th:nth-last-child\(\d\), "
+        r"table\.chain-case td:nth-last-child\(\d\) \{ width: \d+%"
+    )
+    assert not re.search(leftover, _STYLES), "осталась колонка, заданная долей таблицы"
+
+
+def test_chain_table_grows_past_its_frame_instead_of_squeezing_columns() -> None:
+    """Девять колонок с длинными значениями в ширину рабочей колонки не помещаются.
+
+    При `width: 100%` фиксированная раскладка растянула бы колонки по рамке, и заданные знаки
+    перестали бы что-либо значить. Таблица растёт под сумму колонок и прокручивается вбок
+    внутри своей рамки — прокрутка честнее молчаливого усечения.
+    """
+    rule = re.search(r"\ntable\.chain \{(.*?)\}", _STYLES, re.DOTALL)
+    assert rule is not None
+    assert "width: max-content" in rule.group(1)
+    assert "min-width: 100%" in rule.group(1)
+
+    frame = re.search(r"\.table-scroll \{(.*?)\}", _STYLES, re.DOTALL)
+    assert frame is not None
+    assert "overflow: auto" in frame.group(1), "рамке нечем прокручивать таблицу"
+
 
 
 def test_series_row_shows_the_whole_time_range() -> None:
