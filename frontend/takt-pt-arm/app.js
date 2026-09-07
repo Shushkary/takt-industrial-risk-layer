@@ -3585,8 +3585,15 @@ function renderSavedActions() {
 function updateCounters() {
   const effort = simulation.effort || {};
   const steps = (simulation.steps || []).length;
-  const manual = cumulative(effort.current_actions || 0, steps, simCursor);
-  const takt = cumulative(effort.takt_actions || 0, steps, simCursor);
+  // Пока плеер не тронут, показывается итог целиком: заголовок блока обещает трудоёмкость
+  // разбора инцидента, а не отрезка воспроизведения. Два нуля рядом с «сокращение 98.7%»
+  // читались как несчитавшийся показатель, а сам процент — как взятый ниоткуда. Как только
+  // аналитик двигает плеер, счётчики идут за курсором; «Сброс» возвращает к итогу, потому что
+  // возвращает к состоянию «разбор не начат».
+  const atRest = simCursor <= 0;
+  const alongPlayer = (total) => (atRest ? Number(total || 0) : cumulative(total || 0, steps, simCursor));
+  const manual = alongPlayer(effort.current_actions);
+  const takt = alongPlayer(effort.takt_actions);
   $('#manualActions').textContent = String(manual);
   $('#taktActions').textContent = String(takt);
   const reduction = effort.reduction_actions_percent;
@@ -3625,7 +3632,7 @@ function renderSummary() {
     ['Статус', term('case_status', simulation.status)],
     ['Событий в инциденте', `${simulation.events_total}, из них шагов цепочки ${simulation.chain_length}`],
     ['Без разметки фазы', String(simulation.events_without_phase)],
-    ['Сработавшие инварианты', (simulation.invariants || []).map(invariantTitle).join(', ') || 'нет'],
+    ['Сработавшие правила', (simulation.invariants || []).map(invariantTitle).join(', ') || 'нет'],
   ];
   for (const option of simulation.response_options || []) {
     rows.push([option.title, option.objects || '—']);
@@ -3667,7 +3674,7 @@ function openStep(order) {
     phaseOriginText(step),
     `Чем выделено: ${detection.selected_by_title_ru || 'не зафиксировано'}. ${detection.reason || ''}`,
     detection.invariants && detection.invariants.length
-      ? `Сработавшие инварианты на этом событии: ${detection.invariants.map(invariantTitle).join(', ')}.`
+      ? `Сработавшие правила на этом событии: ${detection.invariants.map(invariantTitle).join(', ')}.`
       : 'Правила на этом событии не срабатывали: оно попало в инцидент по связи сущностей, а не по признаку правила.',
     entities.length ? `Сущности: ${entities.join(', ')}.` : 'Сущности не заполнены.',
     artifacts.length ? `Артефакты: ${artifacts.join(', ')}.` : 'Артефактов нет.',

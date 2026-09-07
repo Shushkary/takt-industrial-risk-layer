@@ -232,3 +232,42 @@ def test_header_wraps_instead_of_stretching_the_page() -> None:
     group = re.search(r"\.top-group \{(.*?)\}", _STYLES, re.DOTALL)
     assert group is not None
     assert "flex-wrap: wrap" in group.group(1)
+
+
+def test_no_invariant_label_is_left_in_the_window() -> None:
+    """Проверка на стенде нашла два: сводка симуляции и карточка шага цепочки.
+
+    Термин переименован в видимом тексте целиком, иначе одна вкладка говорит «правила», а
+    соседняя — «инварианты», и аналитик считает их разными вещами. Комментарии кода не в счёт:
+    там остаётся язык домена.
+    """
+    # Записи, где термин продукта назван намеренно: словарь понятий, пояснение о правилах и
+    # путь к каталогу правил в файловой системе.
+    allowed = ("config/invariants", "называется инвариантом", "называется Инвариант")
+
+    left = []
+    for number, line in enumerate(_APP.split("\n"), 1):
+        if re.match(r"^\s*(//|\*)", line):
+            continue
+        for quoted in re.findall(r"'[^'\n]*'", line):
+            if "нвариант" in quoted and not any(mark in quoted for mark in allowed):
+                left.append(f"{number}: {quoted[:70]}")
+
+    assert not left, "в окне остался термин «инвариант»: " + "; ".join(left)
+
+
+def test_effort_counters_show_the_total_before_the_player_is_touched() -> None:
+    """Два нуля рядом с «сокращение 98.7%» читались как несчитавшийся показатель.
+
+    Счётчики накопительные и идут за курсором плеера, но при открытии вкладки курсор стоит на
+    нуле, и блок «Трудоёмкость разбора» показывал 0 и 0 при 75 действиях в таблице ниже.
+    Заголовок блока обещает трудоёмкость разбора инцидента, а не отрезка воспроизведения.
+    """
+    start = _APP.index("function updateCounters(")
+    block = _APP[start : _APP.index(chr(10) + "}", start)]
+
+    assert "const atRest = simCursor <= 0" in block
+    assert "alongPlayer(effort.current_actions)" in block
+    assert "alongPlayer(effort.takt_actions)" in block
+    # Ход за плеером сохраняется: это по-прежнему накопительные счётчики.
+    assert "cumulative(total || 0, steps, simCursor)" in block
