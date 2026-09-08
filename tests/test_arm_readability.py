@@ -454,6 +454,35 @@ def test_bulk_decision_reads_the_selection_from_the_product() -> None:
     assert "failures" in block, "отказ по одному инциденту должен быть назван"
 
 
+def test_narrow_layout_does_not_stretch_the_whole_page() -> None:
+    """Окно 768 px давало документ 1663 px: вбок ездила вся страница, а не таблица.
+
+    В одноколоночной раскладке `1fr` — это `minmax(auto, 1fr)`, и нижней границей колонки
+    становится самое широкое содержимое строки. Таблица состава шире окна намеренно и
+    прокручивается внутри своего контейнера; через `auto` она растягивала колонку, а вместе
+    с ней фильтры очереди и полосу решения.
+    """
+    narrow = re.search(
+        r"@media \(max-width: 1200px\) \{.*?\.layout \{\s*grid-template-columns: ([^;]+);",
+        _STYLES,
+        re.DOTALL,
+    )
+    assert narrow, "одноколоночного правила раскладки нет"
+    assert narrow.group(1).strip() == "minmax(0, 1fr)", narrow.group(1)
+
+    side_idle = re.search(
+        r"\.layout\.side-idle \{\s*grid-template-columns: minmax\(0, 1fr\);", _STYLES
+    )
+    assert side_idle, "свёрнутая колонка на узком экране снова растягивает страницу"
+
+    # Панель не должна расширяться под содержимое: прокрутка предусмотрена внутри цепочки.
+    panel = re.search(r"^\.panel \{(.*?)\}", _STYLES, re.DOTALL | re.MULTILINE)
+    assert panel and "min-width: 0" in panel.group(1)
+
+    # Собственная прокрутка состава остаётся: её убирать было нельзя.
+    assert ".table-scroll" in _STYLES and "overflow: auto" in _STYLES
+
+
 def test_side_column_gives_its_width_back_when_empty() -> None:
     """Треть ширины экрана простаивала под две строки «нет»."""
     assert "function refreshSideColumn(" in _APP
