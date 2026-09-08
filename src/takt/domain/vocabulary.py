@@ -134,6 +134,7 @@ CORRELATION_RULE_RU: dict[str, str] = {
 
 CHAIN_STEP_KIND_RU: dict[str, str] = {
     "process_spawn": "запуск процесса",
+    "process_observed": "процесс наблюдался",
     "network_move": "сетевое перемещение",
 }
 """Вид перехода в реконструкции цепочки (`attack_chain.steps[].kind`)."""

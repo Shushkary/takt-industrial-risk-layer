@@ -990,11 +990,29 @@ function renderCase(workspace) {
 // корректировкой). Раньше это не показывалось на вкладке расследования вовсе — реконструкция
 // была только в «Симуляции», а связанные кейсы виднелись лишь строкой хэшей в карточке сущности.
 
+// Точка входа — гипотеза продукта, и окно обязано это называть: без пометки строка
+// «Точка входа: p-1» читается как установленный факт проникновения. Границы истории тоже
+// приходят от продукта: вывод сделан по событиям дела, за ними реконструкция ничего не знает.
 function renderReconstruction(attackChain) {
   const steps = attackChain.steps || [];
-  $('#reconstructionEntry').textContent = attackChain.entry_point
-    ? `Точка входа: ${attackChain.entry_point}`
-    : 'Точка входа не определена';
+  const entry = $('#reconstructionEntry');
+  if (attackChain.entry_point) {
+    const status = attackChain.entry_point_status === 'hypothesis' ? ' (гипотеза)' : '';
+    entry.textContent = `Точка входа${status}: ${attackChain.entry_point}`;
+    entry.title = attackChain.entry_point_reason || '';
+  } else {
+    entry.textContent = 'Точка входа не определена';
+    entry.title = '';
+  }
+  const history = attackChain.history || {};
+  const scope = $('#reconstructionScope');
+  if (scope) {
+    const known = history.from && history.to;
+    scope.hidden = !known;
+    if (known) {
+      scope.textContent = `Разбор по событиям дела: ${stamp(history.from)} — ${stamp(history.to)}, ${history.events} ${plural(Number(history.events || 0), 'событие', 'события', 'событий')}`;
+    }
+  }
   const list = $('#reconstructionSteps');
   list.replaceChildren();
   if (!steps.length) {
@@ -1004,7 +1022,15 @@ function renderReconstruction(attackChain) {
   for (const step of steps) {
     const item = document.createElement('li');
     const kind = term('chain_step_kind', step.kind);
-    item.innerHTML = `<span class="mono small muted">${escapeHtml(stamp(step.observed_at))}</span> ${escapeHtml(kind)}: <span class="mono">${escapeHtml(step.from_entity)}</span> → <span class="mono">${escapeHtml(step.to_entity)}</span> <span class="muted small">(${escapeHtml(step.operation)})</span>`;
+    // Неизвестный родитель называется неизвестным: пустая стрелка выглядела так, будто
+    // источник перехода известен и просто не показан.
+    const from = step.from_entity_known === false || !step.from_entity
+      ? '<span class="muted small">источник неизвестен</span>'
+      : `<span class="mono">${escapeHtml(step.from_entity)}</span>`;
+    const basis = (step.event_ids || []).length > 1
+      ? ` <span class="muted small">оснований: ${(step.event_ids || []).length}</span>`
+      : '';
+    item.innerHTML = `<span class="mono small muted">${escapeHtml(stamp(step.observed_at))}</span> ${escapeHtml(kind)}: ${from} → <span class="mono">${escapeHtml(step.to_entity)}</span> <span class="muted small">(${escapeHtml(step.operation)})</span>${basis}`;
     list.appendChild(item);
   }
 }

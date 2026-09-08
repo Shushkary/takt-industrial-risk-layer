@@ -483,6 +483,34 @@ def test_narrow_layout_does_not_stretch_the_whole_page() -> None:
     assert ".table-scroll" in _STYLES and "overflow: auto" in _STYLES
 
 
+def test_entry_point_is_shown_as_a_hypothesis() -> None:
+    """«Точка входа: p-1» без пометки читается как установленный факт проникновения.
+
+    Точку входа выбирает эвристика продукта: процесс, родителя которого в составе дела не
+    наблюдалось. Отсутствие родителя в деле не означает его отсутствия вообще.
+    """
+    start = _APP.index("function renderReconstruction(")
+    block = _APP[start : _APP.index("\n}\n", start)]
+    assert "гипотеза" in block
+    assert "entry_point_reason" in block, "основание гипотезы не показано даже подсказкой"
+
+
+def test_reconstruction_names_the_span_it_covers() -> None:
+    """Цепочка без границ читается как полная история узла."""
+    assert 'id="reconstructionScope"' in _INDEX
+    start = _APP.index("function renderReconstruction(")
+    block = _APP[start : _APP.index("\n}\n", start)]
+    assert "attackChain.history" in block
+
+
+def test_unknown_source_of_a_step_is_named() -> None:
+    """Пустая стрелка выглядела так, будто источник перехода известен и просто не показан."""
+    start = _APP.index("function renderReconstruction(")
+    block = _APP[start : _APP.index("\n}\n", start)]
+    assert "источник неизвестен" in block
+    assert "step.from_entity_known === false" in block
+
+
 def test_side_column_gives_its_width_back_when_empty() -> None:
     """Треть ширины экрана простаивала под две строки «нет»."""
     assert "function refreshSideColumn(" in _APP

@@ -36,7 +36,12 @@ def test_reconstruction_finds_entry_process_and_forward_network_move() -> None:
     assert result["entry_point"] == "p1"
     assert [step["kind"] for step in result["steps"]] == ["process_spawn", "process_spawn", "network_move"]
     assert result["steps"][1]["from_entity"] == "p1"
-    assert result["current_state"] == "10.2.2.20"
+    # Последнее наблюдение, а не текущее присутствие злоумышленника: продукт наблюдает
+    # события, а не состояние сети (см. reconstruct_chain, разрыв D05).
+    assert result["last_observed"]["value"] == "10.2.2.20"
+    # Точка входа остаётся гипотезой и называет, на чём она основана.
+    assert result["entry_point_status"] == "hypothesis"
+    assert result["entry_point_reason"]
     assert {(item["type"], item["value"]) for item in result["artifacts"]} == {
         ("file", "dropper.exe"), ("hash", "abc")
     }

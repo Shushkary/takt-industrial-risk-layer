@@ -402,7 +402,11 @@ export type CaseWorkspaceResponse = {
   artifacts: Array<{ type: string; value: string; source: string }>
   attack_chain: {
     entry_point: string
-    current_state: string
+    /** Гипотеза или неопределённость: «точка входа» без пометки читается как факт. */
+    entry_point_status: string
+    entry_point_reason: string
+    /** Последнее наблюдение, а не текущее присутствие злоумышленника. */
+    last_observed: { value: string; observed_at: string }
     steps: Array<{
       order: number
       kind: string
