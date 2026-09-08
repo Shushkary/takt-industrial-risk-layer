@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from takt.domain.entities.case import Case
+from takt.domain.entities.case import Case, CaseArtifact
 from takt.domain.services.decision_brief import decision_brief
 from takt.domain.services.verdict_confidence import MissingContextItem
 
@@ -36,6 +36,96 @@ def _break_long_tokens(text: str, *, max_token_len: int = 16) -> str:
 
 def _pdf_visible_audit_log(case: Case) -> list[str]:
     return [entry for entry in case.audit_log if "pdf exported sha256=" not in entry]
+
+
+# Пределы разделов паспорта. Усечение допустимо — молчаливое усечение нет: обрезанный итог
+# выглядит полным, и получатель не знает, что смотрит на часть.
+_MAX_FINDINGS = 50
+_MAX_ARTIFACTS = 100
+_MAX_DECISIONS = 50
+_MAX_AUDIT = 50
+
+
+def _truncation_note(total: int, limit: int) -> str:
+    return f" (truncated: {limit} of {total})" if total > limit else ""
+
+
+def _artifact_line(artifact: CaseArtifact) -> str:
+    """Артефакт вместе с узлом и статусом проверки.
+
+    Без узла объект остаётся без привязки, и получателю нечего с ним делать; без статуса
+    проверки непроверенное значение читается как установленный факт.
+    """
+    host = artifact.host_id or "host unknown"
+    status = artifact.verification_status or "unverified"
+    source = artifact.source or "-"
+    return f"- [{artifact.type}] {artifact.value} | {host} | {status} | source={source}"
+
+
+def _finding_lines(case: Case) -> list[str]:
+    """Содержание находок, а не факт их добавления.
+
+    Журнал показывал `case.finding.add appended` — то есть что находка была, — но не то, что
+    в ней написано. Связный итог приходилось собирать заново из отдельных выгрузок.
+    """
+    total = len(case.findings)
+    lines = [f"Findings: {total}{_truncation_note(total, _MAX_FINDINGS)}"]
+    if not total:
+        lines.append("-")
+        return lines
+    for finding in case.findings[:_MAX_FINDINGS]:
+        created = finding.created_at.isoformat(timespec="seconds") if finding.created_at else "-"
+        mark = " [historical]" if getattr(finding, "historical", False) else ""
+        origin = getattr(finding, "origin_case_id", "")
+        origin_mark = f" [from case {origin}]" if origin and origin != case.case_id else ""
+        lines.append(f"- {finding.text}{mark}{origin_mark}")
+        lines.append(f"  {finding.author or '-'} | {created} | events: {', '.join(finding.event_ids) or '-'}")
+        for artifact in finding.artifacts:
+            lines.append(f"  {_artifact_line(artifact)}")
+    return lines
+
+
+def _artifact_section(case: Case) -> list[str]:
+    total = len(case.artifacts)
+    lines = [f"Artifacts: {total}{_truncation_note(total, _MAX_ARTIFACTS)}"]
+    if not total:
+        lines.append("-")
+        return lines
+    lines.extend(_artifact_line(artifact) for artifact in case.artifacts[:_MAX_ARTIFACTS])
+    return lines
+
+
+def _decision_section(case: Case) -> list[str]:
+    """Основания решений: паспорт обязан отвечать, почему дело закрыли именно так."""
+    total = len(case.decision_records)
+    lines = [f"Decisions: {total}{_truncation_note(total, _MAX_DECISIONS)}"]
+    if not total:
+        lines.append("-")
+        return lines
+    for record in case.decision_records[:_MAX_DECISIONS]:
+        ts = record.ts.isoformat(timespec="seconds") if hasattr(record.ts, "isoformat") else str(record.ts)
+        lines.append(f"- {ts} | {record.actor or '-'} | {record.prev_status} -> {record.next_status}")
+        lines.append(f"  reason: {record.reason or '-'}")
+    return lines
+
+
+def _open_questions(case: Case) -> list[str]:
+    """Нерешённые вопросы: чего в деле не хватает на момент выгрузки.
+
+    Список строится из уже посчитанного продуктом, а не выводится заново: неполнота качества
+    данных, отсутствие решения аналитика и незакрытая сверка организационного контекста.
+    """
+    questions: list[str] = []
+    if case.dq_partial or case.dq_reasons:
+        reasons = ", ".join(case.dq_reasons) or "partial observability"
+        questions.append(f"- data quality is incomplete: {reasons}")
+    if not case.decision_records:
+        questions.append("- analyst decision is not recorded")
+    if not case.manual_permits:
+        questions.append("- organizational context document is not attached")
+    if not case.findings:
+        questions.append("- no findings recorded by the analyst")
+    return ["Open questions:", *(questions or ["-"])]
 
 
 def _open_document(ts: datetime, unicode_font_path: str | None) -> tuple[Any, str | None, str]:
@@ -117,8 +207,18 @@ def render_case_pdf(
         "Normalized event IDs:",
         ", ".join(case.normalized_event_ids) or "-",
         "",
-        "Audit trail:",
-        "\n".join(T(x) for x in _pdf_visible_audit_log(case)[-50:]) if _pdf_visible_audit_log(case) else "-",
+        # Содержание находок, артефакты с узлами и основания решений: до этой правки паспорт
+        # нёс только строку журнала о том, что находка была добавлена.
+        T("\n".join(_finding_lines(case))),
+        "",
+        T("\n".join(_artifact_section(case))),
+        "",
+        T("\n".join(_decision_section(case))),
+        "",
+        T("\n".join(_open_questions(case))),
+        "",
+        f"Audit trail{_truncation_note(len(_pdf_visible_audit_log(case)), _MAX_AUDIT)}:",
+        "\n".join(T(x) for x in _pdf_visible_audit_log(case)[-_MAX_AUDIT:]) if _pdf_visible_audit_log(case) else "-",
     ]
 
     pdf.set_font(body_font, "", 10)
