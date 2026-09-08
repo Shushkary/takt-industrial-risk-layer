@@ -415,6 +415,18 @@
                 <button class="help" type="button" data-help="journal" aria-label="Пояснение: журнал действий">?</button>
               </div>
             </div>
+            <!-- Основание решения. Смена статуса уходит в продукт вместе с причиной, но
+                 строка журнала несёт только «status -> CONFIRMED»: следующий аналитик видел,
+                 что решение принято, и не видел, почему. Причина приходит отдельным составом
+                 (decision_records), поэтому показывается своей хронологией рядом; строку
+                 журнала интерфейс не трогает — она доказательный материал. -->
+            <div id="decisionRecords" class="decision-records" hidden>
+              <div class="decision-records-head">
+                <h5>Решения аналитика</h5>
+                <button class="help sm" type="button" data-help="decision_records" aria-label="Пояснение: решения аналитика">?</button>
+              </div>
+              <ul id="decisionRecordsList" class="plain"></ul>
+            </div>
             <ul id="journalList" class="plain"></ul>
           </div>
         </div>

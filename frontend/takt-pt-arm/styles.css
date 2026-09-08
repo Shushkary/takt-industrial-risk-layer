@@ -1176,6 +1176,48 @@ ul.plain li {
   margin: 2px 0;
 }
 
+/* Решения аналитика рядом с журналом: та же сетка времени и автора, плюс переход и причина.
+   Блок читают в паре с журналом, поэтому он отделён линией, а не вынесен в отдельную панель. */
+.decision-records {
+  margin: 0 0 10px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.decision-records-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.decision-records-head h5 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.journal-item.decision-item {
+  grid-template-columns: minmax(auto, 12.5em) minmax(auto, 8em) minmax(auto, 14em) minmax(0, 1fr);
+}
+
+.decision-move {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.decision-reason {
+  min-width: 0;
+}
+
+@media (max-width: 1200px) {
+  .journal-item.decision-item {
+    grid-template-columns: 1fr;
+  }
+}
+
 .journal-item {
   /* Время, автор и действие — тремя колонками: взгляд идёт по автору сверху вниз, а не ищет
      его в середине строки. */

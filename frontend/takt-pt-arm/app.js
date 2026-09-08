@@ -253,6 +253,13 @@ const HELP = {
     action: 'Прикладывать паспорт к передаче инцидента, сводку — к докладу. Кириллица в PDF требует настроенного шрифта на стороне продукта; если он не задан, продукт откажет, а не подменит текст.',
     doc: 'docs/api_reference.md',
   },
+  decision_records: {
+    title: 'Решения аналитика',
+    what: 'Смена статуса вместе с основанием: время, автор, прежний и новый статус, причина. Тем же порядком, что и журнал: последнее решение сверху.',
+    source: 'Состав `decision_records` инцидента. Причина записывается при смене статуса и обратно не редактируется; журнал действий остаётся дословным.',
+    action: 'Принимая смену, читать основание здесь, а не запрашивать документ или спрашивать коллегу.',
+    doc: 'docs/product_boundary.md',
+  },
   journal: {
     title: 'Журнал действий по инциденту',
     what: 'Все действия, изменившие состояние инцидента: сборка, находки, подтверждение пакета, смена статуса. В записи — время, автор и суть действия.',
@@ -966,6 +973,7 @@ function renderCase(workspace) {
   renderPermits(item.manual_permits || []);
   renderFindings(item.findings || []);
   refreshSideColumn();
+  renderDecisionRecords(item.decision_records || []);
   renderJournal(item.audit_log || []);
 }
 
@@ -1057,6 +1065,33 @@ function journalAction(action) {
     last = match.index + match[0].length;
   }
   return html + escapeHtml(text.slice(last));
+}
+
+// Хронология решений аналитика. Журнал показывает переход статуса дословно, без причины:
+// она приходит отдельным составом `decision_records` и надёжного ключа связи с конкретной
+// строкой журнала API не даёт. Поэтому решения выводятся своим списком рядом, а не
+// подставляются в записи журнала по совпадению текста — угаданное соответствие в
+// доказательном материале хуже отсутствующего.
+function renderDecisionRecords(records) {
+  const block = $('#decisionRecords');
+  const list = $('#decisionRecordsList');
+  list.replaceChildren();
+  block.hidden = !records.length;
+  if (!records.length) return;
+  // Порядок тот же, что в журнале: последнее решение сверху.
+  for (const record of [...records].reverse()) {
+    const item = document.createElement('li');
+    item.className = 'journal-item decision-item';
+    const prev = record.prev_status ? term('case_status', record.prev_status) : '—';
+    const next = term('case_status', record.next_status);
+    const reason = String(record.reason || '').trim();
+    item.innerHTML = `
+      <span class="journal-time">${escapeHtml(stamp(record.ts))}</span>
+      <span class="journal-actor">${escapeHtml(record.actor || 'система')}</span>
+      <span class="decision-move">${escapeHtml(prev)} → ${escapeHtml(next)}</span>
+      <span class="decision-reason">${reason ? escapeHtml(reason) : '<span class="muted">причина не записана</span>'}</span>`;
+    list.appendChild(item);
+  }
 }
 
 function renderJournal(auditLog) {

@@ -413,6 +413,35 @@ def test_saved_decision_leaves_a_predictable_focus() -> None:
     assert "openCase(selectedCaseId, { moveFocus: true })" in block
 
 
+def test_journal_shows_the_reason_behind_a_decision() -> None:
+    """Причина смены статуса уходила в продукт и не возвращалась на экран.
+
+    Замер: у закрытого инцидента в API одна причина, в журнале АРМ — ноль. Журнал показывал
+    «status -> CONFIRMED», и основание приходилось добирать документом или через коллегу.
+    """
+    assert 'id="decisionRecords"' in _INDEX
+    assert 'id="decisionRecordsList"' in _INDEX
+    assert "function renderDecisionRecords(" in _APP
+
+    start = _APP.index("function renderDecisionRecords(")
+    block = _APP[start : _APP.index("\n}\n", start)]
+    # Время, автор, переход и причина: без причины блок повторял бы журнал.
+    assert "record.reason" in block
+    assert "record.prev_status" in block and "record.next_status" in block
+    assert "term('case_status'" in block
+    assert "record.actor" in block
+
+    # Карточка передаёт состав решений продукта, а не собирает его из текста журнала.
+    case = _APP[_APP.index("function renderCase(") :]
+    case = case[: case.index("\n}\n")]
+    assert "renderDecisionRecords(item.decision_records || [])" in case
+
+    # Строка журнала остаётся дословной: соответствие решению по тексту не угадывается.
+    journal = _APP[_APP.index("function renderJournal(") :]
+    journal = journal[: journal.index("\n}\n")]
+    assert "decision" not in journal.lower()
+
+
 def test_bulk_decision_reads_the_selection_from_the_product() -> None:
     """Размечать «то, что видно» значило бы размечать случайный срез дозагруженной очереди."""
     start = _APP.index("async function submitBulkDecision(")
