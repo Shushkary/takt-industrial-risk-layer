@@ -342,6 +342,36 @@ body {
   min-width: 0;
 }
 
+/* Выход из очереди клавиатурой. Мышью ссылка не нужна и места не занимает; при получении
+   фокуса она становится обычной кнопкой перед списком. */
+.skip-to-work {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-to-work:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0 12px 6px;
+  padding: 4px 10px;
+  overflow: visible;
+  clip: auto;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
 .queue-list {
   max-height: 70vh;
   overflow: auto;

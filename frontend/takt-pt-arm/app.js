@@ -787,6 +787,8 @@ function renderQueue() {
     button.type = 'button';
     button.dataset.caseId = item.case_id;
     button.className = `queue-item${item.case_id === selectedCaseId ? ' active' : ''}`;
+    // Остановка Tab в очереди одна (см. setQueueTabStop): строка достаётся стрелками.
+    button.tabIndex = -1;
     const headline = queueHeadline(item);
     const count = Number(item.event_count ?? 0);
     // Полный заголовок продукта остаётся во всплывающей подсказке: карточка его раскладывает,
@@ -803,9 +805,31 @@ function renderQueue() {
     button.addEventListener('click', () => openCase(item.case_id));
     list.appendChild(button);
   }
+  setQueueTabStop(queueTabStopButton());
   if (focusedCaseId) {
-    list.querySelector(`[data-case-id="${CSS.escape(focusedCaseId)}"]`)?.focus();
+    const restored = list.querySelector(`[data-case-id="${CSS.escape(focusedCaseId)}"]`);
+    if (restored) {
+      setQueueTabStop(restored);
+      restored.focus();
+    }
   }
+}
+
+// Клавиатурная остановка в очереди одна: выбранная строка, а до выбора — первая. Остальные
+// строки достаются стрелками. Раньше остановкой была каждая загруженная строка, и выход из
+// очереди на сотне строк стоил 100 нажатий Tab — до кнопки дозагрузки доходили сотым.
+function setQueueTabStop(button) {
+  for (const item of document.querySelectorAll('#queueList .queue-item')) {
+    item.tabIndex = item === button ? 0 : -1;
+  }
+}
+
+function queueTabStopButton() {
+  const list = $('#queueList');
+  return (
+    list.querySelector(`.queue-item[data-case-id="${CSS.escape(selectedCaseId || '')}"]`) ||
+    list.querySelector('.queue-item')
+  );
 }
 
 // Подсветка выбранного кейса без перестройки DOM: используется при выборе кейса, чтобы
@@ -814,11 +838,14 @@ function updateActiveQueueItem() {
   for (const button of document.querySelectorAll('#queueList .queue-item')) {
     button.classList.toggle('active', button.dataset.caseId === selectedCaseId);
   }
+  // Остановка Tab идёт за выбором: обратный Tab из карточки возвращает к разбираемой строке,
+  // а не к началу списка.
+  setQueueTabStop(queueTabStopButton());
 }
 
 // --- Окно инцидента --------------------------------------------------------
 
-async function openCase(caseId) {
+async function openCase(caseId, { moveFocus = false } = {}) {
   selectedCaseId = caseId;
   queueFreshIds.delete(caseId);
   // Сущность принадлежит кейсу, из которого её открыли: при смене кейса панель очищается,
@@ -833,10 +860,12 @@ async function openCase(caseId) {
     // Пустота блока определяется по отрисованному составу, а не по ответу продукта: часть
     // блоков собирается несколькими запросами и наполняется позже отрисовки карточки.
     refreshBlockCollapse();
+    if (moveFocus) focusInvestigation();
   } catch (error) {
     $('#workBody').hidden = true;
     $('#workEmpty').hidden = false;
     $('#workEmpty').textContent = `Инцидент не открылся: ${error.message}`;
+    if (moveFocus) focusInvestigation();
   }
 }
 
@@ -1259,7 +1288,9 @@ async function submitStatusForm() {
       body: JSON.stringify({ status, reason }),
     });
     toast(`Статус изменён: ${term('case_status', status)}`);
-    await openCase(selectedCaseId);
+    // Кнопка «Сохранить» вместе с формой уходит с экрана, и фокус падал на документ: следующий
+    // Tab начинал обход окна заново. После решения фокус стоит в карточке разобранного дела.
+    await openCase(selectedCaseId, { moveFocus: true });
     await refresh();
   } catch (error) {
     const message =
@@ -2711,6 +2742,16 @@ function queueButtons() {
   return [...document.querySelectorAll('#queueList .queue-item')];
 }
 
+// Выход из очереди в область расследования. Стрелки читают список быстро, но клавиатурный
+// выход из него шёл через все загруженные строки. Ссылка «К расследованию» перед списком и
+// перевод фокуса после Enter дают этот переход одним нажатием; отказ открытия тоже забирает
+// фокус — иначе сообщение об отказе осталось бы непрочитанным.
+function focusInvestigation() {
+  const target = $('#workBody').hidden ? $('#workEmpty') : $('#caseTitle');
+  target.focus();
+  target.scrollIntoView({ block: 'nearest' });
+}
+
 function moveQueueSelection(delta) {
   const buttons = queueButtons();
   if (!buttons.length) return;
@@ -2719,6 +2760,7 @@ function moveQueueSelection(delta) {
   const next = current < 0 ? (delta > 0 ? 0 : buttons.length - 1) : current + delta;
   if (next < 0 || next >= buttons.length) return;
   const button = buttons[next];
+  setQueueTabStop(button);
   button.focus();
   button.scrollIntoView({ block: 'nearest' });
   const caseId = button.dataset.caseId;
@@ -2750,7 +2792,7 @@ document.addEventListener('keydown', (event) => {
     if (!focused) return;
     event.preventDefault();
     clearTimeout(queueStepTimer);
-    openCase(focused.dataset.caseId);
+    openCase(focused.dataset.caseId, { moveFocus: true });
     return;
   }
   if (event.key === '/') {
@@ -3430,6 +3472,7 @@ $('#modalClose').addEventListener('click', closeHelp);
 $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
 $('#reportButton').addEventListener('click', openCaseReport);
+$('#skipToWork').addEventListener('click', focusInvestigation);
 $('#queueMore').addEventListener('click', async () => {
   const button = $('#queueMore');
   button.disabled = true;

@@ -333,6 +333,56 @@ def test_keyboard_walks_the_queue() -> None:
     assert "keyboardIsBusy" in block, "«/» в поле поиска — символ, а не команда"
 
 
+def test_queue_holds_one_keyboard_stop() -> None:
+    """Сотня загруженных строк была сотней остановок Tab на пути из очереди.
+
+    Замер: при показанных 100 из 518 строк выход из списка стоил 100 нажатий. Внутри списка
+    строки достаются стрелками, поэтому остановка Tab нужна одна — на выбранной строке, а до
+    выбора на первой.
+    """
+    start = _APP.index("function renderQueue(")
+    block = _APP[start : _APP.index("\nfunction setQueueTabStop(", start)]
+    assert "button.tabIndex = -1" in block, "каждая строка очереди снова стала остановкой Tab"
+    assert "setQueueTabStop(" in block
+
+    assert "function setQueueTabStop(" in _APP
+    stop = _APP[_APP.index("function setQueueTabStop(") :]
+    assert "item.tabIndex = item === button ? 0 : -1" in stop[: stop.index("\n}\n")]
+
+    # Стрелка ведёт остановку за собой, иначе обратный Tab вернёт к прежней строке.
+    move = _APP[_APP.index("function moveQueueSelection(") :]
+    assert "setQueueTabStop(button)" in move[: move.index("\n}\n")]
+
+    # Выбор кейса без перестройки списка тоже переносит остановку.
+    active = _APP[_APP.index("function updateActiveQueueItem(") :]
+    assert "setQueueTabStop(" in active[: active.index("\n}\n")]
+
+
+def test_keyboard_leaves_the_queue_for_the_investigation() -> None:
+    """Из очереди в область расследования быстрого перехода не было вовсе."""
+    assert 'id="skipToWork"' in _INDEX, "ссылка «К расследованию» перед очередью"
+    assert ".skip-to-work" in _STYLES
+    # Цель перевода фокуса должна его принимать: заголовок и пустое состояние сами не фокусируемы.
+    assert 'id="caseTitle" class="case-title" tabindex="-1"' in _INDEX
+    assert 'id="workEmpty" class="muted pad" tabindex="-1"' in _INDEX
+
+    assert "function focusInvestigation(" in _APP
+    assert "$('#skipToWork').addEventListener('click', focusInvestigation);" in _APP
+
+    # Enter открывает инцидент и уводит фокус в карточку; стрелка — нет, она листает список.
+    start = _APP.index("// --- Клавиатура ---")
+    block = _APP[start : _APP.index("// --- Полоса решения", start)]
+    assert "openCase(focused.dataset.caseId, { moveFocus: true })" in block
+    assert "openCase(caseId), QUEUE_STEP_DELAY_MS" in block, "стрелка не должна забирать фокус"
+
+
+def test_saved_decision_leaves_a_predictable_focus() -> None:
+    """Кнопка «Сохранить» уходит с экрана вместе с формой, и фокус падал на документ."""
+    start = _APP.index("async function submitStatusForm(")
+    block = _APP[start : _APP.index("\n}\n", start)]
+    assert "openCase(selectedCaseId, { moveFocus: true })" in block
+
+
 def test_bulk_decision_reads_the_selection_from_the_product() -> None:
     """Размечать «то, что видно» значило бы размечать случайный срез дозагруженной очереди."""
     start = _APP.index("async function submitBulkDecision(")
