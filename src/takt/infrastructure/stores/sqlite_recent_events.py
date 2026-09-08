@@ -33,6 +33,16 @@ def _chunks(items: list[str], size: int) -> list[list[str]]:
     return [items[start : start + size] for start in range(0, len(items), size)]
 
 
+def _span_seconds(first_seen: Any, last_seen: Any) -> int:
+    """Промежуток между первым и последним наблюдением сущности, в секундах."""
+    try:
+        start = _dt_from_sql(str(first_seen))
+        end = _dt_from_sql(str(last_seen))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, int((end - start).total_seconds()))
+
+
 class SqliteRecentEventStore:
     def __init__(self, db_path: str | Path) -> None:
         self._path = Path(db_path)
@@ -168,7 +178,9 @@ class SqliteRecentEventStore:
             (entity_type, entity_id, bucket),
         )
 
-    def entity_card(self, entity_type: str, entity_id: str, *, event_limit: int = 100) -> dict[str, Any] | None:
+    def entity_card(
+        self, entity_type: str, entity_id: str, *, event_limit: int = 100, event_offset: int = 0
+    ) -> dict[str, Any] | None:
         with self._lock:
             self._raise_if_closed()
             row = self._conn.execute(
@@ -185,14 +197,23 @@ class SqliteRecentEventStore:
         filter_name = {"host": "host_id", "user": "user_id", "process": "process_key"}[entity_type]
         # Имя фильтра выбирается по типу сущности, поэтому аргумент собирается словарём.
         entity_filter: dict[str, Any] = {filter_name: entity_id}
-        events, total = self.search_events(limit=event_limit, **entity_filter)
+        events, total = self.search_events(limit=event_limit, offset=event_offset, **entity_filter)
         count = int(row["event_count"])
+        # Промежуток и число часовых корзин — это границы счётчика, а не модель поведения.
+        # Без них 51 событие за 50 секунд и 51 событие за неделю выглядели одинаково «часто».
+        active_hours = len(activity)
+        span_seconds = _span_seconds(row["first_seen"], row["last_seen"])
         if count == 1:
             typicality, explanation = "first_seen", "entity has exactly one observed event"
         elif count < 3:
             typicality, explanation = "rare", f"only {count} events are present in history"
+        elif active_hours <= 1:
+            # Вся история уместилась в один час: это вспышка, а не устойчивое поведение.
+            # Порог периода для суждения о типичности согласуется с заказчиком; до тех пор
+            # продукт называет наблюдаемое, а не делает вывод о норме.
+            typicality, explanation = "burst", f"{count} events within a single hour"
         else:
-            typicality, explanation = "typical", f"{count} events across {len(activity)} hourly buckets"
+            typicality, explanation = "typical", f"{count} events across {active_hours} hourly buckets"
         attributes = json.loads(row["attributes_json"] or "{}")
         return {
             "type": entity_type, "id": entity_id,
@@ -204,10 +225,16 @@ class SqliteRecentEventStore:
             "first_seen": row["first_seen"], "last_seen": row["last_seen"],
             "sources": json.loads(row["sources_json"] or "[]"), "event_count": count,
             "activity_by_hour": [{"bucket": item["bucket_hour"], "count": item["event_count"]} for item in activity],
-            "typicality": {"status": typicality, "explanation": explanation},
+            "typicality": {
+                "status": typicality, "explanation": explanation,
+                "active_hours": active_hours, "span_seconds": span_seconds,
+            },
             "attributes": attributes,
             "environment": [_persistent_event_summary(event) for event in events],
             "environment_total": total,
+            # Смещение страницы: история длиннее предела запроса достаётся страницами, а не
+            # обрывается молча на сотом событии.
+            "environment_offset": int(event_offset),
         }
 
     def search_events(

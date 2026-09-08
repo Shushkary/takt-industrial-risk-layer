@@ -631,6 +631,24 @@ function stamp(value) {
   return `${utc(value)} ${zoneLabel()}`;
 }
 
+// Промежуток истории словами: «за 50 секунд» и «за 6 суток» — разные наблюдения, и разницу
+// должен видеть читающий, а не вычислять из двух меток времени.
+function humanSpan(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value <= 0) return 'в пределах одной отметки времени';
+  if (value < 60) return `за ${Math.round(value)} ${plural(Math.round(value), 'секунду', 'секунды', 'секунд')}`;
+  if (value < 3600) {
+    const minutes = Math.round(value / 60);
+    return `за ${minutes} ${plural(minutes, 'минуту', 'минуты', 'минут')}`;
+  }
+  if (value < 86400) {
+    const hours = Math.round(value / 3600);
+    return `за ${hours} ${plural(hours, 'час', 'часа', 'часов')}`;
+  }
+  const days = Math.round(value / 86400);
+  return `за ${days} ${plural(days, 'сутки', 'суток', 'суток')}`;
+}
+
 function score(value) {
   return Number.isFinite(Number(value)) ? Number(value).toFixed(3) : '—';
 }
@@ -2399,16 +2417,21 @@ function renderEntityEnvironment() {
     item.innerHTML = `<span class="mono small muted">${escapeHtml(stamp(event.observed_at))}</span> <span class="chip sm" title="${escapeHtml(event.source)}">${escapeHtml(term('event_source', event.source))}</span> <span class="mono small">${escapeHtml(event.operation)}</span>`;
     list.appendChild(item);
   }
-  count.hidden = false;
-  count.textContent = `Показано ${shown} из ${received}`;
-  const rest = received - shown;
-  more.hidden = rest <= 0;
-  more.textContent = `Показать ещё ${rest}`;
-  // Предел запроса называется, только когда история в него упёрлась: иначе строка вводила бы
-  // в заблуждение о полноте.
   const known = Number(entityEnvironmentTotal || received);
-  limit.hidden = !(Number.isFinite(known) && known > received);
-  limit.textContent = `Получено ${received} из ${known}: остальное за пределом запроса (${ENTITY_EVENT_LIMIT})`;
+  count.hidden = false;
+  count.textContent = `Показано ${shown} из ${known}`;
+  const rest = received - shown;
+  // За полученным массивом идёт следующая страница продукта: раньше история обрывалась на
+  // пределе запроса, и контрольное 101-е событие было недостижимо вовсе.
+  const beyondPage = received < known;
+  more.hidden = rest <= 0 && !beyondPage;
+  more.textContent = rest > 0
+    ? `Показать ещё ${Math.min(rest, ENTITY_ENVIRONMENT_PAGE)}`
+    : `Показать ещё ${Math.min(known - received, ENTITY_EVENT_LIMIT)} (запрос к продукту)`;
+  // Строка о пределе одного запроса остаётся: она объясняет, почему следующая порция
+  // требует обращения к продукту, а не разворачивается мгновенно.
+  limit.hidden = !beyondPage;
+  limit.textContent = `Получено ${received} из ${known}: следующая страница запрашивается у продукта (по ${ENTITY_EVENT_LIMIT})`;
 }
 
 function resetEntityPanel() {
@@ -2477,12 +2500,20 @@ async function openEntity(type, id) {
     const frequency = typicality.status
       ? `${term('typicality', typicality.status)} (${eventCount})`
       : '—';
+    // Периоды: без них счётчик ничего не говорит о поведении — 51 событие за 50 секунд и
+    // 51 событие за неделю выглядели одинаково.
+    const span = Number(typicality.span_seconds ?? 0);
+    const activeHours = Number(typicality.active_hours ?? 0);
+    const spread = typicality.status
+      ? `${humanSpan(span)} · часов с активностью: ${activeHours}`
+      : '—';
     // Значение из данных источника, а не внутренний ключ: карточка процесса открывается по
     // ключу «узел+PID», но аналитику показывается PID, который он видит в цепочке.
     if (card.display_id) $('#entityId').textContent = card.display_id;
     const rows = [
       ['Событий всего', eventCount],
       ['Частота в истории', frequency],
+      ['Разброс во времени', spread],
       ['Первое появление', card.first_seen ? stamp(card.first_seen) : '—'],
       ['Последнее появление', card.last_seen ? stamp(card.last_seen) : '—'],
       ['Источники', (card.sources || []).map((source) => term('event_source', source)).join(', ') || '—'],
@@ -3766,10 +3797,30 @@ $('#attachMore').addEventListener('click', async () => {
     button.disabled = false;
   }
 });
-$('#entityEnvironmentMore').addEventListener('click', () => {
-  // Разворачивается уже полученный массив: нового запроса продукту это не стоит.
-  entityEnvironmentShown = entityEnvironment.length;
-  renderEntityEnvironment();
+$('#entityEnvironmentMore').addEventListener('click', async () => {
+  // Сначала разворачивается уже полученное — это не стоит запроса. Когда развёрнуто всё, а
+  // история продолжается, запрашивается следующая страница у продукта.
+  if (entityEnvironmentShown < entityEnvironment.length) {
+    entityEnvironmentShown = entityEnvironment.length;
+    renderEntityEnvironment();
+    return;
+  }
+  if (!selectedEntity || entityEnvironment.length >= entityEnvironmentTotal) return;
+  const button = $('#entityEnvironmentMore');
+  button.disabled = true;
+  try {
+    const path = `/entities/${encodeURIComponent(selectedEntity.type)}/${encodeURIComponent(selectedEntity.id)}/card`;
+    const next = await api(`${path}?event_limit=${ENTITY_EVENT_LIMIT}&event_offset=${entityEnvironment.length}`);
+    const page = next.environment || [];
+    entityEnvironment = [...entityEnvironment, ...page];
+    entityEnvironmentTotal = Number(next.environment_total ?? entityEnvironment.length);
+    entityEnvironmentShown = entityEnvironment.length;
+    renderEntityEnvironment();
+  } catch (error) {
+    toast(`История не дочитана: ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
 });
 $('#queueMore').addEventListener('click', async () => {
   const button = $('#queueMore');

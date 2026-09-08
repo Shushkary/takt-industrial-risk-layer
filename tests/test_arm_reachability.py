@@ -230,24 +230,25 @@ def test_entity_history_is_reachable_past_the_tenth_record() -> None:
 
     block = _APP[_APP.index("function renderEntityEnvironment(") :]
     block = block[: block.index("\n}\n")]
-    assert "Показано ${shown} из ${received}" in block
-    assert "Показать ещё ${rest}" in block
+    assert "Показано ${shown} из ${known}" in block
+    assert "Показать ещё " in block, "кнопка продолжения истории потеряла подпись"
     # Разворачивается уже полученный массив: срез на десяти как предел показа исчез.
     assert ".slice(0, 10)" not in _APP[_APP.index("async function openEntity(") :]
 
 
-def test_entity_history_names_the_request_limit_instead_of_faking_pages() -> None:
-    """За серверным пределом навигация не имитируется, предел называется.
+def test_entity_history_names_the_request_limit_and_continues_past_it() -> None:
+    """Предел одного запроса назван, и за ним история продолжается страницами.
 
-    API отдаёт до `event_limit` записей и общее число отдельно. Когда история в предел
-    упёрлась, окно говорит это прямо, а не показывает кнопку, за которой ничего нет.
+    Сначала за пределом ничего не было: окно честно говорило «остальное за пределом
+    запроса» и на этом останавливалось. Теперь предел объясняет, почему следующая порция
+    требует обращения к продукту, а сама порция достаётся.
     """
     assert "ENTITY_EVENT_LIMIT" in _APP
     assert "event_limit=${ENTITY_EVENT_LIMIT}" in _APP, "предел запроса задаётся явно"
     block = _APP[_APP.index("function renderEntityEnvironment(") :]
     block = block[: block.index("\n}\n")]
     assert "entityEnvironmentTotal" in block
-    assert "за пределом запроса" in block
+    assert "запрашивается у продукта" in block
 
 
 def test_writing_a_finding_keeps_the_entity_open() -> None:
@@ -411,3 +412,23 @@ def test_confirmed_package_keeps_the_host_of_each_row() -> None:
     assert "verification_status" in confirm
     # Исключённые строки не уходят в находку, а значит и в экспорт.
     assert "responseRows.filter((row) => row.checked)" in confirm
+# --------------------------------------------------------------------------- #
+# История сущности: периоды и страницы за пределом одного запроса
+# --------------------------------------------------------------------------- #
+
+def test_entity_card_shows_the_spread_in_time() -> None:
+    """51 событие за 50 секунд и 51 за неделю выглядели одинаково «часто»."""
+    entity = _APP[_APP.index("async function openEntity(") :]
+    entity = entity[: entity.index(SIG)]
+    assert "typicality.span_seconds" in entity
+    assert "typicality.active_hours" in entity
+    assert "Разброс во времени" in entity
+    assert "function humanSpan(" in _APP
+
+
+def test_history_past_the_request_limit_is_fetched_from_the_product() -> None:
+    """Контрольное 101-е событие было недостижимо: карточка за предел не переходила."""
+    assert "event_offset=" in _APP, "следующая страница истории не запрашивается"
+    # Уже полученное по-прежнему разворачивается без запроса: лишний запрос за тем, что уже
+    # пришло, — та же потеря, что и отсутствие продолжения.
+    assert "entityEnvironmentShown < entityEnvironment.length" in _APP
