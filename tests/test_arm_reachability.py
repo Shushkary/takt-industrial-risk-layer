@@ -170,8 +170,9 @@ def test_host_expansion_can_be_started_from_the_case_panel() -> None:
 def test_host_expansion_reads_seeds_from_pivot_seed_artifacts() -> None:
     """Сиды для повторной сборки берутся из уже сохранённых артефактов дела.
 
-    Не набираются заново и не хранятся отдельно от продукта: `case.artifacts` с
-    `source === 'pivot-seed'` — тот же список, что показывает пакет реагирования.
+    Не набираются заново и не хранятся отдельно от продукта: это `case.artifacts` с
+    `source === 'pivot-seed'`. Пакет реагирования с этим списком больше не совпадает — его
+    состав считает продукт по всему делу, а не по одним отличительным сущностям.
     """
     assert "item.source === 'pivot-seed'" in _APP
     assert "`${item.type}:${item.value}`" in _APP
@@ -361,3 +362,52 @@ def test_attach_search_filters_a_process_by_key() -> None:
     options = _APP[_APP.index("function caseEntityOptions(") :]
     options = options[: options.index(SIG)]
     assert "process_key:" in options
+# --------------------------------------------------------------------------- #
+# Пакет реагирования: состав считает продукт
+# --------------------------------------------------------------------------- #
+
+def test_response_package_is_built_by_the_product() -> None:
+    """Хеш и домен были в составе дела, а таблица предлагала учётные записи и адрес.
+
+    Пакет собирался в браузере из артефактов пивота и знал три типа. Теперь состав приходит
+    рабочей областью, и окно только показывает и отмечает.
+    """
+    render = _APP[_APP.index("function renderResponse(") :]
+    render = render[: render.index(SIG)]
+    assert "data.candidates" in render
+    assert "renderResponse(workspace.response_package)" in _APP
+    # Свой расчёт из отличительных сущностей ушёл: он и терял хеш, домен и файл.
+    assert "seed.type === 'host'" not in _APP
+
+
+def test_unknown_host_is_named_and_not_ticked() -> None:
+    """Пустая ячейка узла молчала, и рекомендация уходила без адресата."""
+    paint = _APP[_APP.index("function paintResponse(") :]
+    paint = paint[: paint.index(SIG)]
+    assert "узел не определён" in paint
+
+    render = _APP[_APP.index("function renderResponse(") :]
+    render = render[: render.index(SIG)]
+    assert "item.selected_by_default" in render, "отметка по умолчанию снова решается в окне"
+
+
+def test_response_package_text_carries_version_and_provenance() -> None:
+    """Получатель должен отличать отличительную сущность сборки от объекта из события."""
+    text = _APP[_APP.index("function responsePackageText(") :]
+    text = text[: text.index(SIG)]
+    assert "версия ${responseVersion}" in text
+    assert "responseBoundaryNote" in text, "граница продукта обязана уходить вместе с пакетом"
+
+    line = _APP[_APP.index("function responseLineText(") :]
+    line = line[: line.index(SIG)]
+    assert "responseOriginLabel(row.origin)" in line
+
+
+def test_confirmed_package_keeps_the_host_of_each_row() -> None:
+    """Артефакт без узла в экспорте — объект без привязки, которую аналитик уже сделал."""
+    confirm = _APP[_APP.index("async function confirmResponsePackage(") :]
+    confirm = confirm[: confirm.index(SIG)]
+    assert "host_id: row.host" in confirm
+    assert "verification_status" in confirm
+    # Исключённые строки не уходят в находку, а значит и в экспорт.
+    assert "responseRows.filter((row) => row.checked)" in confirm

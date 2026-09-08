@@ -974,7 +974,7 @@ function renderCase(workspace) {
   renderReconstruction(workspace.attack_chain || {});
   renderRelatedCases(item.related_cases || []);
   lastCaseArtifacts = workspace.artifacts || [];
-  renderResponse(workspace.events || [], lastCaseArtifacts, item.correlation_evidence || []);
+  renderResponse(workspace.response_package);
   renderExpandBlock();
   renderPermits(item.manual_permits || []);
   renderFindings(item.findings || []);
@@ -2186,72 +2186,41 @@ function findingArtifactType(row) {
 
 function responseLineText(row) {
   if (row.type === 'pipeline') return row.action;
-  const hostPart = row.host ? ` — узел ${row.host}` : '';
-  return `${responseTypeLabel(row.type)} — ${row.value}${hostPart} — ${row.action}`;
+  const hostPart = row.host ? ` — узел ${row.host}` : ' — узел не определён';
+  const originPart = row.origin ? ` [${responseOriginLabel(row.origin)}]` : '';
+  return `${responseTypeLabel(row.type)} — ${row.value}${hostPart} — ${row.action}${originPart}`;
 }
 
 let responseRows = [];
+let responseVersion = 1;
+let responseBoundaryNote = '';
 
-// Варианты реагирования строятся по отличительным сущностям инцидента (артефакты кейса
-// с источником pivot-seed) — события, добранные расширением до уровня узла, содержат и
-// штатную активность, предлагать по ним действия значит предлагать сброс учётных записей
-// людей, которые в это время просто работали. Узлы расширения показаны отдельной, не
-// отмеченной по умолчанию группой (F-08): по инциденту «компрометация ws-17» иначе не было
-// видно вообще, что с ws-17 можно что-то сделать.
-function renderResponse(events, artifacts, correlationEvidence) {
-  const evidenceByEvent = new Map((correlationEvidence || []).map((item) => [item.event_id, item]));
-  const hosts = new Set();
-  const users = new Set();
-  const addresses = new Set();
-  const objects = new Set();
-  let pipeline = false;
-  const seeds = (artifacts || []).filter((item) => item.source === 'pivot-seed');
-  for (const seed of seeds) {
-    // Объекты конвейера приходят в поле узла с префиксом вида `pipeline:` или
-    // `artifact:`. Изолировать их нельзя — это не узлы сети.
-    if (seed.type === 'host') (seed.value.includes(':') ? objects : hosts).add(seed.value);
-    if (seed.type === 'user') users.add(seed.value);
-    if (seed.type === 'address') addresses.add(seed.value);
-  }
-  for (const event of events) {
-    if (event.source === 'ot') pipeline = true;
-  }
-  const expandedHosts = new Set();
-  for (const event of events) {
-    const evidence = evidenceByEvent.get(event.event_id);
-    const hostId = event.entities && event.entities.host_id;
-    if (evidence && evidence.rule === 'host-expansion' && hostId) expandedHosts.add(hostId);
-  }
-
-  responseRows = [];
-  if (seeds.length) {
-    for (const host of hosts) {
-      responseRows.push({ type: 'host', value: host, host, action: 'Изоляция узла', group: 'core', checked: true });
-    }
-    for (const user of users) {
-      responseRows.push({ type: 'user', value: user, host: '', action: 'Сброс учётной записи', group: 'core', checked: true });
-    }
-    for (const address of addresses) {
-      responseRows.push({ type: 'address', value: address, host: '', action: 'Блокировка адреса', group: 'core', checked: true });
-    }
-    if (objects.size) {
-      for (const object of objects) {
-        responseRows.push({
-          type: 'artifact', value: object, host: '',
-          action: 'Заморозка конвейера сборки до проверки объекта', group: 'core', checked: true,
-        });
-      }
-    } else if (pipeline) {
-      responseRows.push({ type: 'pipeline', value: '—', host: '', action: 'Заморозка конвейера сборки', group: 'core', checked: true });
-    }
-  }
-  for (const host of expandedHosts) {
-    responseRows.push({
-      type: 'host', value: host, host,
-      action: 'Изоляция узла (узел разбора, не отличительная сущность)', group: 'expanded', checked: false,
-    });
-  }
-
+// Состав пакета считает продукт (`response_package` рабочей области). Раньше он собирался
+// здесь из артефактов пивота и знал три типа — узел, учётную запись и адрес: хеш, домен и
+// файл до таблицы не доходили, дело, собранное не пивотом, оставляло панель пустой, а поле
+// узла у учётной записи и адреса молча пустовало.
+//
+// Что осталось решением аналитика: узлы, добранные расширением до узла, идут отдельной
+// группой и по умолчанию не отмечены — они попали в дело по узлу, а не по признаку атаки, и
+// предлагать по ним действия значит предлагать сброс учётных записей людей, которые в это
+// время просто работали. Объект с неизвестным узлом тоже не отмечается сам.
+function renderResponse(package_) {
+  const data = package_ || {};
+  responseVersion = Number(data.version ?? 1);
+  responseBoundaryNote = String(data.boundary_note || '');
+  responseRows = (data.candidates || []).map((item) => ({
+    type: item.type,
+    value: item.value,
+    host: item.host_id || '',
+    hostKnown: Boolean(item.host_known),
+    action: item.action,
+    origin: item.origin,
+    source: item.source || '',
+    eventIds: item.event_ids || [],
+    verification: item.verification_status || '',
+    group: item.group,
+    checked: Boolean(item.selected_by_default),
+  }));
   paintResponse();
 }
 
@@ -2263,7 +2232,7 @@ function paintResponse() {
   if (!responseRows.length) {
     wrap.hidden = true;
     empty.hidden = false;
-    empty.textContent = 'инцидент собран не пивотом: отличительные сущности не заданы, поэтому предлагать нечего';
+    empty.textContent = 'в составе дела нет объектов, к которым применимы рекомендации';
     $('#confirmResponseButton').disabled = true;
     return;
   }
@@ -2272,12 +2241,18 @@ function paintResponse() {
   responseRows.forEach((row, index) => {
     const tr = document.createElement('tr');
     if (row.group === 'expanded') tr.className = 'response-expanded';
+    // Неизвестный узел называется прямо: пустая ячейка молчала, и рекомендация уходила без
+    // адресата. Такая строка не отмечена по умолчанию — решение принимает аналитик.
+    const host = row.host
+      ? `<span class="mono small">${escapeHtml(row.host)}</span>`
+      : '<span class="muted small">узел не определён</span>';
+    const origin = `<span class="muted small">${escapeHtml(responseOriginLabel(row.origin))}</span>`;
     tr.innerHTML = `
       <td><input type="checkbox" data-response-index="${index}" ${row.checked ? 'checked' : ''} /></td>
       <td>${escapeHtml(responseTypeLabel(row.type))}</td>
       <td class="mono small">${escapeHtml(row.value)}</td>
-      <td class="mono small">${escapeHtml(row.host)}</td>
-      <td>${escapeHtml(row.action)}</td>`;
+      <td>${host}</td>
+      <td>${escapeHtml(row.action)}<br />${origin}</td>`;
     body.appendChild(tr);
   });
   body.querySelectorAll('[data-response-index]').forEach((checkbox) => {
@@ -2293,9 +2268,23 @@ function updateConfirmResponseState() {
   $('#confirmResponseButton').disabled = !responseRows.some((row) => row.checked);
 }
 
+// Происхождение строки видно и в тексте для передачи: получатель должен отличать
+// отличительную сущность сборки от объекта, добранного из события.
+const RESPONSE_ORIGIN_RU = {
+  'pivot-seed': 'отличительная сущность сборки',
+  manual: 'артефакт, добавленный аналитиком',
+  event: 'сущность или артефакт события',
+  'host-expansion': 'узел, добранный расширением',
+};
+
+function responseOriginLabel(origin) {
+  return RESPONSE_ORIGIN_RU[origin] || origin || '';
+}
+
 function responsePackageText() {
   const lines = responseRows.filter((row) => row.checked).map(responseLineText);
-  return `Пакет реагирования по инциденту ${selectedCaseId}:\n${lines.join('\n')}`;
+  const note = responseBoundaryNote ? `\n${responseBoundaryNote}` : '';
+  return `Пакет реагирования (версия ${responseVersion}) по инциденту ${selectedCaseId}:\n${lines.join('\n')}${note}`;
 }
 
 function showResponsePackageModal(text) {
@@ -2330,9 +2319,15 @@ async function confirmResponsePackage() {
       method: 'POST',
       body: JSON.stringify({
         text,
+        // Исключённые строки в находку не уходят — значит, не уходят и в экспорт.
         artifacts: checked
           .filter((row) => row.type !== 'pipeline')
-          .map((row) => ({ type: findingArtifactType(row), value: row.value, host_id: row.host || '' })),
+          .map((row) => ({
+            type: findingArtifactType(row),
+            value: row.value,
+            host_id: row.host || '',
+            verification_status: row.verification || 'unverified',
+          })),
       }),
     });
     if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});

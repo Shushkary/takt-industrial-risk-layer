@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from takt.application.use_cases.reconstruct_chain import reconstruct_attack_chain
+from takt.application.use_cases.response_package import build_response_package
 from takt.domain.services.process_identity import process_entity_key
 from takt.interface_adapters.api.dependencies import ApiContext, require
 
@@ -20,6 +21,25 @@ def _workspace_event(event) -> dict:
         ),
         "artifacts": [{"type": item.type.value, "value": item.value} for item in event.artifacts],
     }
+
+
+def _expanded_hosts(case, events) -> list[str]:
+    """Узлы, добранные расширением до узла.
+
+    Они попали в дело по узлу, а не по признаку атаки, поэтому в пакете идут отдельной
+    группой и по умолчанию не отмечены.
+    """
+    expanded = {
+        item.event_id for item in case.correlation_evidence if getattr(item, "rule", "") == "host-expansion"
+    }
+    hosts: list[str] = []
+    for event in events:
+        if event.event_id not in expanded:
+            continue
+        host = (event.entities.host_id if event.entities else "") or ""
+        if host and host not in hosts:
+            hosts.append(host)
+    return hosts
 
 
 def _case_graph(events) -> dict:
@@ -83,4 +103,25 @@ def register_workspace_routes(ctx: ApiContext) -> None:
                 for item in case.artifacts
             ],
             "attack_chain": reconstruct_attack_chain(ordered),
+            # Состав пакета считает продукт, а не браузер: раньше окно собирало его из
+            # артефактов пивота и знало три типа, поэтому хеш, домен и файл до пакета не
+            # доходили, а дело, собранное не пивотом, оставляло панель пустой.
+            "response_package": _response_package(case, ordered),
+        }
+
+    def _response_package(case, ordered) -> dict:
+        package = build_response_package(case, ordered, expanded_hosts=_expanded_hosts(case, ordered))
+        return {
+            "version": package.version,
+            "boundary_note": package.boundary_note,
+            "candidates": [
+                {
+                    "type": item.type, "value": item.value, "action": item.action,
+                    "host_id": item.host_id, "host_known": item.host_known,
+                    "origin": item.origin, "event_ids": list(item.event_ids),
+                    "source": item.source, "verification_status": item.verification_status,
+                    "group": item.group, "selected_by_default": item.selected_by_default,
+                }
+                for item in package.candidates
+            ],
         }
