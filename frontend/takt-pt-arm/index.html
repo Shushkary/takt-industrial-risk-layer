@@ -449,6 +449,13 @@
           <div id="entityRelatedCases" class="chips"></div>
           <h3 class="entity-subhead">Окружение</h3>
           <ul id="entityEnvironment" class="plain small"></ul>
+          <!-- История узла обрывалась на десятой записи молча: карточка писала «Событий всего
+               18», список показывал последние десять, кнопки продолжения не было. Остальные
+               восемь уже пришли ответом продукта — их разворачивает кнопка. Предел запроса
+               назван отдельной строкой: за него навигация не имитируется. -->
+          <p id="entityEnvironmentCount" class="muted small" hidden>—</p>
+          <button id="entityEnvironmentMore" class="action inline" type="button" hidden>Показать ещё</button>
+          <p id="entityEnvironmentLimit" class="muted small" hidden>—</p>
         </div>
 
         <div class="panel-head">

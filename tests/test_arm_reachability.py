@@ -208,3 +208,38 @@ def test_assembly_threshold_is_adjustable_from_the_queue() -> None:
 def test_assembly_threshold_has_a_help_entry_stating_the_trade_off() -> None:
     assert 'data-help="assemble_threshold"' in _INDEX
     assert re.search(r"^  assemble_threshold: \{$", _APP, re.MULTILINE)
+# --------------------------------------------------------------------------- #
+# Контекст сущности: полученная история и её сохранение между записями
+# --------------------------------------------------------------------------- #
+
+def test_entity_history_is_reachable_past_the_tenth_record() -> None:
+    """История узла обрывалась на десятой записи молча.
+
+    У `eng-ws-04` карточка писала «Событий всего 18», окружение показывало последние десять,
+    кнопки продолжения не было. Восемь недостающих событий уже пришли ответом продукта —
+    ограничение стояло в срезе на стороне АРМ.
+    """
+    assert 'id="entityEnvironmentMore"' in _INDEX, "кнопки продолжения истории нет"
+    assert 'id="entityEnvironmentCount"' in _INDEX, "«Показано 10 из 18» не показывается"
+    assert "function renderEntityEnvironment(" in _APP
+
+    block = _APP[_APP.index("function renderEntityEnvironment(") :]
+    block = block[: block.index("\n}\n")]
+    assert "Показано ${shown} из ${received}" in block
+    assert "Показать ещё ${rest}" in block
+    # Разворачивается уже полученный массив: срез на десяти как предел показа исчез.
+    assert ".slice(0, 10)" not in _APP[_APP.index("async function openEntity(") :]
+
+
+def test_entity_history_names_the_request_limit_instead_of_faking_pages() -> None:
+    """За серверным пределом навигация не имитируется, предел называется.
+
+    API отдаёт до `event_limit` записей и общее число отдельно. Когда история в предел
+    упёрлась, окно говорит это прямо, а не показывает кнопку, за которой ничего нет.
+    """
+    assert "ENTITY_EVENT_LIMIT" in _APP
+    assert "event_limit=${ENTITY_EVENT_LIMIT}" in _APP, "предел запроса задаётся явно"
+    block = _APP[_APP.index("function renderEntityEnvironment(") :]
+    block = block[: block.index("\n}\n")]
+    assert "entityEnvironmentTotal" in block
+    assert "за пределом запроса" in block

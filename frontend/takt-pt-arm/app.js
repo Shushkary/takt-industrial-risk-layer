@@ -2241,6 +2241,49 @@ async function confirmResponsePackage() {
 
 // --- Сущность и находки ----------------------------------------------------
 
+// Окружение сущности: продукт отдаёт историю целиком до предела запроса, окно показывало
+// первые десять записей и обрывалось молча — раннее появление, названное в фактах карточки,
+// в списке отсутствовало. Показ разворачивается по кнопке из уже полученного массива;
+// за предел запроса навигация не имитируется, предел называется строкой.
+const ENTITY_ENVIRONMENT_PAGE = 10;
+// Предел запроса задаётся явно: без него читающий не знает, чем ограничена история.
+const ENTITY_EVENT_LIMIT = 100;
+let entityEnvironment = [];
+let entityEnvironmentShown = 0;
+let entityEnvironmentTotal = 0;
+
+function renderEntityEnvironment() {
+  const list = $('#entityEnvironment');
+  const count = $('#entityEnvironmentCount');
+  const more = $('#entityEnvironmentMore');
+  const limit = $('#entityEnvironmentLimit');
+  list.replaceChildren();
+  const received = entityEnvironment.length;
+  if (!received) {
+    list.innerHTML = '<li class="muted small">событий нет</li>';
+    count.hidden = true;
+    more.hidden = true;
+    limit.hidden = true;
+    return;
+  }
+  const shown = Math.min(entityEnvironmentShown, received);
+  for (const event of entityEnvironment.slice(0, shown)) {
+    const item = document.createElement('li');
+    item.innerHTML = `<span class="mono small muted">${escapeHtml(stamp(event.observed_at))}</span> <span class="chip sm" title="${escapeHtml(event.source)}">${escapeHtml(term('event_source', event.source))}</span> <span class="mono small">${escapeHtml(event.operation)}</span>`;
+    list.appendChild(item);
+  }
+  count.hidden = false;
+  count.textContent = `Показано ${shown} из ${received}`;
+  const rest = received - shown;
+  more.hidden = rest <= 0;
+  more.textContent = `Показать ещё ${rest}`;
+  // Предел запроса называется, только когда история в него упёрлась: иначе строка вводила бы
+  // в заблуждение о полноте.
+  const known = Number(entityEnvironmentTotal || received);
+  limit.hidden = !(Number.isFinite(known) && known > received);
+  limit.textContent = `Получено ${received} из ${known}: остальное за пределом запроса (${ENTITY_EVENT_LIMIT})`;
+}
+
 function resetEntityPanel() {
   selectedEntity = null;
   $('#entityBody').hidden = true;
@@ -2251,6 +2294,12 @@ function resetEntityPanel() {
   $('#entityDecisions').hidden = true;
   $('#entityRelatedCases').replaceChildren();
   $('#entityEnvironment').replaceChildren();
+  entityEnvironment = [];
+  entityEnvironmentShown = 0;
+  entityEnvironmentTotal = 0;
+  $('#entityEnvironmentCount').hidden = true;
+  $('#entityEnvironmentMore').hidden = true;
+  $('#entityEnvironmentLimit').hidden = true;
   $('#findingComment').value = '';
   refreshSideColumn();
 }
@@ -2278,7 +2327,9 @@ async function openEntity(type, id) {
   const environment = $('#entityEnvironment');
   environment.replaceChildren();
   try {
-    const card = await api(`/entities/${encodeURIComponent(type)}/${encodeURIComponent(id)}/card`);
+    const card = await api(
+      `/entities/${encodeURIComponent(type)}/${encodeURIComponent(id)}/card?event_limit=${ENTITY_EVENT_LIMIT}`
+    );
     const typicality = card.typicality || {};
     const eventCount = card.event_count ?? (card.environment || []).length;
     // «Частота в истории» — счётчик событий, а не модель поведения. Название с порогом
@@ -2305,20 +2356,10 @@ async function openEntity(type, id) {
     // в колонке 127 px чипы встают в столбец и растягивают карточку на 660 px.
     renderEntityDecisions(card.related_cases || []);
     fillCaseChips($('#entityRelatedCases'), card.related_cases || [], 'связанных инцидентов нет');
-    const recent = (card.environment || []).slice(0, 10);
-    if (!recent.length) {
-      environment.innerHTML = '<li class="muted small">событий нет</li>';
-    } else {
-      for (const event of recent) {
-        const item = document.createElement('li');
-        item.innerHTML = `<span class="mono small muted">${escapeHtml(stamp(event.observed_at))}</span> <span class="chip sm" title="${escapeHtml(event.source)}">${escapeHtml(term('event_source', event.source))}</span> <span class="mono small">${escapeHtml(event.operation)}</span>`;
-        environment.appendChild(item);
-      }
-      const total = document.createElement('li');
-      total.className = 'muted small';
-      total.textContent = `всего в истории: ${card.environment_total ?? recent.length}`;
-      environment.appendChild(total);
-    }
+    entityEnvironment = card.environment || [];
+    entityEnvironmentTotal = Number(card.environment_total ?? entityEnvironment.length);
+    entityEnvironmentShown = Math.min(ENTITY_ENVIRONMENT_PAGE, entityEnvironment.length);
+    renderEntityEnvironment();
   } catch (error) {
     const dt = document.createElement('dt');
     dt.textContent = 'Частота в истории';
@@ -2326,6 +2367,12 @@ async function openEntity(type, id) {
     dd.textContent = `недоступна: ${error.message}`;
     facts.append(dt, dd);
     $('#entityRelatedCases').innerHTML = '<span class="muted small">недоступно</span>';
+    entityEnvironment = [];
+    entityEnvironmentShown = 0;
+    entityEnvironmentTotal = 0;
+    $('#entityEnvironmentCount').hidden = true;
+    $('#entityEnvironmentMore').hidden = true;
+    $('#entityEnvironmentLimit').hidden = true;
     environment.innerHTML = '<li class="muted small">окружение недоступно</li>';
   }
 }
@@ -3559,6 +3606,11 @@ $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
 $('#reportButton').addEventListener('click', openCaseReport);
 $('#skipToWork').addEventListener('click', focusInvestigation);
+$('#entityEnvironmentMore').addEventListener('click', () => {
+  // Разворачивается уже полученный массив: нового запроса продукту это не стоит.
+  entityEnvironmentShown = entityEnvironment.length;
+  renderEntityEnvironment();
+});
 $('#queueMore').addEventListener('click', async () => {
   const button = $('#queueMore');
   button.disabled = true;
