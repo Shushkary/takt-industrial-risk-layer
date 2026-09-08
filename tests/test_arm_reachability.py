@@ -23,6 +23,10 @@ _INDEX = (_ARM / "index.html").read_text(encoding="utf-8")
 _APP = (_ARM / "app.js").read_text(encoding="utf-8")
 _STYLES = (_ARM / "styles.css").read_text(encoding="utf-8")
 
+# Конец функции в исходнике АРМ: закрывающая скобка на нулевом отступе. По ней вырезается
+# тело проверяемой функции — искать по номеру строки нельзя, он уедет с первой же правкой.
+SIG = "\n}\n"
+
 # Виды сущностей, для которых продукт отдаёт карточку истории.
 CARD_TYPES = ("host", "user", "process")
 
@@ -258,3 +262,63 @@ def test_writing_a_finding_keeps_the_entity_open() -> None:
     # Состав дела пересобран — отметка выбранной сущности в цепочке восстанавливается.
     assert "if (!switching) restoreEntityHighlight();" in block
     assert "function restoreEntityHighlight(" in _APP
+# --------------------------------------------------------------------------- #
+# Поиск кандидатов на присоединение: полнота выдачи и раскрытые фильтры
+# --------------------------------------------------------------------------- #
+
+def test_case_events_are_excluded_by_the_product_not_by_the_browser() -> None:
+    """При 51 совпадении, первые 50 из которых в деле, окно отвечало «не нашлось».
+
+    Страница из 50 записей читалась целиком, а события дела отсеивались уже в браузере —
+    единственный кандидат за пределами страницы терялся вместе с ней.
+    """
+    start = _APP.index("async function loadAttachPage(")
+    block = _APP[start : _APP.index(SIG, start)]
+    assert "exclude_case_id" in block, "исключение состава дела снова считает браузер"
+    # Полное число кандидатов приходит заголовком продукта, а не длиной страницы.
+    assert "X-Total-Count" in block
+    assert "Показано ${attachShown} из ${attachTotal}" in block
+    assert 'id="attachMore"' in _INDEX, "за первой страницей кандидатов нет продолжения"
+
+    # Отсев по составу рабочей области ушёл: он и был причиной потери кандидата.
+    search = _APP[_APP.index("async function runAttachSearch(") :]
+    search = search[: search.index(SIG)]
+    assert "lastWorkspaceEvents" not in search
+
+
+def test_indicator_is_searched_as_a_type_and_value_pair() -> None:
+    """`domain=target-hash` находило событие, где target-hash имеет тип hash.
+
+    Тип и значение должны уходить продукту вместе и относиться к одному артефакту.
+    """
+    start = _APP.index("function attachSearchParams(")
+    block = _APP[start : _APP.index(SIG, start)]
+    assert "params.set('artifact_type', type)" in block
+    assert "params.set('artifact_value', artifactValue)" in block
+
+    # Индикаторы дела предлагаются списком: значение не переносится руками.
+    options = _APP[_APP.index("function caseEntityOptions(") :]
+    options = options[: options.index(SIG)]
+    assert "event.artifacts" in options
+    assert "term('artifact_type'" in options
+
+
+def test_search_filters_of_the_product_are_reachable_from_the_window() -> None:
+    """API принимал источник, время и процесс; дотянуться до них из окна было нечем."""
+    for marker in ('id="attachSource"', 'id="attachFrom"', 'id="attachTo"'):
+        assert marker in _INDEX, marker
+
+    start = _APP.index("function attachSearchParams(")
+    block = _APP[start : _APP.index(SIG, start)]
+    for parameter in ("source", "observed_from", "observed_to"):
+        assert f"params.set('{parameter}'" in block, parameter
+
+    # Процесс дела попадает в список отбора: раньше его там не было вовсе.
+    options = _APP[_APP.index("function caseEntityOptions(") :]
+    options = options[: options.index(SIG)]
+    assert "process_id" in options
+
+    # Классы источников берутся из словаря продукта, а не из своего списка в окне.
+    panel = _APP[_APP.index("function openAttachPanel(") :]
+    panel = panel[: panel.index(SIG)]
+    assert "vocabulary.event_source" in panel

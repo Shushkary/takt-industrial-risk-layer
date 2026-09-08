@@ -9,7 +9,7 @@
          файл пришлось бы отдельно заливать при выкладке. CSP допускает img-src data:. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230b0f14'/%3E%3Crect%20x='1.5'%20y='1.5'%20width='61'%20height='61'%20rx='12.5'%20fill='none'%20stroke='%231f2937'%20stroke-width='3'/%3E%3Cpath%20d='M7%2037H19l6.5-17L34%2047l5.5-15H57'%20fill='none'%20stroke='%2338bdf8'%20stroke-width='6.5'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260908-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260908-02" />
   </head>
   <body>
     <header class="top">
@@ -319,8 +319,22 @@
                 <button id="attachSearch" class="action inline" type="button">Найти</button>
                 <button id="attachClose" class="action inline" type="button">Закрыть</button>
               </div>
-              <p id="attachHint" class="muted small">Список строится продуктом по принятым событиям. Прицепить можно только событие из этого списка: набранный вручную идентификатор проверить нечем.</p>
+              <!-- Отбор источника и времени раскрыт в окне: продукт эти фильтры принимал и
+                   раньше, но дотянуться до них из АРМ было нечем, и поиск шёл по всему
+                   принятому потоку. Сущности, процессы и индикаторы дела подставляются
+                   списком выше — идентификаторы не переносятся руками. -->
+              <div class="relink-row">
+                <label for="attachSource">Источник</label>
+                <select id="attachSource" aria-label="Класс источника события"></select>
+                <label for="attachFrom">С</label>
+                <input id="attachFrom" type="datetime-local" aria-label="Не раньше" />
+                <label for="attachTo">По</label>
+                <input id="attachTo" type="datetime-local" aria-label="Не позже" />
+              </div>
+              <p id="attachHint" class="muted small">Список строится продуктом по принятым событиям. Прицепить можно только событие из этого списка: набранный вручную идентификатор в поиске не проверить.</p>
+              <p id="attachCount" class="muted small" hidden>—</p>
               <ul id="attachResults" class="plain small"></ul>
+              <button id="attachMore" class="action inline" type="button" hidden>Показать ещё</button>
             </div>
 
             <div id="mergePanel" class="relink-form" hidden>
@@ -666,7 +680,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260908-01"></script>
-    <script src="./app.min.js?v=20260908-01"></script>
+    <script src="./env.js?v=20260908-02"></script>
+    <script src="./app.min.js?v=20260908-02"></script>
   </body>
 </html>

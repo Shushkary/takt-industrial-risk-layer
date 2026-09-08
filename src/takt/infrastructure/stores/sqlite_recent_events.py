@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,14 @@ from takt.infrastructure.stores.sqlite_connection import (
     dt_to_sql as _dt_to_sql,
 )
 from takt.infrastructure.stores.sqlite_schema import ensure_recent_events_schema
+
+# Число параметров одного запроса SQLite ограничено, поэтому список исключаемых событий
+# разбивается на группы: дело из тысяч событий не должно ронять поиск кандидатов.
+_EXCLUDE_CHUNK = 400
+
+
+def _chunks(items: list[str], size: int) -> list[list[str]]:
+    return [items[start : start + size] for start in range(0, len(items), size)]
 
 
 class SqliteRecentEventStore:
@@ -195,6 +204,7 @@ class SqliteRecentEventStore:
         artifact_type: str | None = None,
         artifact_value: str | None = None,
         text: str | None = None,
+        exclude_event_ids: Sequence[str] | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> tuple[list[NormalizedEvent], int]:
@@ -216,15 +226,34 @@ class SqliteRecentEventStore:
         if address:
             clauses.append("(src_address = ? OR dst_address = ?)")
             params.extend((address, address))
-        if artifact_type:
-            clauses.append("artifacts_json LIKE ?")
-            params.append(f'%"type": "{artifact_type}"%')
-        if artifact_value:
-            clauses.append("artifacts_json LIKE ?")
-            params.append(f"%{artifact_value}%")
+        # Тип и значение проверяются внутри одного артефакта. Раньше это были два независимых
+        # LIKE по одному и тому же JSON: событие с артефактами hash=target-hash и domain=evil
+        # отвечало на запрос domain=target-hash, и несвязанная пара выглядела совпадением.
+        if artifact_type or artifact_value:
+            artifact_clauses = []
+            if artifact_type:
+                artifact_clauses.append("json_extract(item.value, '$.type') = ?")
+                params.append(artifact_type)
+            if artifact_value:
+                # Артефакт — индикатор: сравнение точное. Подстрока принадлежит текстовому
+                # поиску по содержимому события (`text`), и смешивать их нельзя.
+                artifact_clauses.append("json_extract(item.value, '$.value') = ?")
+                params.append(artifact_value)
+            clauses.append(
+                "EXISTS (SELECT 1 FROM json_each(events.artifacts_json) AS item WHERE "
+                + " AND ".join(artifact_clauses)
+                + ")"
+            )
         if text:
             clauses.append("payload_json LIKE ?")
             params.append(f"%{text}%")
+        # События, уже входящие в дело, исключаются здесь, а не в браузере после выдачи: при
+        # 51 совпадении, первые 50 из которых в деле, страница из 50 записей не содержала ни
+        # одного кандидата, и окно отвечало «не нашлось». Идентификаторы разбиваются на группы:
+        # число параметров в одном запросе SQLite ограничено.
+        for chunk in _chunks(list(dict.fromkeys(exclude_event_ids or [])), _EXCLUDE_CHUNK):
+            clauses.append(f"event_id NOT IN ({','.join('?' * len(chunk))})")
+            params.extend(chunk)
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         with self._lock:
             self._raise_if_closed()

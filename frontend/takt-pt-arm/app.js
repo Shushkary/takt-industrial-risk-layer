@@ -1903,9 +1903,13 @@ async function splitSelected() {
 
 // --- Прицепить событие -----------------------------------------------------
 //
-// Идентификатор события набрать нельзя намеренно. Продукт принимает любой идентификатор, в
-// том числе несуществующий, и такое событие останется в инциденте как ссылка в никуда. Поэтому
-// прицепить можно только то, что продукт сам вернул в ответе на поиск.
+// Идентификатор события набрать нельзя намеренно: прицепить можно только то, что продукт сам
+// вернул в ответе на поиск. Продукт теперь и сам отказывает в неизвестном событии, но набор
+// идентификатора руками остаётся способом ошибиться молча.
+//
+// Отбор строится по сущностям и индикаторам самого дела: аналитик выбирает узел, учётную
+// запись, процесс, адрес или артефакт из списка, а не переносит значение руками. Индикатор
+// уходит парой тип+значение — продукт сопоставляет их внутри одного артефакта.
 
 function caseEntityOptions() {
   const options = new Map();
@@ -1913,10 +1917,43 @@ function caseEntityOptions() {
     const entities = event.entities || {};
     if (entities.host_id) options.set(`host_id:${entities.host_id}`, `${term('entity_type', 'host')}: ${entities.host_id}`);
     if (entities.user_id) options.set(`user_id:${entities.user_id}`, `${term('entity_type', 'user')}: ${entities.user_id}`);
+    if (entities.process_id) options.set(`process_id:${entities.process_id}`, `${term('entity_type', 'process')}: ${entities.process_id}`);
     const address = entities.dst_address || entities.src_address;
     if (address) options.set(`address:${address}`, `${term('entity_type', 'address')}: ${address}`);
+    for (const artifact of event.artifacts || []) {
+      if (!artifact || !artifact.type || !artifact.value) continue;
+      options.set(
+        `artifact:${artifact.type}\u0000${artifact.value}`,
+        `${term('artifact_type', artifact.type)}: ${artifact.value}`
+      );
+    }
   }
   return options;
+}
+
+// Отбор поиска кандидатов одним объектом: строится при нажатии «Найти» и переиспользуется
+// дозагрузкой, иначе вторая страница уедет под другой запрос.
+function attachSearchParams() {
+  const params = new URLSearchParams();
+  const [field, value] = $('#attachEntity').value.split(/:(.*)/s);
+  if (field === 'artifact' && value) {
+    const [type, artifactValue] = value.split('\u0000');
+    if (type && artifactValue) {
+      params.set('artifact_type', type);
+      params.set('artifact_value', artifactValue);
+    }
+  } else if (field && value) {
+    params.set(field, value);
+  }
+  const text = $('#attachQuery').value.trim();
+  if (text) params.set('text', text);
+  const source = $('#attachSource').value;
+  if (source) params.set('source', source);
+  const from = $('#attachFrom').value;
+  if (from) params.set('observed_from', from);
+  const to = $('#attachTo').value;
+  if (to) params.set('observed_to', to);
+  return params;
 }
 
 function openAttachPanel() {
@@ -1934,44 +1971,97 @@ function openAttachPanel() {
     option.textContent = title;
     select.appendChild(option);
   }
+  // Классы источников берутся из словаря продукта: свой список в окне разошёлся бы с
+  // продуктом при первом же добавлении источника.
+  const sources = $('#attachSource');
+  sources.replaceChildren();
+  const anySource = document.createElement('option');
+  anySource.value = '';
+  anySource.textContent = 'любой источник';
+  sources.appendChild(anySource);
+  for (const [code, title] of Object.entries(vocabulary.event_source || {})) {
+    const option = document.createElement('option');
+    option.value = code;
+    option.textContent = title;
+    sources.appendChild(option);
+  }
+  $('#attachFrom').value = '';
+  $('#attachTo').value = '';
+  resetAttachResults();
   $('#attachQuery').focus();
 }
 
+// Страница поиска кандидатов. Исключение событий дела считает продукт (`exclude_case_id`):
+// раньше страница из 50 записей читалась целиком, а события дела отсеивались уже в браузере —
+// при 51 совпадении, первые 50 из которых в деле, окно отвечало «не нашлось» и теряло
+// единственного кандидата за пределами страницы.
+const ATTACH_PAGE_LIMIT = 50;
+let attachQuery = null;
+let attachOffset = 0;
+let attachTotal = 0;
+let attachShown = 0;
+
+function resetAttachResults() {
+  attachQuery = null;
+  attachOffset = 0;
+  attachTotal = 0;
+  attachShown = 0;
+  $('#attachResults').replaceChildren();
+  $('#attachCount').hidden = true;
+  $('#attachMore').hidden = true;
+}
+
+function appendAttachRow(event) {
+  const row = document.createElement('li');
+  row.className = 'attach-row';
+  const entities = event.entities || {};
+  const where = [entities.host_id, entities.user_id].filter(Boolean).join(' · ');
+  row.innerHTML = `<span class="mono small">${escapeHtml(stamp(event.observed_at))}</span> <span class="chip sm">${escapeHtml(term('event_source', event.source))}</span> <span class="mono small">${escapeHtml(event.operation)}</span> <span class="muted small">${escapeHtml(where)}</span>`;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'action inline';
+  button.textContent = 'Прицепить';
+  button.addEventListener('click', () => attachEvent(event.event_id, button));
+  row.appendChild(button);
+  $('#attachResults').appendChild(row);
+}
+
+async function loadAttachPage() {
+  const params = new URLSearchParams(attachQuery);
+  params.set('limit', String(ATTACH_PAGE_LIMIT));
+  params.set('offset', String(attachOffset));
+  if (selectedCaseId) params.set('exclude_case_id', selectedCaseId);
+  const { data, headers } = await apiWithHeaders(`/events/search?${params.toString()}`);
+  const found = data || [];
+  attachTotal = Number(headers.get('X-Total-Count') ?? found.length);
+  for (const event of found) appendAttachRow(event);
+  attachShown += found.length;
+  attachOffset += found.length;
+  if (!attachShown) {
+    $('#attachResults').innerHTML = '<li class="muted">Событий вне этого инцидента не нашлось.</li>';
+    $('#attachCount').hidden = true;
+    $('#attachMore').hidden = true;
+    return;
+  }
+  // Счётчик называет полное число кандидатов, а не длину страницы: «нашлось 50» при 300
+  // совпадениях — это тупик чтения, а не результат поиска.
+  $('#attachCount').hidden = false;
+  $('#attachCount').textContent = `Показано ${attachShown} из ${attachTotal}`;
+  $('#attachMore').hidden = attachShown >= attachTotal || !found.length;
+  $('#attachMore').textContent = `Показать ещё ${Math.min(ATTACH_PAGE_LIMIT, attachTotal - attachShown)}`;
+}
+
 async function runAttachSearch() {
-  const list = $('#attachResults');
-  list.replaceChildren();
-  const params = new URLSearchParams({ limit: '50' });
-  const [field, value] = $('#attachEntity').value.split(/:(.*)/s);
-  if (field && value) params.set(field, value);
-  const text = $('#attachQuery').value.trim();
-  if (text) params.set('text', text);
-  if (!params.has('host_id') && !params.has('user_id') && !params.has('address') && !text) {
-    showRelinkError('Задайте сущность инцидента или подстроку: без отбора список вернёт весь поток событий.');
+  resetAttachResults();
+  const params = attachSearchParams();
+  if (![...params.keys()].length) {
+    showRelinkError('Задайте сущность инцидента, индикатор, источник, время или подстроку: без отбора список вернёт весь поток событий.');
     return;
   }
   $('#relinkError').hidden = true;
+  attachQuery = params;
   try {
-    const found = (await api(`/events/search?${params.toString()}`)) || [];
-    const inCase = new Set(lastWorkspaceEvents.map((event) => event.event_id));
-    const candidates = found.filter((event) => !inCase.has(event.event_id));
-    if (!candidates.length) {
-      list.innerHTML = '<li class="muted">Событий вне этого инцидента не нашлось.</li>';
-      return;
-    }
-    for (const event of candidates) {
-      const row = document.createElement('li');
-      row.className = 'attach-row';
-      const entities = event.entities || {};
-      const where = [entities.host_id, entities.user_id].filter(Boolean).join(' · ');
-      row.innerHTML = `<span class="mono small">${escapeHtml(stamp(event.observed_at))}</span> <span class="chip sm">${escapeHtml(term('event_source', event.source))}</span> <span class="mono small">${escapeHtml(event.operation)}</span> <span class="muted small">${escapeHtml(where)}</span>`;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'action inline';
-      button.textContent = 'Прицепить';
-      button.addEventListener('click', () => attachEvent(event.event_id, button));
-      row.appendChild(button);
-      list.appendChild(row);
-    }
+    await loadAttachPage();
   } catch (error) {
     showRelinkError(`Поиск событий не выполнен: ${error.message}`);
   }
@@ -3626,6 +3716,17 @@ $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
 $('#reportButton').addEventListener('click', openCaseReport);
 $('#skipToWork').addEventListener('click', focusInvestigation);
+$('#attachMore').addEventListener('click', async () => {
+  const button = $('#attachMore');
+  button.disabled = true;
+  try {
+    await loadAttachPage();
+  } catch (error) {
+    showRelinkError(`Поиск событий не выполнен: ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
+});
 $('#entityEnvironmentMore').addEventListener('click', () => {
   // Разворачивается уже полученный массив: нового запроса продукту это не стоит.
   entityEnvironmentShown = entityEnvironment.length;
