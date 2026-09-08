@@ -322,3 +322,42 @@ def test_search_filters_of_the_product_are_reachable_from_the_window() -> None:
     panel = _APP[_APP.index("function openAttachPanel(") :]
     panel = panel[: panel.index(SIG)]
     assert "vocabulary.event_source" in panel
+# --------------------------------------------------------------------------- #
+# Идентичность процесса: ключ внутри, PID на экране
+# --------------------------------------------------------------------------- #
+
+def test_process_card_opens_by_key_but_shows_the_pid() -> None:
+    """Два узла с одним PID открывали одну карточку процесса на 52 события.
+
+    Ключ сущности и показываемое значение разведены: карточка открывается по ключу
+    «узел+PID» (или по идентификатору запуска), а в цепочке и в карточке остаётся PID —
+    показывать аналитику внутренний ключ незачем.
+    """
+    button = _APP[_APP.index("function entityButton(") :]
+    button = button[: button.index(SIG)]
+    assert "const id = key || value;" in button
+    assert "data-entity-label" in button, "показываемое значение потерялось вместе с ключом"
+
+    assert "entityButton('process', entities.process_id, event.process_key)" in _APP
+    # Ключ считает продукт и отдаёт рабочей областью: считать его в браузере значило бы
+    # завести второй контракт идентичности.
+    assert "process_key" in _APP
+
+    entity = _APP[_APP.index("async function openEntity(") :]
+    entity = entity[: entity.index(SIG)]
+    assert "card.display_id" in entity
+
+
+def test_process_card_names_the_limit_of_its_identity() -> None:
+    """«Узел и PID» не различает повторные запуски — читающий должен это видеть."""
+    entity = _APP[_APP.index("async function openEntity(") :]
+    entity = entity[: entity.index(SIG)]
+    assert "term('process_identity', card.identity)" in entity
+    assert "Опознан по" in entity
+
+
+def test_attach_search_filters_a_process_by_key() -> None:
+    """PID одного узла не должен приводить события другого в кандидаты."""
+    options = _APP[_APP.index("function caseEntityOptions(") :]
+    options = options[: options.index(SIG)]
+    assert "process_key:" in options

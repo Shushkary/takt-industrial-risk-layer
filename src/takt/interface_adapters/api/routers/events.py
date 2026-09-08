@@ -26,6 +26,13 @@ def register_event_routes(ctx: ApiContext) -> None:
         host_id: str | None = None,
         user_id: str | None = None,
         process_id: str | None = None,
+        process_key: str | None = Query(
+            default=None,
+            description=(
+                "Ключ процесса как сущности (узел+PID либо идентификатор запуска). "
+                "PID сам по себе не различает процессы разных узлов"
+            ),
+        ),
         address: str | None = None,
         artifact_type: str | None = None,
         artifact_value: str | None = None,
@@ -57,7 +64,8 @@ def register_event_routes(ctx: ApiContext) -> None:
             exclude_event_ids = list(case.normalized_event_ids)
         events, total = store.search_events(
             source=source, observed_from=observed_from, observed_to=observed_to,
-            host_id=host_id, user_id=user_id, process_id=process_id, address=address,
+            host_id=host_id, user_id=user_id, process_id=process_id, process_key=process_key,
+            address=address,
             artifact_type=artifact_type, artifact_value=artifact_value, text=text,
             exclude_event_ids=exclude_event_ids,
             offset=offset, limit=limit,

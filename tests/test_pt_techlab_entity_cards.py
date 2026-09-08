@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 
 from takt.domain.entities.event import EventEntities, EventSource, NormalizedEvent
+from takt.domain.services.process_identity import process_entity_key
 from takt.infrastructure.stores.sqlite_recent_events import SqliteRecentEventStore
 from takt.interface_adapters.api.main import create_app
 
@@ -28,7 +29,9 @@ def test_registry_materializes_host_user_and_process_with_history(tmp_path) -> N
 
         host = store.entity_card("host", "ws-17")
         user = store.entity_card("user", "ivanov")
-        process = store.entity_card("process", "proc-1")
+        # Процесс собирается по ключу сущности, а не по значению из источника: один PID на
+        # двух узлах — это два разных процесса (см. domain/services/process_identity.py).
+        process = store.entity_card("process", process_entity_key("proc-1", "ws-17"))
         assert host is not None and host["typicality"]["status"] == "typical"
         assert host["sources"] == ["edr", "ndr", "siem"]
         assert host["environment_total"] == 3

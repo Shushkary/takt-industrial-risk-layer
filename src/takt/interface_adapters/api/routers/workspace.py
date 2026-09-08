@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from takt.application.use_cases.reconstruct_chain import reconstruct_attack_chain
+from takt.domain.services.process_identity import process_entity_key
 from takt.interface_adapters.api.dependencies import ApiContext, require
 
 
@@ -12,6 +13,11 @@ def _workspace_event(event) -> dict:
         "event_id": event.event_id, "observed_at": event.observed_at.isoformat(),
         "source": event.source.value, "operation": event.operation, "protocol": event.protocol,
         "entities": ({name: getattr(entities, name) for name in entities.__slots__} if entities else None),
+        # Ключ процесса как сущности: один PID на двух узлах — два разных процесса, и карточку
+        # надо открывать по ключу, а не по значению из источника. Показывается по-прежнему PID.
+        "process_key": process_entity_key(
+            entities.process_id if entities else None, entities.host_id if entities else None
+        ),
         "artifacts": [{"type": item.type.value, "value": item.value} for item in event.artifacts],
     }
 

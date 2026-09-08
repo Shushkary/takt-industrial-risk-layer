@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from takt.domain.entities.event import ArtifactType, EventArtifact, EventEntities, EventSource, NormalizedEvent
+from takt.domain.services.process_identity import process_entity_key, process_identity_kind
 from takt.infrastructure.stores.sqlite_connection import (
     checkpoint_wal_best_effort as _checkpoint_wal_best_effort,
 )
@@ -84,14 +85,17 @@ class SqliteRecentEventStore:
     def _persist_event(self, event: NormalizedEvent) -> None:
         entities = event.entities or EventEntities()
         artifacts = [{"type": artifact.type.value, "value": artifact.value} for artifact in event.artifacts]
+        # Ключ процесса считается один раз при записи и хранится рядом с событием: считать его
+        # в каждом запросе значило бы повторять контракт идентичности в SQL.
+        process_key = process_entity_key(entities.process_id, entities.host_id) or None
         self._conn.execute(
             """
             INSERT INTO events (
               event_id, observed_at, source, protocol, operation, payload_size,
               payload_json, operator_id, host_id, user_id, process_id,
               parent_process_id, src_address, dst_address, artifacts_json,
-              ingest_trust, inserted_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+              ingest_trust, inserted_at, process_key
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(event_id) DO UPDATE SET
               observed_at=excluded.observed_at, source=excluded.source,
               protocol=excluded.protocol, operation=excluded.operation,
@@ -100,7 +104,8 @@ class SqliteRecentEventStore:
               user_id=excluded.user_id, process_id=excluded.process_id,
               parent_process_id=excluded.parent_process_id,
               src_address=excluded.src_address, dst_address=excluded.dst_address,
-              artifacts_json=excluded.artifacts_json, ingest_trust=excluded.ingest_trust
+              artifacts_json=excluded.artifacts_json, ingest_trust=excluded.ingest_trust,
+              process_key=excluded.process_key
             """,
             (
                 event.event_id, _dt_to_sql(event.observed_at), event.source.value,
@@ -109,13 +114,21 @@ class SqliteRecentEventStore:
                 entities.host_id, entities.user_id, entities.process_id, entities.parent_process_id,
                 entities.src_address, entities.dst_address,
                 json.dumps(artifacts, ensure_ascii=False), float(event.ingest_trust),
-                _dt_to_sql(datetime.now(UTC)),
+                _dt_to_sql(datetime.now(UTC)), process_key,
             ),
         )
+        # Процесс заводится по ключу, а не по значению из источника: один PID на двух узлах —
+        # два разных процесса. Показываемое значение и способ опознания идут в атрибуты.
+        process_attributes = {
+            "parent_process_id": entities.parent_process_id,
+            "display_id": entities.process_id,
+            "host_id": entities.host_id,
+            "identity": process_identity_kind(entities.process_id, entities.host_id),
+        }
         for entity_type, entity_id, attributes in (
             ("host", entities.host_id, {}),
             ("user", entities.user_id, {}),
-            ("process", entities.process_id, {"parent_process_id": entities.parent_process_id}),
+            ("process", process_key, process_attributes),
         ):
             if entity_id:
                 self._upsert_entity(entity_type, entity_id, event, attributes)
@@ -169,7 +182,7 @@ class SqliteRecentEventStore:
                    WHERE entity_type=? AND entity_id=? ORDER BY bucket_hour DESC LIMIT 168""",
                 (entity_type, entity_id),
             ).fetchall()
-        filter_name = {"host": "host_id", "user": "user_id", "process": "process_id"}[entity_type]
+        filter_name = {"host": "host_id", "user": "user_id", "process": "process_key"}[entity_type]
         # Имя фильтра выбирается по типу сущности, поэтому аргумент собирается словарём.
         entity_filter: dict[str, Any] = {filter_name: entity_id}
         events, total = self.search_events(limit=event_limit, **entity_filter)
@@ -180,13 +193,19 @@ class SqliteRecentEventStore:
             typicality, explanation = "rare", f"only {count} events are present in history"
         else:
             typicality, explanation = "typical", f"{count} events across {len(activity)} hourly buckets"
+        attributes = json.loads(row["attributes_json"] or "{}")
         return {
             "type": entity_type, "id": entity_id,
+            # Аналитику показывается значение из данных источника, а не внутренний ключ.
+            "display_id": str(attributes.get("display_id") or entity_id),
+            # Чем процесс опознан: `guid` сходится из разных источников, `host_pid` разводит
+            # узлы, но не различает повторные запуски, `undetermined` не сливается ни с чем.
+            "identity": str(attributes.get("identity") or ""),
             "first_seen": row["first_seen"], "last_seen": row["last_seen"],
             "sources": json.loads(row["sources_json"] or "[]"), "event_count": count,
             "activity_by_hour": [{"bucket": item["bucket_hour"], "count": item["event_count"]} for item in activity],
             "typicality": {"status": typicality, "explanation": explanation},
-            "attributes": json.loads(row["attributes_json"] or "{}"),
+            "attributes": attributes,
             "environment": [_persistent_event_summary(event) for event in events],
             "environment_total": total,
         }
@@ -200,6 +219,7 @@ class SqliteRecentEventStore:
         host_id: str | None = None,
         user_id: str | None = None,
         process_id: str | None = None,
+        process_key: str | None = None,
         address: str | None = None,
         artifact_type: str | None = None,
         artifact_value: str | None = None,
@@ -212,6 +232,7 @@ class SqliteRecentEventStore:
         params: list[Any] = []
         exact = {
             "source": source, "host_id": host_id, "user_id": user_id, "process_id": process_id,
+            "process_key": process_key,
         }
         for column, value in exact.items():
             if value:

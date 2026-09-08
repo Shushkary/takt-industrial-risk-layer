@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from takt.infrastructure.stores.sqlite_connection import table_columns
@@ -203,12 +204,14 @@ def ensure_recent_events_schema(conn: sqlite3.Connection) -> None:
           dst_address TEXT,
           artifacts_json TEXT NOT NULL DEFAULT '[]',
           ingest_trust REAL NOT NULL DEFAULT 1.0,
-          inserted_at TEXT NOT NULL
+          inserted_at TEXT NOT NULL,
+          process_key TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_events_source_time ON events (source, observed_at DESC);
         CREATE INDEX IF NOT EXISTS idx_events_host_time ON events (host_id, observed_at DESC);
         CREATE INDEX IF NOT EXISTS idx_events_user_time ON events (user_id, observed_at DESC);
         CREATE INDEX IF NOT EXISTS idx_events_process_time ON events (process_id, observed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_events_process_key_time ON events (process_key, observed_at DESC);
         CREATE INDEX IF NOT EXISTS idx_events_src_address ON events (src_address);
         CREATE INDEX IF NOT EXISTS idx_events_dst_address ON events (dst_address);
         CREATE TABLE IF NOT EXISTS entity_registry (
@@ -232,6 +235,89 @@ def ensure_recent_events_schema(conn: sqlite3.Connection) -> None:
           ON entity_activity (entity_type, entity_id, bucket_hour DESC);
         """
     )
+    _migrate_process_identity(conn)
+
+
+# Версия схемы хранилища событий. Поднимается, когда прежние записи нужно пересобрать:
+# `CREATE TABLE IF NOT EXISTS` существующую базу не трогает, и без явного шага миграции
+# старые строки остались бы жить по прежнему ключу.
+_RECENT_EVENTS_SCHEMA_VERSION = 1
+
+
+def _migrate_process_identity(conn: sqlite3.Connection) -> None:
+    """Ключ процесса: заполнение колонки и пересборка реестра по прежним событиям.
+
+    До этой правки процесс заводился по значению из источника, и один PID на двух узлах давал
+    одну карточку. Ключ считается заново из уже принятых событий — сами события не меняются,
+    пересобираются только производные строки реестра и почасовой активности.
+    """
+    from takt.domain.services.process_identity import process_entity_key, process_identity_kind
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(events)")}
+    if "process_key" not in cols:
+        conn.execute("ALTER TABLE events ADD COLUMN process_key TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_process_key_time ON events (process_key, observed_at DESC)"
+        )
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0] or 0)
+    if version >= _RECENT_EVENTS_SCHEMA_VERSION:
+        return
+
+    rows = conn.execute(
+        "SELECT event_id, host_id, process_id, source, observed_at, parent_process_id"
+        " FROM events WHERE process_id IS NOT NULL AND process_id != ''"
+    ).fetchall()
+    conn.execute("DELETE FROM entity_registry WHERE entity_type = 'process'")
+    conn.execute("DELETE FROM entity_activity WHERE entity_type = 'process'")
+    registry: dict[str, dict] = {}
+    activity: dict[tuple[str, str], int] = {}
+    for event_id, host_id, process_id, source, observed_at, parent_process_id in rows:
+        key = process_entity_key(process_id, host_id)
+        if not key:
+            continue
+        conn.execute("UPDATE events SET process_key = ? WHERE event_id = ?", (key, event_id))
+        entry = registry.setdefault(
+            key,
+            {
+                "first_seen": observed_at,
+                "last_seen": observed_at,
+                "sources": set(),
+                "count": 0,
+                "attributes": {
+                    "display_id": process_id,
+                    "host_id": host_id,
+                    "identity": process_identity_kind(process_id, host_id),
+                },
+            },
+        )
+        entry["first_seen"] = min(entry["first_seen"], observed_at)
+        entry["last_seen"] = max(entry["last_seen"], observed_at)
+        entry["sources"].add(source)
+        entry["count"] += 1
+        if parent_process_id:
+            entry["attributes"]["parent_process_id"] = parent_process_id
+        bucket = f"{str(observed_at)[:13]}:00:00Z".replace(" ", "T")
+        activity[(key, bucket)] = activity.get((key, bucket), 0) + 1
+    for key, entry in registry.items():
+        conn.execute(
+            """
+            INSERT INTO entity_registry (
+              entity_type, entity_id, first_seen, last_seen, sources_json, event_count, attributes_json
+            ) VALUES ('process', ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                key, entry["first_seen"], entry["last_seen"],
+                json.dumps(sorted(entry["sources"])), entry["count"],
+                json.dumps(entry["attributes"], ensure_ascii=False),
+            ),
+        )
+    for (key, bucket), count in activity.items():
+        conn.execute(
+            "INSERT INTO entity_activity (entity_type, entity_id, bucket_hour, event_count)"
+            " VALUES ('process', ?, ?, ?)",
+            (key, bucket, count),
+        )
+    conn.execute(f"PRAGMA user_version = {_RECENT_EVENTS_SCHEMA_VERSION}")
 
 
 def ensure_audit_engagement_schema(conn: sqlite3.Connection) -> None:

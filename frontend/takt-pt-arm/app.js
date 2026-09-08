@@ -1471,9 +1471,13 @@ function renderInvariants(details, hits) {
   }
 }
 
-function entityButton(type, value) {
+// Кнопка сущности несёт ключ, а показывает значение из данных источника. Для узла и учётной
+// записи это одно и то же; у процесса — нет: один PID на двух узлах даёт два разных процесса,
+// и карточка открывается по ключу. Показывать ключ аналитику незачем — он внутренний.
+function entityButton(type, value, key = '') {
   if (!value) return '';
-  return `<button type="button" class="entity-link" data-entity-type="${escapeHtml(type)}" data-entity-id="${escapeHtml(value)}">${escapeHtml(value)}</button>`;
+  const id = key || value;
+  return `<button type="button" class="entity-link" data-entity-type="${escapeHtml(type)}" data-entity-id="${escapeHtml(id)}" data-entity-label="${escapeHtml(value)}">${escapeHtml(value)}</button>`;
 }
 
 // Основание попадания события в кейс приходит из `correlation_evidence` ответа API, название —
@@ -1535,7 +1539,7 @@ function chainCells({ event, evidence }) {
       <td class="mono" data-col="operation">${escapeHtml(event.operation)}</td>
       <td data-col="host">${entityButton('host', entities.host_id)}</td>
       <td data-col="user">${entityButton('user', entities.user_id)}</td>
-      <td data-col="process">${entityButton('process', entities.process_id)}</td>
+      <td data-col="process">${entityButton('process', entities.process_id, event.process_key)}</td>
       <td class="mono small" data-col="address">${addressOf(entities)}</td>
       <td class="small" data-col="artifact">${artifactCell(event)}</td>`;
 }
@@ -1917,7 +1921,13 @@ function caseEntityOptions() {
     const entities = event.entities || {};
     if (entities.host_id) options.set(`host_id:${entities.host_id}`, `${term('entity_type', 'host')}: ${entities.host_id}`);
     if (entities.user_id) options.set(`user_id:${entities.user_id}`, `${term('entity_type', 'user')}: ${entities.user_id}`);
-    if (entities.process_id) options.set(`process_id:${entities.process_id}`, `${term('entity_type', 'process')}: ${entities.process_id}`);
+    // Отбор по процессу идёт ключом: PID одного узла не должен приводить события другого.
+    if (entities.process_id) {
+      options.set(
+        `process_key:${event.process_key || entities.process_id}`,
+        `${term('entity_type', 'process')}: ${entities.process_id}`
+      );
+    }
     const address = entities.dst_address || entities.src_address;
     if (address) options.set(`address:${address}`, `${term('entity_type', 'address')}: ${address}`);
     for (const artifact of event.artifacts || []) {
@@ -2446,6 +2456,9 @@ async function openEntity(type, id) {
     const frequency = typicality.status
       ? `${term('typicality', typicality.status)} (${eventCount})`
       : '—';
+    // Значение из данных источника, а не внутренний ключ: карточка процесса открывается по
+    // ключу «узел+PID», но аналитику показывается PID, который он видит в цепочке.
+    if (card.display_id) $('#entityId').textContent = card.display_id;
     const rows = [
       ['Событий всего', eventCount],
       ['Частота в истории', frequency],
@@ -2453,6 +2466,11 @@ async function openEntity(type, id) {
       ['Последнее появление', card.last_seen ? stamp(card.last_seen) : '—'],
       ['Источники', (card.sources || []).map((source) => term('event_source', source)).join(', ') || '—'],
     ];
+    // Чем процесс опознан — это граница вывода, а не подробность: «узел и PID» не различает
+    // повторные запуски на одном узле, и выдавать такую историю за точную нельзя.
+    if (type === 'process' && card.identity) {
+      rows.push(['Опознан по', term('process_identity', card.identity)]);
+    }
     for (const [label, value] of rows) {
       const dt = document.createElement('dt');
       dt.textContent = label;
