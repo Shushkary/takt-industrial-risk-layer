@@ -132,26 +132,33 @@ def register_case_routes(ctx: ApiContext) -> None:
         link = offset_limit_link_header(request, offset=offset, limit=limit, total_before_slice=result.total_before_slice)
         if link:
             response.headers["Link"] = link
-        return [
-            CaseSummary(
-                case_id=c.case_id,
-                status=c.status.value,
-                title=c.title,
-                risk_class=c.risk_class,
-                risk_score=c.risk_score,
-                fingerprint=c.burst_fingerprint,
-                primary_asset_id=c.primary_asset_id,
-                trigger_operation=c.trigger_operation,
-                operator_id=c.operator_id,
-                last_event_source=c.last_event_source,
-                invariant_hits_count=len(c.invariant_hits),
-                event_count=len(c.normalized_event_ids),
-                created_at=c.created_at.astimezone(UTC).isoformat(timespec="seconds"),
-                dq_score=c.dq_score,
-                dq_partial=c.dq_partial,
+
+        def summary(case):
+            # Покрытие считает продукт: по загруженной странице очереди оно вышло бы неполным.
+            covered = result.coverage.get(case.case_id)
+            return CaseSummary(
+                case_id=case.case_id,
+                status=case.status.value,
+                title=case.title,
+                risk_class=case.risk_class,
+                risk_score=case.risk_score,
+                fingerprint=case.burst_fingerprint,
+                primary_asset_id=case.primary_asset_id,
+                trigger_operation=case.trigger_operation,
+                operator_id=case.operator_id,
+                last_event_source=case.last_event_source,
+                invariant_hits_count=len(case.invariant_hits),
+                event_count=len(case.normalized_event_ids),
+                created_at=case.created_at.astimezone(UTC).isoformat(timespec="seconds"),
+                dq_score=case.dq_score,
+                dq_partial=case.dq_partial,
+                covered_by_case_id=covered.case_id if covered else "",
+                covered_by_status=covered.status if covered else "",
+                covered_events=covered.covered_events if covered else 0,
+                coverage=("full" if covered.full else "partial") if covered else "",
             )
-            for c in result.items
-        ]
+
+        return [summary(c) for c in result.items]
 
     @app.get("/cases/stats", response_model=CasesStatsResponse, tags=["Cases"])
     def cases_stats():

@@ -731,7 +731,15 @@ function addressOf(entities) {
 // пройти список с клавиатуры было невозможно. Сигнатура не учитывает selectedCaseId —
 // подсветку выбранного кейса переключает updateActiveQueueItem() без перестройки DOM.
 function queueSignature(items) {
-  return items.map((item) => `${item.case_id}:${item.status}:${item.risk_score}:${item.event_count}`).join('|');
+  return items
+    .map(
+      (item) =>
+        `${item.case_id}:${item.status}:${item.risk_score}:${item.event_count}` +
+        // Признак покрытия входит в подпись: без него метка «уже разобрано» появилась бы
+        // только вместе со следующей правкой дела, то есть неизвестно когда.
+        `:${item.covered_by_case_id || ''}:${item.coverage || ''}:${item.covered_by_status || ''}`
+    )
+    .join('|');
 }
 
 // Порядок очереди: сначала класс риска от высшего к низшему, внутри класса — балл, при
@@ -765,6 +773,30 @@ function queueHeadline(item) {
   // Код операции набирается моноширинным: это значение из журнала источника, а не фраза.
   // Переводить его нельзя — это материал доказательства (`domain/vocabulary.py`).
   return { text: String(item.trigger_operation || generated[1]).trim(), code: true };
+}
+
+// «Событие уже разобрано в другом инциденте». Связь ведёт собранный инцидент, у исходного
+// дела обратной ссылки нет — и в очереди оно выглядело нетронутым: событие разбирали второй
+// раз, а признак покрытия был виден только внутри собранного инцидента. Покрытие считает
+// продукт (`coverage`, `covered_by_case_id` в сводке очереди): по загруженной сотне строк
+// оно вышло бы неполным. Исходное дело при этом не закрывается — решение остаётся за
+// аналитиком, метка только называет, где событие уже разобрано.
+function queueCoveredButton(item) {
+  const coveredBy = String(item.covered_by_case_id || '').trim();
+  if (!coveredBy) return null;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'queue-covered';
+  button.dataset.caseId = coveredBy;
+  const declared = Number(item.event_count ?? 0);
+  const covered = Number(item.covered_events ?? 0);
+  // «Частично» без чисел ничего не говорит: аналитику важно, сколько событий осталось.
+  const share = item.coverage === 'partial' && declared ? ` (${covered} из ${declared})` : '';
+  const status = item.covered_by_status ? ` · ${term('case_status', item.covered_by_status)}` : '';
+  button.textContent = `${term('case_coverage', item.coverage)}${share} в ${coveredBy}${status}`;
+  button.title = `Открыть инцидент ${coveredBy}, в котором эти события уже разобраны`;
+  button.addEventListener('click', () => openCase(coveredBy, { moveFocus: true }));
+  return button;
 }
 
 let lastQueueSignature = null;
@@ -803,7 +835,14 @@ function renderQueue() {
       ${item.primary_asset_id ? `<span class="queue-where mono">${escapeHtml(item.primary_asset_id)}</span>` : ''}
       <span class="queue-meta">${escapeHtml(term('case_status', item.status))} · ${escapeHtml(String(count))} ${escapeHtml(plural(count, 'событие', 'события', 'событий'))} · ${escapeHtml(score(item.risk_score))}</span>`;
     button.addEventListener('click', () => openCase(item.case_id));
-    list.appendChild(button);
+    // Строка живёт в обёртке: метку покрытия нельзя вложить в саму кнопку — по ней
+    // открывается другой инцидент, а кнопка внутри кнопки разметкой не предусмотрена.
+    const entry = document.createElement('div');
+    entry.className = 'queue-entry';
+    entry.appendChild(button);
+    const covered = queueCoveredButton(item);
+    if (covered) entry.appendChild(covered);
+    list.appendChild(entry);
   }
   setQueueTabStop(queueTabStopButton());
   if (focusedCaseId) {
@@ -819,9 +858,16 @@ function renderQueue() {
 // строки достаются стрелками. Раньше остановкой была каждая загруженная строка, и выход из
 // очереди на сотне строк стоил 100 нажатий Tab — до кнопки дозагрузки доходили сотым.
 function setQueueTabStop(button) {
-  for (const item of document.querySelectorAll('#queueList .queue-item')) {
-    item.tabIndex = item === button ? 0 : -1;
+  for (const item of document.querySelectorAll('#queueList .queue-item, #queueList .queue-covered')) {
+    item.tabIndex = -1;
   }
+  if (!button) return;
+  button.tabIndex = 0;
+  // Метка покрытия выбранной строки — вторая и последняя остановка в очереди: по ней
+  // открывается инцидент, в котором событие уже разобрано. Метки остальных строк остаются
+  // вне обхода, иначе выход из очереди снова стоил бы столько нажатий, сколько строк.
+  const covered = button.parentElement?.querySelector('.queue-covered');
+  if (covered) covered.tabIndex = 0;
 }
 
 function queueTabStopButton() {
@@ -3286,6 +3332,10 @@ function renderGroups() {
     const statuses = Object.entries(group.by_status || {})
       .map(([code, count]) => `${term('case_status', code)}: ${count}`)
       .join(' · ');
+    // Сведённая строка складывает дело конвейера и собранный инцидент, в который оно вошло:
+    // два инцидента и сумма их событий там, где событие одно. Число уже разобранных считает
+    // продукт и называет здесь — само сведение при этом ничего не сливает и не закрывает.
+    const covered = Number(group.covered_cases ?? 0);
     button.innerHTML = `
       <span class="group-line">
         <span class="group-count">${escapeHtml(String(group.cases))} ${escapeHtml(plural(group.cases, 'инцидент', 'инцидента', 'инцидентов'))}</span>
@@ -3293,7 +3343,8 @@ function renderGroups() {
         <span class="muted small">до ${escapeHtml(score(group.max_risk_score))}</span>
       </span>
       <span class="queue-title mono">${escapeHtml(group.trigger_operation || '—')}</span>
-      <span class="queue-meta">${where} · ${escapeHtml(String(group.events))} ${escapeHtml(plural(group.events, 'событие', 'события', 'событий'))} · ${escapeHtml(statuses)}</span>`;
+      <span class="queue-meta">${where} · ${escapeHtml(String(group.events))} ${escapeHtml(plural(group.events, 'событие', 'события', 'событий'))} · ${escapeHtml(statuses)}</span>
+      ${covered ? `<span class="queue-meta muted">из них уже разобрано в собранных инцидентах: ${escapeHtml(String(covered))}</span>` : ''}`;
     button.addEventListener('click', () => drillIntoGroup(group));
     list.appendChild(button);
   }

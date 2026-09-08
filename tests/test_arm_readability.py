@@ -314,6 +314,32 @@ def test_empty_blocks_collapse_but_the_answer_stays_open() -> None:
         assert title in line, f"блок «{title}» может свернуться сам"
 
 
+def test_queue_says_when_an_event_is_already_covered_by_another_incident() -> None:
+    """Одно событие давало две записи очереди, и вторая выглядела нетронутой.
+
+    Признак приходит сводкой очереди (`coverage`, `covered_by_case_id`): считать покрытие
+    по загруженной сотне строк в браузере запрещено — оно вышло бы неполным.
+    """
+    assert "function queueCoveredButton(" in _APP
+    block = _APP[_APP.index("function queueCoveredButton(") :]
+    block = block[: block.index(chr(10) + "}" + chr(10))]
+    assert "item.covered_by_case_id" in block, "признак берётся у продукта"
+    assert "term('case_coverage'" in block, "название покрытия — из словаря продукта"
+    assert "term('case_status', item.covered_by_status)" in block
+    # По метке открывается разобранный инцидент, а не текущее дело.
+    assert "openCase(coveredBy" in block
+    # Частичное покрытие без чисел ничего не говорит.
+    assert "item.coverage === 'partial'" in block
+
+    # Признак входит в подпись очереди, иначе метка появится неизвестно когда.
+    signature = _APP[_APP.index("function queueSignature(") :]
+    assert "covered_by_case_id" in signature[: signature.index(chr(10) + "}" + chr(10))]
+
+    # Сведённая строка называет, сколько её дел уже разобрано.
+    groups = _APP[_APP.index("function renderGroups(") :]
+    assert "group.covered_cases" in groups[: groups.index(chr(10) + "}" + chr(10))]
+
+
 def test_queue_can_be_paged_past_the_first_hundred() -> None:
     """«Показано 100 из 500» было честным, но тупиковым: остальные доставались только фильтром."""
     assert 'id="queueMore"' in _INDEX
@@ -347,7 +373,11 @@ def test_queue_holds_one_keyboard_stop() -> None:
 
     assert "function setQueueTabStop(" in _APP
     stop = _APP[_APP.index("function setQueueTabStop(") :]
-    assert "item.tabIndex = item === button ? 0 : -1" in stop[: stop.index("\n}\n")]
+    stop = stop[: stop.index("\n}\n")]
+    # Обход гасится целиком, потом поднимается одна запись: и строка, и её метка покрытия.
+    assert "item.tabIndex = -1;" in stop
+    assert "button.tabIndex = 0;" in stop
+    assert ".queue-covered" in stop, "метки покрытия остальных строк вернулись в обход Tab"
 
     # Стрелка ведёт остановку за собой, иначе обратный Tab вернёт к прежней строке.
     move = _APP[_APP.index("function moveQueueSelection(") :]

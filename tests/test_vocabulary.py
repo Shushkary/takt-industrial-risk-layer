@@ -215,6 +215,7 @@ def test_vocabulary_bundles_every_table() -> None:
         "ledger_issue",
         "role",
         "permit_verdict",
+        "case_coverage",
     }
     assert payload["case_status"][CaseStatus.CONFIRMED.value] == "подтверждено"
 

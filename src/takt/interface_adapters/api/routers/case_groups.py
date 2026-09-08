@@ -92,6 +92,7 @@ def register_case_group_routes(ctx: ApiContext) -> None:
                 first_created_at=group.first_created_at,
                 last_created_at=group.last_created_at,
                 by_status=group.by_status,
+                covered_cases=group.covered_cases,
             )
             for group in result.items
         ]

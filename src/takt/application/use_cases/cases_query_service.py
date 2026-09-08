@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from takt.domain.entities.case import Case, CaseStatus
@@ -73,9 +74,32 @@ class CasesListQuery:
 
 
 @dataclass(frozen=True, slots=True)
+class CaseCoverage:
+    """Собранный инцидент, в котором состав исходного дела уже разобран.
+
+    Связь ведёт собранный инцидент: `related_cases` перечисляет дела, события которых в него
+    вошли. Обратной ссылки у исходного дела нет, поэтому в очереди оно выглядит нетронутым —
+    аналитик открывает и разбирает событие второй раз.
+    """
+
+    case_id: str
+    """Идентификатор собранного инцидента."""
+    status: str
+    """Его статус: разобран он или ещё ждёт очереди — разные новости для читающего."""
+    covered_events: int
+    """Сколько событий исходного дела в него вошло."""
+    total_events: int
+    """Сколько всего событий в исходном деле."""
+    full: bool
+    """Вошли все события дела, а не часть."""
+
+
+@dataclass(frozen=True, slots=True)
 class CasesListResult:
     items: list[Case]
     total_before_slice: int
+    coverage: dict[str, CaseCoverage] = field(default_factory=dict)
+    """Покрытие для дел этой страницы: `case_id` исходного дела → собранный инцидент."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +118,11 @@ class CaseGroup:
     first_created_at: str
     last_created_at: str
     by_status: dict[str, int]
+    covered_cases: int = 0
+    """Сколько дел группы уже разобрано в собранных инцидентах.
+
+    Без этого числа сведённая строка складывает дело конвейера и собранный инцидент, в
+    который оно вошло, и объявляет два инцидента и сумму их событий там, где событие одно."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,14 +177,64 @@ class CasesQueryService:
         return VALID_RISK_CLASSES
 
     def list_cases(self, query: CasesListQuery) -> CasesListResult:
-        items = list(self._require_repo().list_all())
-        items = self._apply_filters(items, query)
+        snapshot = list(self._require_repo().list_all())
+        items = self._apply_filters(snapshot, query)
         items = self.sort_cases(items, query.sort)
         total = len(items)
         sliced = items[query.offset :]
         if query.limit is not None:
             sliced = sliced[: query.limit]
-        return CasesListResult(items=sliced, total_before_slice=total)
+        # Покрытие считается по всему срезу хранилища, а не по отобранной странице: собранный
+        # инцидент мог не пройти фильтр очереди, а разобранным исходное дело от этого быть не
+        # перестало. Отдаётся только для показанных дел — остальное читающему не нужно.
+        index = self._coverage_index(snapshot)
+        coverage = {case.case_id: index[case.case_id] for case in sliced if case.case_id in index}
+        return CasesListResult(items=sliced, total_before_slice=total, coverage=coverage)
+
+    @staticmethod
+    def _coverage_index(snapshot: Sequence[Case]) -> dict[str, CaseCoverage]:
+        """Какие дела уже разобраны в составе собранных инцидентов.
+
+        Покрытие считается по составу событий, а не по факту ссылки: пересборка меняет состав
+        в обе стороны, и часть событий исходного дела в новый инцидент может не войти.
+        Объявить такое дело разобранным целиком значило бы спрятать неразобранный остаток.
+
+        Что покрытием не считается:
+
+        - дело со статусом «объединено» — оно само поглощено другим и работой не является;
+        - дело, состав которого целиком лежит внутри исходного: так связаны половина после
+          ручного разделения и её источник, и разобрана там не она, а он.
+        """
+        by_id = {case.case_id: case for case in snapshot}
+        found: dict[str, CaseCoverage] = {}
+        for assembled in snapshot:
+            if not assembled.related_cases or assembled.status is CaseStatus.MERGED:
+                continue
+            assembled_events = set(assembled.normalized_event_ids)
+            for source_id in assembled.related_cases:
+                source = by_id.get(source_id)
+                if source is None or source.case_id == assembled.case_id:
+                    continue
+                source_events = set(source.normalized_event_ids)
+                covered = len(source_events & assembled_events)
+                if not covered or assembled_events <= source_events:
+                    continue
+                candidate = CaseCoverage(
+                    case_id=assembled.case_id,
+                    status=assembled.status.value,
+                    covered_events=covered,
+                    total_events=len(source_events),
+                    full=covered == len(source_events),
+                )
+                current = found.get(source_id)
+                # При нескольких собранных берётся покрывший больше; при равном покрытии —
+                # меньший идентификатор, чтобы повторный прогон дал тот же ответ.
+                if current is None or (candidate.covered_events, current.case_id) > (
+                    current.covered_events,
+                    candidate.case_id,
+                ):
+                    found[source_id] = candidate
+        return found
 
     @staticmethod
     def group_key(case: Case, group_by: str = "asset") -> str:
@@ -185,7 +264,9 @@ class CasesQueryService:
         """
         if group_by not in CASE_GROUP_KEYS:
             raise ValueError(f"unsupported group_by: {group_by}")
-        items = self._apply_filters(list(self._require_repo().list_all()), query)
+        snapshot = list(self._require_repo().list_all())
+        items = self._apply_filters(snapshot, query)
+        coverage = self._coverage_index(snapshot)
         buckets: dict[str, list[Case]] = {}
         for case in items:
             buckets.setdefault(self.group_key(case, group_by), []).append(case)
@@ -211,6 +292,7 @@ class CasesQueryService:
                     first_created_at=created[0],
                     last_created_at=created[-1],
                     by_status=dict(Counter(c.status.value for c in cases)),
+                    covered_cases=sum(1 for c in cases if c.case_id in coverage),
                 )
             )
 
