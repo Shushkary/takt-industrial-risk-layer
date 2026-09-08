@@ -487,7 +487,10 @@ def create_app() -> FastAPI:
     )
     forensic_verify_uc = VerifyForensicBundleUseCase(ZipForensicBundleVerifier())
     manual_permit_uc = AttachManualPermitUseCase(repo, default_clock, default_id_provider)
-    manual_correlation_uc = ManualCorrelationUseCase(repo)
+    # Хранилище принятых событий проверяет существование того, что аналитик присоединяет:
+    # без него дело получало ссылку в никуда. В поставке без постоянного хранилища
+    # проверка недоступна, и операция ведёт себя как прежде.
+    manual_correlation_uc = ManualCorrelationUseCase(repo, events=recent_event_store)
     case_findings_uc = CaseFindingsUseCase(repo)
     decoder_service = LocalDecoderService()
     formal_verdict_confirmation_uc = ConfirmFormalVerdictUseCase(repo, default_clock)

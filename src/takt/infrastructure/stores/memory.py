@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Sequence
 from copy import deepcopy
 from datetime import UTC, datetime
 
@@ -54,6 +55,28 @@ class InMemoryCaseStore(CaseRepositoryPort):
         with self._lock:
             self._by_id[case.case_id] = clone_case(case)
             self._reindex_locked(case)
+
+    def save_all(self, cases: Sequence[Case]) -> None:
+        """Пакетная запись: либо записаны все дела, либо ни одного.
+
+        Нужна ручной корректировке состава: она меняет два дела сразу, и сбой между записями
+        оставлял бы источник закрытым, а цель — без его событий.
+        """
+        with self._lock:
+            previous = {case.case_id: self._by_id.get(case.case_id) for case in cases}
+            index = dict(self._open_by_fingerprint)
+            try:
+                for case in cases:
+                    self._by_id[case.case_id] = clone_case(case)
+                    self._reindex_locked(case)
+            except Exception:
+                for case_id, snapshot in previous.items():
+                    if snapshot is None:
+                        self._by_id.pop(case_id, None)
+                    else:
+                        self._by_id[case_id] = snapshot
+                self._open_by_fingerprint = index
+                raise
 
     def get(self, case_id: str) -> Case | None:
         with self._lock:

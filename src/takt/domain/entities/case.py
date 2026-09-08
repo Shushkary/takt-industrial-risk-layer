@@ -234,12 +234,24 @@ class CaseArtifact:
 
 @dataclass(slots=True)
 class Finding:
+    """Запись аналитика о деле: текст, автор, события и артефакты.
+
+    Находка живёт дольше состава, о котором её писали: ручная корректировка переносит
+    события между делами, и запись может остаться без своих событий. Удалять её нельзя —
+    это работа аналитика и материал доказательства, — поэтому вместо удаления она
+    помечается исторической, а происхождение остаётся в ``origin_case_id``.
+    """
+
     finding_id: str
     text: str
     author: str
     created_at: datetime
     event_ids: list[str] = field(default_factory=list)
     artifacts: list[CaseArtifact] = field(default_factory=list)
+    historical: bool = False
+    """Состав событий, о котором находку писали, в этом деле больше не собран."""
+    origin_case_id: str = ""
+    """Дело, в котором находка была записана; пусто — записана в текущем."""
 
 
 @dataclass(slots=True)

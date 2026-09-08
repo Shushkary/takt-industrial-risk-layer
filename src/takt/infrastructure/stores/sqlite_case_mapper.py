@@ -424,6 +424,8 @@ def _row_to_case(row: sqlite3.Row) -> Case:
                         created_at=_dt_from_sql(artifact["created_at"]) if artifact.get("created_at") else None,
                     ) for artifact in item.get("artifacts", []) if isinstance(artifact, dict)
                 ],
+                historical=bool(item.get("historical", False)),
+                origin_case_id=str(item.get("origin_case_id", "")),
             ) for item in findings_raw if isinstance(item, dict)
         ],
         primary_asset_id=str(row["primary_asset_id"] or ""),

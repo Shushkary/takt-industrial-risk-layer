@@ -218,6 +218,16 @@ class SqliteCaseStore(CaseRepositoryPort):
                     created_at = line.split(" | ", 1)[0] if " | " in line else _dt_to_sql(_now_utc())
                     self._append_audit_ledger_line(case.case_id, line, created_at)
 
+    def save_all(self, cases: Sequence[Case]) -> None:
+        """Пакетная запись в одной транзакции: либо записаны все дела, либо ни одного.
+
+        Нужна ручной корректировке состава: она меняет два дела сразу, и сбой между записями
+        оставлял бы источник закрытым, а цель — без его событий.
+        """
+        with self.transaction():
+            for case in cases:
+                self.save(case)
+
     def delete_cases_by_id(self, case_ids: Sequence[str]) -> int:
         """РЈРґР°Р»РµРЅРёРµ РєР°СЂС‚РѕС‡РµРє РїРѕ **case_id** (СЃРєСЂРёРїС‚С‹ РјРёРіСЂР°С†РёРё; РІРЅРµ РїРѕСЂС‚Р° СЂРµРїРѕР·РёС‚РѕСЂРёСЏ)."""
         if not case_ids:
