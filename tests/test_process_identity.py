@@ -191,3 +191,54 @@ def test_existing_events_are_migrated_to_process_keys(tmp_path) -> None:
         assert migrated.entity_card("process", "4242") is None, "прежняя общая карточка осталась"
     finally:
         migrated.close()
+def test_a_store_created_before_the_key_opens_without_error(tmp_path) -> None:
+    """База, заведённая прежней редакцией, обязана открываться.
+
+    `CREATE TABLE IF NOT EXISTS` существующую таблицу не меняет, поэтому колонки ключа в ней
+    нет. Индекс по этой колонке в общем скрипте схемы ронял открытие хранилища целиком —
+    ошибку нашёл запуск на накопленной базе стенда, а не прогон на пустых временных каталогах.
+    """
+    import sqlite3
+
+    path = tmp_path / "legacy.sqlite3"
+    legacy = sqlite3.connect(path)
+    legacy.executescript(
+        """
+        CREATE TABLE events (
+          event_id TEXT PRIMARY KEY NOT NULL,
+          observed_at TEXT NOT NULL,
+          source TEXT NOT NULL,
+          protocol TEXT NOT NULL,
+          operation TEXT NOT NULL,
+          payload_size INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          operator_id TEXT NOT NULL DEFAULT '',
+          host_id TEXT,
+          user_id TEXT,
+          process_id TEXT,
+          parent_process_id TEXT,
+          src_address TEXT,
+          dst_address TEXT,
+          artifacts_json TEXT NOT NULL DEFAULT '[]',
+          ingest_trust REAL NOT NULL DEFAULT 1.0,
+          inserted_at TEXT NOT NULL
+        );
+        """
+    )
+    legacy.execute(
+        "INSERT INTO events (event_id, observed_at, source, protocol, operation, payload_size,"
+        " payload_json, host_id, process_id, inserted_at)"
+        " VALUES ('a-1', '2026-09-08 09:00:00', 'edr', 'test', 'OBSERVED', 1, '{}', 'host-a', '4242',"
+        " '2026-09-08 09:00:00')"
+    )
+    legacy.commit()
+    legacy.close()
+
+    store = SqliteRecentEventStore(path)
+    try:
+        card = store.entity_card("process", process_entity_key("4242", "host-a"))
+
+        assert card is not None
+        assert card["event_count"] == 1
+    finally:
+        store.close()

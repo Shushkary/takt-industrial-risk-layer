@@ -211,7 +211,6 @@ def ensure_recent_events_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_events_host_time ON events (host_id, observed_at DESC);
         CREATE INDEX IF NOT EXISTS idx_events_user_time ON events (user_id, observed_at DESC);
         CREATE INDEX IF NOT EXISTS idx_events_process_time ON events (process_id, observed_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_events_process_key_time ON events (process_key, observed_at DESC);
         CREATE INDEX IF NOT EXISTS idx_events_src_address ON events (src_address);
         CREATE INDEX IF NOT EXISTS idx_events_dst_address ON events (dst_address);
         CREATE TABLE IF NOT EXISTS entity_registry (
@@ -256,9 +255,11 @@ def _migrate_process_identity(conn: sqlite3.Connection) -> None:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(events)")}
     if "process_key" not in cols:
         conn.execute("ALTER TABLE events ADD COLUMN process_key TEXT")
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_process_key_time ON events (process_key, observed_at DESC)"
-        )
+    # Индекс создаётся здесь, а не в общем скрипте схемы: на уже существующей базе колонка
+    # появляется строкой выше, и индекс по ней в скрипте ронял открытие хранилища целиком.
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_process_key_time ON events (process_key, observed_at DESC)"
+    )
     version = int(conn.execute("PRAGMA user_version").fetchone()[0] or 0)
     if version >= _RECENT_EVENTS_SCHEMA_VERSION:
         return
