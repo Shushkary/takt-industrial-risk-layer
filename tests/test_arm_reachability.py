@@ -243,3 +243,18 @@ def test_entity_history_names_the_request_limit_instead_of_faking_pages() -> Non
     block = block[: block.index("\n}\n")]
     assert "entityEnvironmentTotal" in block
     assert "за пределом запроса" in block
+
+
+def test_writing_a_finding_keeps_the_entity_open() -> None:
+    """Запись находки сбрасывала карточку сущности: продолжение разбора стоило открытия заново.
+
+    `addFinding` перечитывает тот же инцидент, а `openCase` очищал панель сущности всегда —
+    и при переходе к другому делу, и при перечитывании текущего.
+    """
+    start = _APP.index("async function openCase(")
+    block = _APP[start : _APP.index("\n}\n", start)]
+    assert "const switching = caseId !== selectedCaseId;" in block
+    assert "if (switching) resetEntityPanel();" in block, "контекст сбрасывается не только при смене дела"
+    # Состав дела пересобран — отметка выбранной сущности в цепочке восстанавливается.
+    assert "if (!switching) restoreEntityHighlight();" in block
+    assert "function restoreEntityHighlight(" in _APP

@@ -899,11 +899,14 @@ function updateActiveQueueItem() {
 // --- Окно инцидента --------------------------------------------------------
 
 async function openCase(caseId, { moveFocus = false } = {}) {
+  const switching = caseId !== selectedCaseId;
   selectedCaseId = caseId;
   queueFreshIds.delete(caseId);
   // Сущность принадлежит кейсу, из которого её открыли: при смене кейса панель очищается,
-  // иначе «Добавить в находки» запишет в новый кейс сущность из прежнего.
-  resetEntityPanel();
+  // иначе «Добавить в находки» запишет в новый кейс сущность из прежнего. Перечитывание того
+  // же кейса контекст сохраняет: после записи находки, смены статуса или подтверждения пакета
+  // карточка узла собиралась заново, и разбор продолжали с повторного открытия сущности.
+  if (switching) resetEntityPanel();
   updateActiveQueueItem();
   $('#workEmpty').hidden = true;
   $('#workBody').hidden = false;
@@ -913,6 +916,9 @@ async function openCase(caseId, { moveFocus = false } = {}) {
     // Пустота блока определяется по отрисованному составу, а не по ответу продукта: часть
     // блоков собирается несколькими запросами и наполняется позже отрисовки карточки.
     refreshBlockCollapse();
+    // Состав дела пересобран, и вместе со старыми кнопками цепочки потерялась отметка
+    // выбранной сущности: панель осталась открытой, а в цепочке узел выглядел невыбранным.
+    if (!switching) restoreEntityHighlight();
     if (moveFocus) focusInvestigation();
   } catch (error) {
     $('#workBody').hidden = true;
@@ -2304,6 +2310,18 @@ function resetEntityPanel() {
   refreshSideColumn();
 }
 
+// Отметка выбранной сущности в цепочке. Кнопки цепочки создаются заново при каждой отрисовке
+// состава, поэтому отметку восстанавливает тот, кто состав перерисовал.
+function restoreEntityHighlight() {
+  if (!selectedEntity) return;
+  for (const button of document.querySelectorAll('.entity-link')) {
+    button.classList.toggle(
+      'active',
+      button.dataset.entityType === selectedEntity.type && button.dataset.entityId === selectedEntity.id
+    );
+  }
+}
+
 async function openEntity(type, id) {
   // Колонка разворачивается заранее: содержимое приедет ответом продукта, а ширина нужна уже
   // сейчас, иначе карточка отрисуется в свёрнутой полосе.
@@ -2428,6 +2446,8 @@ async function addFinding() {
     });
     toast('Находка записана в журнал инцидента');
     $('#findingComment').value = '';
+    // Тот же кейс: карточка сущности, её окружение и место в истории остаются на экране —
+    // разбор узла продолжается, а не начинается с повторного открытия.
     await openCase(selectedCaseId);
   } catch (error) {
     toast(`Находка не сохранена: ${error.message}`);
