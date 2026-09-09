@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Мишень ТАКТ. Обводки 1.7 и 2.75 относятся как φ ≈ 1,618, просветы 2.6 и 11.01 — как φ³.
-       Внешняя пара сходится плотно, дальше рисунок раскрывается к центру. -->
+  <!-- Мишень ТАКТ. Обводки 2.55 и 4.13 относятся как φ ≈ 1,618, просветы 2.6 и 4.21 —
+       так же. Два кольца и крупный центр; просветы считаются между краями обводки. -->
   <rect width="64" height="64" rx="14" fill="#0b0f14"/>
   <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="#1f2937" stroke-width="3"/>
-  <circle cx="32" cy="32" r="22.21" fill="none" stroke="#38bdf8" stroke-width="1.7"/>
-  <circle cx="32" cy="32" r="17.38" fill="none" stroke="#38bdf8" stroke-width="2.75"/>
-  <circle cx="32" cy="32" r="5" fill="#38bdf8"/>
+  <circle cx="32" cy="32" r="25.23" fill="none" stroke="#38bdf8" stroke-width="2.55"/>
+  <circle cx="32" cy="32" r="19.28" fill="none" stroke="#38bdf8" stroke-width="4.13"/>
+  <circle cx="32" cy="32" r="13.01" fill="#38bdf8"/>
 </svg>
