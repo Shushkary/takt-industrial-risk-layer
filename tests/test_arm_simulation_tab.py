@@ -137,7 +137,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260909-07"}, versions
+    assert versions >= {"20260909-08"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -555,6 +555,21 @@ def test_the_case_card_draws_the_same_graph_as_the_simulation() -> None:
     assert "drawEntityGraph(svg, nodes, edges)" in _function(app, "renderCaseGraph")
     # Граф дела строится по рабочему столу, а не отдельным запросом.
     assert "renderCaseGraph(workspace.graph" in app
+
+
+def test_case_graph_vertices_are_filled() -> None:
+    """Вершине графа в карточке дела нужна заливка.
+
+    По умолчанию SVG заливает фигуру чёрным: на тёмной панели вершина выглядела дырой.
+    На «Симуляции» цвет ставит плеер по фазе шага, в карточке дела плеера нет — и цвет
+    приходится задать стилем, иначе он остаётся чёрным.
+    """
+    styles = _STYLES.read_text(encoding="utf-8")
+    start = styles.index(".entity-graph.static .graph-node circle {")
+    rule = styles[start : styles.index("}", start)]
+
+    assert "fill:" in rule
+    assert "#000" not in rule and "black" not in rule
 
 
 def test_case_graph_knows_every_link_kind_of_the_product() -> None:
