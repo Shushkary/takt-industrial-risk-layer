@@ -3115,6 +3115,19 @@ function renderInvestigationSummary(payload) {
   $('#summaryHistoryButton').hidden = (payload.versions || []).length < 2;
   $('#summaryState').textContent = summaryStateText(current);
   $('#summaryError').hidden = true;
+  applySummaryCollapse(Boolean(current));
+}
+
+// Пока описания нет, восемь пустых полей занимают экран между пакетом реагирования и
+// журналом, и разбор приходится прокручивать мимо них. Блок складывается до заголовка;
+// с написанным описанием он открыт. Свой выбор аналитика сильнее: сохранённое им состояние
+// блока здесь не переопределяется.
+function applySummaryCollapse(hasSummary) {
+  const block = $('#summaryBlock');
+  if (!block) return;
+  const title = blockTitle(block);
+  if (Object.prototype.hasOwnProperty.call(readBlockState(), title)) return;
+  toggleBlockSilently(block, !hasSummary);
 }
 
 function summaryStateText(current) {

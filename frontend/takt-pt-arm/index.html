@@ -15,7 +15,7 @@
          на вкладке в 16 пикселей внешнее кольцо бледнеет рядом с внутренним. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230b0f14'/%3E%3Crect%20x='1.5'%20y='1.5'%20width='61'%20height='61'%20rx='12.5'%20fill='none'%20stroke='%231f2937'%20stroke-width='3'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='25.23'%20fill='none'%20stroke='%2338bdf8'%20stroke-width='2.55'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='19.28'%20fill='none'%20stroke='%2338bdf8'%20stroke-width='4.13'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='13.01'%20fill='%2338bdf8'/%3E%3C/svg%3E" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260909-03" />
+    <link rel="stylesheet" href="./styles.css?v=20260909-04" />
   </head>
   <body>
     <header class="top">
@@ -594,10 +594,14 @@
           <p class="muted small">Все перечисленные механизмы детерминированы: языковая модель ни в одном из них не участвует, и счётчики выше получены без неё.</p>
         </div>
 
+        <!-- Управление плеером стоит здесь, а не отдельным блоком: оно двигает курсор
+             именно этого рисунка. Отдельный блок занимал экран целиком, и ход цепочки с
+             графом атаки уходили под сгиб — то есть оба рисунка, ради которых вкладку и
+             открывают, приходилось искать прокруткой. -->
         <div class="block">
           <div class="block-head">
-            <h4>Плеер цепочки</h4>
-            <button class="help" type="button" data-help="player" aria-label="Пояснение: плеер цепочки">?</button>
+            <h4>Ход цепочки</h4>
+            <button class="help" type="button" data-help="timeline" aria-label="Пояснение: ход цепочки">?</button>
           </div>
           <div class="player">
             <button id="playPause" class="action inline" type="button">Воспроизвести</button>
@@ -605,16 +609,9 @@
             <button id="stepForward" class="action inline" type="button">Шаг →</button>
             <button id="resetPlayer" class="action inline" type="button">Сброс</button>
             <span id="playerPosition" class="muted small">0 / 0</span>
+            <button class="help sm" type="button" data-help="player" aria-label="Пояснение: плеер цепочки">?</button>
           </div>
           <div id="phaseLegend" class="legend"></div>
-          <ol id="stepList" class="steps"></ol>
-        </div>
-
-        <div class="block">
-          <div class="block-head">
-            <h4>Ход цепочки</h4>
-            <button class="help" type="button" data-help="timeline" aria-label="Пояснение: ход цепочки">?</button>
-          </div>
           <div class="timeline-wrap">
             <svg id="chainTimeline" viewBox="0 0 1000 170" role="img" aria-label="Ход цепочки: события по времени и по шагам плеера"></svg>
           </div>
@@ -630,6 +627,13 @@
             <svg id="attackGraph" viewBox="0 0 960 320" role="img" aria-label="Граф сущностей цепочки атаки"></svg>
           </div>
           <p id="graphNote" class="muted small">—</p>
+        </div>
+
+        <div class="block">
+          <div class="block-head">
+            <h4>Шаги цепочки</h4>
+          </div>
+          <ol id="stepList" class="steps"></ol>
         </div>
 
         <div class="block">
@@ -720,7 +724,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260909-03"></script>
-    <script src="./app.min.js?v=20260909-03"></script>
+    <script src="./env.js?v=20260909-04"></script>
+    <script src="./app.min.js?v=20260909-04"></script>
   </body>
 </html>
