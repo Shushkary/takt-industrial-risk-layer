@@ -27,7 +27,13 @@ from takt.application.use_cases.investigation_summary import (
     build_summary_template,
     summary_checksum,
 )
-from takt.domain.entities.case import Case, CaseDecisionRecord, CaseStatus, Finding
+from takt.domain.entities.case import (
+    Case,
+    CaseDecisionRecord,
+    CaseStatus,
+    Finding,
+    ManualPermit,
+)
 from takt.domain.entities.event import EventEntities, EventSource, NormalizedEvent
 from takt.infrastructure.stores.memory import InMemoryCaseStore
 
@@ -45,6 +51,23 @@ def _event(event_id: str, *, minute: int = 0, host: str = "eng-ws-04", user: str
         payload={},
         entities=EventEntities(host_id=host, user_id=user),
         ingest_trust=1.0,
+    )
+
+
+def _permit() -> ManualPermit:
+    """Приложенный к делу организационный документ: с ним пробела в сборе нет."""
+    return ManualPermit(
+        permit_id="p-1",
+        case_id="c-1",
+        work_order_number="НР-2026-14",
+        actor="eng.petrov",
+        created_at=NOW,
+        asset_id="eng-ws-04",
+        operation="PROCESS_START",
+        verdict="LEG",
+        confidence=0.9,
+        rationale="плановые работы",
+        counterfactual="без наряда вердикт был бы ILLEG",
     )
 
 
@@ -107,12 +130,45 @@ def test_the_template_is_prefilled_from_what_the_product_already_knows() -> None
     assert "INV-OT-01" in template.draft["how_detected"]
 
 
-def test_the_template_leaves_the_analysts_own_conclusions_empty() -> None:
-    """Краткое изложение и уроки — выводы человека: подписывать их его именем продукт не вправе."""
+def test_the_conclusion_sections_come_as_a_marked_draft() -> None:
+    """Три раздела с рассуждением приходят заготовкой — и каждый называет себя черновиком.
+
+    Пустое поле аналитик заполняет заново вне контура, ради этого раздел и делался. Но текст
+    без пометки ушёл бы в доказательный пакет как слова человека, подписанные его именем.
+    """
     template = build_summary_template(_case(), [_event("e-1")])
 
-    assert template.draft["executive_summary"] == ""
-    assert template.draft["lessons"] == ""
+    for key in ("executive_summary", "assessment", "lessons"):
+        assert template.draft[key].startswith(f"- {DRAFT_MARKER}"), key
+
+
+def test_the_executive_draft_holds_the_reference_values_of_the_case() -> None:
+    """Верхний раздел читают первым: в черновике опорные величины дела, а не пересказ."""
+    case = _case()
+    draft = build_summary_template(case, [_event("e-1")]).draft["executive_summary"]
+
+    assert case.case_id in draft
+    assert case.title in draft
+    assert case.risk_class in draft
+    assert "0.810" in draft
+    assert case.status.value in draft
+
+
+def test_the_lessons_draft_names_what_blocked_the_review() -> None:
+    """Уроки продукт не пишет, но знает, что помешало разбору: пробелы и инварианты."""
+    draft = build_summary_template(_case(), [_event("e-1")]).draft["lessons"]
+
+    assert "организационный документ к делу не приложен" in draft
+    assert "INV-OT-01" in draft
+
+
+def test_the_lessons_draft_holds_without_gaps_and_invariants() -> None:
+    """У полного дела разбирать нечего — заготовка не должна остаться одной пометкой."""
+    case = _case(invariant_hits=[], manual_permits=[_permit()])
+    draft = build_summary_template(case, [_event("e-1")]).draft["lessons"]
+
+    assert draft.startswith(f"- {DRAFT_MARKER}")
+    assert "выбирает аналитик" in draft
 
 
 def test_the_assessment_draft_is_the_product_explanation_and_says_so() -> None:

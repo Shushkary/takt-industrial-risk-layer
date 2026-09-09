@@ -170,11 +170,13 @@ def build_summary_template(
     Заготовка подставляет то, что и так есть в деле — состав, источники, находки, решения, —
     чтобы аналитик не переносил это руками и не ошибался в идентификаторах.
 
-    Единственный раздел, куда кладётся рассуждение, — «Оценка аналитика»: туда идёт
-    собственное объяснение продукта (`xai_summary`) с явной пометкой черновика. Выдуманных
-    строк («вероятно, это атака») здесь не появляется: всё, что подставлено, продукт уже
-    посчитал сам и может предъявить. Краткое изложение и извлечённые уроки остаются пустыми —
-    это выводы человека, и подписывать их его именем продукт не вправе.
+    Пустых разделов заготовка не оставляет: аналитик правит текст, а не сочиняет его с
+    чистого листа. Три раздела, где обычно пишут рассуждение, — «Краткое изложение»,
+    «Оценка аналитика» и «Извлечённые уроки» — приходят черновиком с пометкой
+    `DRAFT_MARKER` первой строкой. Выдуманных строк («вероятно, это атака») в них нет: всё,
+    что подставлено, продукт посчитал сам и может предъявить. Пометка держит границу —
+    сохранённый без правки черновик так и останется черновиком продукта, а не выводом
+    человека, подписанным его именем.
     """
     ordered = sorted(events, key=lambda item: (item.observed_at, item.event_id))
     sources = sorted({event.source.value for event in ordered})
@@ -216,7 +218,7 @@ def build_summary_template(
         f"{facts['period_from']} — {facts['period_to']}" if ordered else "период недоступен"
     )
     draft = {
-        "executive_summary": "",
+        "executive_summary": _executive_draft(case, period),
         "what_happened": _bullets(
             [f"Дело {case.case_id}: {case.title}", f"Период событий: {period}", f"Событий в составе: {len(case.normalized_event_ids)}"]
         ),
@@ -231,7 +233,7 @@ def build_summary_template(
         "assessment": _assessment_draft(case),
         "response": _bullets(list(response_actions)) if response_actions else "",
         "open_questions": _bullets(gaps) if gaps else "",
-        "lessons": "",
+        "lessons": _lessons_draft(case, gaps),
     }
     # Уверенность не угадывается: аналитик выбирает её сам. Средняя стоит как значение,
     # которое придётся подтвердить осознанно, а не как оценка продукта.
@@ -266,6 +268,44 @@ def _assessment_draft(case: Case) -> str:
     if case.invariant_hits:
         lines.append(f"Сработавшие инварианты: {', '.join(case.invariant_hits)}")
     lines.append(f"Класс риска: {case.risk_class}, балл {case.risk_score:.3f}")
+    return _bullets(lines)
+
+
+def _executive_draft(case: Case, period: str) -> str:
+    """Заготовка раздела «Краткое изложение».
+
+    Верхний раздел отчёта читают первым и часто единственным, поэтому в черновик идут
+    опорные величины дела: идентификатор и название, класс риска с баллом, текущий статус,
+    период и объём состава, последнее решение по делу. Всё это продукт уже посчитал —
+    аналитику остаётся связать это в свою формулировку, а не переносить руками.
+    """
+    lines = [DRAFT_MARKER, f"Дело {case.case_id}: {case.title}"]
+    lines.append(f"Класс риска: {case.risk_class}, балл {case.risk_score:.3f}; статус: {case.status.value}")
+    lines.append(f"Период событий: {period}; событий в составе: {len(case.normalized_event_ids)}")
+    if case.decision_records:
+        last = case.decision_records[-1]
+        reason = (last.reason or "").strip()
+        transition = f"Последнее решение: {last.prev_status} -> {last.next_status}"
+        lines.append(transition + (f", причина: {reason}" if reason else ""))
+    return _bullets(lines)
+
+
+def _lessons_draft(case: Case, gaps: Sequence[str]) -> str:
+    """Заготовка раздела «Извлечённые уроки».
+
+    Продукт не знает, какой вывод сделает организация, но знает, что помешало разбору: те же
+    пробелы, что попали в «Открытые вопросы», и сработавшие инварианты. Это темы для разбора,
+    а не готовые уроки — формулирует их аналитик.
+    """
+    lines = [DRAFT_MARKER]
+    if gaps:
+        lines.append("Что помешало разбору: " + "; ".join(gaps))
+    if case.invariant_hits:
+        lines.append("Разобрать, почему сработали инварианты: " + ", ".join(case.invariant_hits))
+    if len(lines) == 1:
+        lines.append(
+            "Пробелов в сборе и сработавших инвариантов продукт не отметил — тему разбора выбирает аналитик."
+        )
     return _bullets(lines)
 
 
