@@ -83,6 +83,31 @@ def test_authoritative_docs_state_actual_catalog_size() -> None:
     assert not violations, "Документация разошлась с каталогом инвариантов:\n" + "\n".join(violations)
 
 
+def test_the_disabled_invariants_claim_matches_the_config() -> None:
+    """Заявление «N инвариантов отключены в проде» сверяется с самим конфигом.
+
+    Прецедент: в заголовке матрицы стояло 7 отключённых, в списке под ним — шесть имён, а в
+    `config/invariants/*.yaml` с `predicate_ref: builtin:noop` — тоже шесть. Разрыв держался,
+    потому что подмножества правило сверки размера каталога намеренно не проверяет. Число,
+    которым продукт признаёт собственный разрыв, ошибаться не должно: его первым делом
+    проверяет эксперт, и ошибка в нём ставит под сомнение остальные числа.
+    """
+    disabled = sorted(
+        path.stem
+        for path in sorted((_REPO_ROOT / "config" / "invariants").glob("*.yaml"))
+        if "predicate_ref: builtin:noop" in path.read_text(encoding="utf-8")
+    )
+    matrix = (_REPO_ROOT / "docs" / "invariant_matrix.md").read_text(encoding="utf-8")
+
+    heading = re.search(r"Известный разрыв: (\d+) инвариантов отключены в проде", matrix)
+    assert heading is not None, "заголовок о разрыве пропал из матрицы"
+    assert int(heading.group(1)) == len(disabled), (
+        f"в заголовке {heading.group(1)}, в конфиге {len(disabled)}: {disabled}"
+    )
+    for invariant_id in disabled:
+        assert f"`{invariant_id}`" in matrix, invariant_id
+
+
 def test_pattern_detects_catalog_claims() -> None:
     """Проверка самого правила: заявления о каталоге распознаются, подмножества — нет."""
 

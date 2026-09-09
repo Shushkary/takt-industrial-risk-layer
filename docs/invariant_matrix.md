@@ -26,7 +26,7 @@ TPR/FPR-протокол (`docs/detection_quality.md`) на момент обн�
 `docs/product_boundary.md` и `docs/certification_risk_roadmap.md` фиксируют расширение на промышленную
 выборку и оставшиеся инварианты как открытый пункт ФСТЭК-пакета.
 
-## ⚠ Известный разрыв: 7 инвариантов отключены в проде
+## ⚠ Известный разрыв: 6 инвариантов отключены в проде
 
 Ниже отмечены `⚠ NOOP` — эти правила задекларированы в `config/invariants/*.yaml` с `predicate_ref: builtin:noop`
 и **не помечены `experimental: true`**, хотя рабочая реализация предиката существует в `rule_predicates.py` и
@@ -39,7 +39,15 @@ TPR/FPR-протокол (`docs/detection_quality.md`) на момент обн�
 `stale_data`, `telemetry_gap`, `polling_period_doubling_suspect`.
 
 `out_of_shift_access` из списка выведен: предикат включён, а сопоставление вердиктов источников
-(`params.source_operations`) поднимает его на правиле SIEM `CODE_REPO_WRITE_OFFHOURS`.
+(`params.source_operations`) поднимает его на правиле SIEM `CODE_REPO_WRITE_OFFHOURS`. Заголовок при этом
+остался с прежним числом 7 — расхождение держалось до 2026-09-09 и ловилось только глазами.
+
+Число проверяется одной командой и прогоном (`tests/test_docs_invariant_count_consistency.py`,
+`test_the_disabled_invariants_claim_matches_the_config`):
+
+```bash
+grep -l "predicate_ref: builtin:noop" config/invariants/*.yaml | wc -l
+```
 
 Это не проектное решение (см. отсутствие `experimental: true`), а рассогласование между декларативным конфигом
 и кодом — исправление вынесено отдельной задачей, см. `spawn_task` в этой же сессии /
