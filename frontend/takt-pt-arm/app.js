@@ -213,6 +213,13 @@ const HELP = {
     action: 'Разбирать сверху вниз ядро, а расширение отсеивать. Вместе с расширением в инцидент попадает штатная активность тех же узлов — это цена полноты, а не ошибка сборки.',
     doc: 'docs/pt_techlab/correlation_quality.md',
   },
+  case_attack_graph: {
+    title: 'Граф атаки',
+    what: 'Сущности инцидента и связи между ними одной картинкой: учётная запись, узел, процесс, адрес. Вид связи показывает начертание линии, названия видов — под графом; наведение на линию показывает пару сущностей целиком.',
+    source: 'Строится по тем же событиям дела, что и список «Связи сущностей» под ним: картинка показывает форму, список читается точно. Связи вне дела в графе не видны — продукт рисует только состав этого инцидента.',
+    action: 'Искать переходы между узлами и смену учётной записи — по ним видно перемещение внутри сети. Клик по узлу, учётной записи или процессу открывает карточку сущности; у адреса карточки нет.',
+    doc: 'docs/pt_techlab/correlation_quality.md',
+  },
   graph: {
     title: 'Связи сущностей',
     what: 'Связи между узлами, учётными записями, процессами и адресами инцидента: запуск процесса, порождение дочернего процесса, сетевое обращение.',
@@ -996,6 +1003,7 @@ function renderCase(workspace) {
   renderInvariants(item.invariant_details || [], item.invariant_hits || []);
   renderChain(workspace.events || [], item.correlation_evidence || []);
   renderGraph(workspace.graph || { nodes: [], edges: [] });
+  renderCaseGraph(workspace.graph || { nodes: [], edges: [] });
   renderReconstruction(workspace.attack_chain || {});
   renderRelatedCases(item.related_cases || []);
   lastCaseArtifacts = workspace.artifacts || [];
@@ -2190,6 +2198,83 @@ async function mergeSelectedCase() {
     showRelinkError(relinkErrorText(error, 'Дело не присоединено'));
     button.disabled = false;
   }
+}
+
+// Граф связей в карточке дела: тот же рисунок, что на «Симуляции», но без плеера. Список
+// «Связи сущностей» под ним — тот же состав строками: картинка показывает форму, список
+// читается точно. Данные берутся из рабочего стола дела, лишнего запроса нет.
+function renderCaseGraph(graph) {
+  const svg = $('#caseAttackGraph');
+  const block = $('#caseGraphBlock');
+  if (!svg || !block) return;
+  const rawNodes = graph.nodes || [];
+  const rawEdges = graph.edges || [];
+
+  // Связи дела ссылаются на значение сущности (`eng.petrov`), а вершины приходят составным
+  // идентификатором (`user:eng.petrov`), поэтому вершины сводятся по значению. Один и тот же
+  // адрес приходит дважды — источником и назначением: на картинке это одна машина, и вид
+  // берётся старший, иначе узел подписался бы адресом.
+  const rank = { host: 4, user: 3, process: 2, address: 1, destination: 0 };
+  const byValue = new Map();
+  for (const node of rawNodes) {
+    const value = node.value || node.id;
+    const kept = byValue.get(value);
+    if (!kept || (rank[node.type] || 0) > (rank[kept.type] || 0)) {
+      byValue.set(value, { value, type: node.type });
+    }
+  }
+  const links = new Map();
+  for (const edge of rawEdges) {
+    for (const value of [edge.source, edge.target]) {
+      links.set(value, (links.get(value) || 0) + 1);
+    }
+  }
+
+  const nodes = [...byValue.values()].map((node) => ({
+    key: node.value,
+    label: node.value,
+    meta: `${term('entity_type', node.type)} · связей: ${links.get(node.value) || 0}`,
+    // Карточка есть только у узла, учётной записи и процесса — у адреса её нет, и вершина
+    // адреса остаётся рисунком, а не ссылкой, которая молча ничего не делает.
+    onClick: ['host', 'user', 'process'].includes(node.type)
+      ? () => openEntity(node.type, node.value)
+      : null,
+  }));
+  const seen = new Set();
+  const edges = [];
+  for (const edge of rawEdges) {
+    const key = `${edge.source}|${edge.type}|${edge.target}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const label = term('graph_edge_kind', edge.type);
+    edges.push({
+      from: edge.source,
+      to: edge.target,
+      kind: CASE_EDGE_KINDS[edge.type] || 'reaches',
+      title: `${edge.source} ${label} ${edge.target}`,
+    });
+  }
+
+  // Дело из одной сущности связывать нечем: граф вырождается в точку и читается как
+  // незагрузившийся блок. Состав такого дела показывает список связей и цепочка событий.
+  block.hidden = nodes.length < 2;
+  renderCaseGraphNote(nodes.length, edges.length);
+  renderGraphLegend(
+    $('#caseGraphLegend'),
+    presentEdgeKinds(rawEdges.map((edge) => edge.type), CASE_EDGE_KINDS, (code) => term('graph_edge_kind', code)),
+  );
+  drawEntityGraph(svg, nodes, edges);
+}
+
+// Что именно нарисовано и по каким данным. Без этой строки граф читается как карта сети,
+// хотя он показывает только события этого инцидента.
+function renderCaseGraphNote(nodes, edges) {
+  const box = $('#caseGraphNote');
+  if (!box) return;
+  box.textContent =
+    `Сущностей в инциденте: ${nodes}, связей между ними: ${edges}. ` +
+    'Граф построен только по событиям этого дела: связи вне дела в нём не видны. ' +
+    'Клик по узлу, учётной записи или процессу открывает карточку сущности.';
 }
 
 function renderGraph(graph) {
@@ -4565,41 +4650,54 @@ function renderGraphNote(nodes, edges) {
       : `${facts} События инцидента не связывают сущности между собой: каждое касается своей. ${player}`;
 }
 
-// Виды связей графа: имя из данных -> класс начертания линии. Порядок задаёт порядок
-// строк условных обозначений.
+// Виды связей графа: имя из данных -> класс начертания линии. Порядок задаёт порядок строк
+// условных обозначений. Наборов два, потому что цепочка атаки и дело говорят о связях
+// разными словарями: у плеера свои названия переходов, у дела — коды словаря продукта.
 const EDGE_KINDS = { 'обращается к': 'reaches', 'действует на': 'acts' };
+const CASE_EDGE_KINDS = { network: 'reaches', runs: 'acts', initiated: 'starts', spawned: 'spawns' };
 
 // Условные обозначения показывают только те виды связей, которые есть на этом графе: строка
-// про несуществующую линию заставляет искать её глазами.
-function renderGraphLegend(edges) {
-  const box = $('#graphLegend');
+// про несуществующую линию заставляет искать её глазами. Образец рисуется тем же начертанием,
+// что и сама линия, — иначе легенда обещает одно, а на полотне видно другое.
+function renderGraphLegend(box, entries) {
   if (!box) return;
-  const present = new Set(edges.map((edge) => edge.label));
+  const ns = 'http://www.w3.org/2000/svg';
   box.replaceChildren();
-  for (const [label, kind] of Object.entries(EDGE_KINDS)) {
-    if (!present.has(label)) continue;
+  for (const [label, kind] of entries) {
     const item = document.createElement('span');
     item.className = 'graph-legend-item';
-    const swatch = document.createElement('span');
-    swatch.className = `graph-legend-line ${kind}`;
+    const swatch = document.createElementNS(ns, 'svg');
+    swatch.setAttribute('class', 'graph-legend-line');
+    swatch.setAttribute('viewBox', '0 0 24 2');
+    swatch.setAttribute('aria-hidden', 'true');
+    const sample = document.createElementNS(ns, 'line');
+    sample.setAttribute('x1', 0);
+    sample.setAttribute('y1', 1);
+    sample.setAttribute('x2', 24);
+    sample.setAttribute('y2', 1);
+    sample.setAttribute('class', kind);
+    swatch.appendChild(sample);
     item.append(swatch, document.createTextNode(label));
     box.appendChild(item);
   }
   box.hidden = !box.childElementCount;
 }
 
-function renderAttackGraph() {
-  const svg = $('#attackGraph');
-  svg.replaceChildren();
-  simGraph = chainGraph();
-  const { nodes, edges } = simGraph;
-  renderGraphNote(nodes.length, edges);
-  renderGraphLegend(edges);
-  // Дело из одной сущности связывать нечем: граф вырождается в точку и читается как
-  // незагрузившийся блок. Ход цепочки в таком деле показывает лента, а граф скрывается
-  // целиком — вместе с заголовком, чтобы на экране не оставалось пустого места.
-  $('#attackGraphBlock').hidden = nodes.length < 2;
+// Виды связей, которые на этом графе действительно есть, в порядке объявления набора.
+function presentEdgeKinds(codes, kinds, caption) {
+  const present = new Set(codes);
+  return Object.entries(kinds)
+    .filter(([code]) => present.has(code))
+    .map(([code, kind]) => [caption ? caption(code) : code, kind]);
+}
 
+// Раскладка и отрисовка графа сущностей — общая для карточки дела и вкладки «Симуляция».
+// Вершина ожидает `key` (по нему связи находят её концы), `label`, необязательные `meta`
+// и `onClick`; связь — `from`, `to`, `kind` (класс начертания) и `title` для подсказки.
+// Отрисованные элементы кладутся в сами объекты: плееру они нужны, чтобы перекрашивать
+// вершины по шагам, не собирая граф заново.
+function drawEntityGraph(svg, nodes, edges) {
+  svg.replaceChildren();
   const perRow = 5;
   const rows = Math.max(1, Math.ceil(nodes.length / perRow));
   const cols = Math.max(1, Math.min(nodes.length, perRow));
@@ -4615,7 +4713,7 @@ function renderAttackGraph() {
   nodes.forEach((node, index) => {
     const row = Math.floor(index / perRow);
     const col = index % perRow;
-    position.set(node.id, { x: 110 + col * 185, y: 60 + row * 90 });
+    position.set(node.key, { x: 110 + col * 185, y: 60 + row * 90 });
   });
 
   const ns = 'http://www.w3.org/2000/svg';
@@ -4628,19 +4726,20 @@ function renderAttackGraph() {
     line.setAttribute('y1', from.y);
     line.setAttribute('x2', to.x);
     line.setAttribute('y2', to.y);
-    line.setAttribute('class', `edge-line ${EDGE_KINDS[edge.label] || 'reaches'}`);
+    line.setAttribute('class', `edge-line ${edge.kind || 'reaches'}`);
     // Пара сущностей и вид связи остаются доступны наведением: подпись убрана с полотна,
-    // а не из продукта.
-    const hint = document.createElementNS(ns, 'title');
-    hint.textContent = `${edge.from} ${edge.label} ${edge.to}`;
-    line.appendChild(hint);
+    // а не из продукта. Подпись на середине длинного перехода ложилась на чужую вершину.
+    if (edge.title) {
+      const hint = document.createElementNS(ns, 'title');
+      hint.textContent = edge.title;
+      line.appendChild(hint);
+    }
     edge.element = line;
-    edge.orders = new Set(edge.steps);
     svg.appendChild(line);
   }
 
   for (const node of nodes) {
-    const point = position.get(node.id);
+    const point = position.get(node.key);
     const group = document.createElementNS(ns, 'g');
     group.setAttribute('class', 'graph-node');
     const circle = document.createElementNS(ns, 'circle');
@@ -4652,7 +4751,7 @@ function renderAttackGraph() {
     text.setAttribute('x', point.x);
     text.setAttribute('y', point.y + 30);
     text.setAttribute('class', 'node-label');
-    text.textContent = node.id.length > 22 ? `${node.id.slice(0, 21)}…` : node.id;
+    text.textContent = node.label.length > 22 ? `${node.label.slice(0, 21)}…` : node.label;
     group.appendChild(text);
     // Вид сущности подписью: кружок сам по себе не различает узел, учётную запись и адрес,
     // а на графе из одной вершины различать больше нечем.
@@ -4660,15 +4759,45 @@ function renderAttackGraph() {
     meta.setAttribute('x', point.x);
     meta.setAttribute('y', point.y + 45);
     meta.setAttribute('class', 'node-meta');
+    if (node.meta) meta.textContent = node.meta;
     group.appendChild(meta);
     node.element = group;
     node.circle = circle;
-    node.meta = meta;
-    group.addEventListener('click', () => openStep(nodeStepAtCursor(node)));
+    node.metaElement = meta;
+    if (node.onClick) {
+      // Курсор обещает переход только там, где он есть: у адреса карточки сущности нет,
+      // и вершина-адрес должна выглядеть как рисунок, а не как несработавшая ссылка.
+      group.classList.add('clickable');
+      group.addEventListener('click', node.onClick);
+    }
     svg.appendChild(group);
   }
+}
+
+function renderAttackGraph() {
+  const svg = $('#attackGraph');
+  simGraph = chainGraph();
+  const { nodes, edges } = simGraph;
+  renderGraphNote(nodes.length, edges);
+  renderGraphLegend($('#graphLegend'), presentEdgeKinds(edges.map((edge) => edge.label), EDGE_KINDS));
+  // Дело из одной сущности связывать нечем: граф вырождается в точку и читается как
+  // незагрузившийся блок. Ход цепочки в таком деле показывает лента, а граф скрывается
+  // целиком — вместе с заголовком, чтобы на экране не оставалось пустого места.
+  $('#attackGraphBlock').hidden = nodes.length < 2;
+  for (const node of nodes) {
+    node.key = node.id;
+    node.label = node.id;
+    node.onClick = () => openStep(nodeStepAtCursor(node));
+  }
+  for (const edge of edges) {
+    edge.kind = EDGE_KINDS[edge.label] || 'reaches';
+    edge.title = `${edge.from} ${edge.label} ${edge.to}`;
+    edge.orders = new Set(edge.steps);
+  }
+  drawEntityGraph(svg, nodes, edges);
   paintProgress();
 }
+
 
 // Шаг сущности под текущим положением плеера: последний уже сыгранный, а до начала
 // воспроизведения — первый. Клик по вершине во время проигрывания должен открывать событие,
@@ -4709,7 +4838,7 @@ function paintGraphProgress() {
     node.circle.setAttribute('fill', phaseColor(phase));
     node.element.classList.toggle('played', played > 0);
     node.element.classList.toggle('current', node.steps.some((item) => item.order === simCursor));
-    node.meta.textContent = `${term('entity_type', node.type)} · ${played} из ${node.steps.length}`;
+    node.metaElement.textContent = `${term('entity_type', node.type)} · ${played} из ${node.steps.length}`;
   }
   for (const edge of simGraph.edges) {
     if (!edge.element) continue;

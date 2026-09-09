@@ -34,6 +34,12 @@ def _app() -> str:
     return _APP.read_text(encoding="utf-8")
 
 
+def _function(app: str, name: str) -> str:
+    """Тело функции верхнего уровня по имени: тесты сверяют устройство, а не весь файл."""
+    start = app.index(f"function {name}(")
+    return app[start : app.index(chr(10) + "}" + chr(10), start)]
+
+
 def test_every_help_button_has_a_registry_entry() -> None:
     """Кнопка «?» без записи в реестре открывала бы пустое окно."""
     used = set(_HELP_ATTR.findall(_index()))
@@ -131,7 +137,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260909-06"}, versions
+    assert versions >= {"20260909-07"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -223,7 +229,7 @@ def test_simulation_view_declares_no_active_control() -> None:
 
 def test_styles_define_phase_and_player_classes() -> None:
     styles = _STYLES.read_text(encoding="utf-8")
-    for selector in (".legend-item", ".step.played", ".step.current", "#attackGraph .edge-line.played"):
+    for selector in (".legend-item", ".step.played", ".step.current", ".entity-graph .edge-line.played"):
         assert selector in styles, selector
 
 
@@ -521,15 +527,52 @@ def test_the_graph_shows_the_kind_of_link_without_writing_on_the_canvas() -> Non
     """
     app = _app()
     styles = _STYLES.read_text(encoding="utf-8")
-    start = app.index("function renderAttackGraph(")
-    block = app[start : app.index(chr(10) + "}" + chr(10), start)]
 
-    assert "edge-label" not in block
+    assert "edge-label" not in app
     assert "edge-label" not in styles
-    assert "EDGE_KINDS[edge.label]" in block
-    assert "renderGraphLegend(" in block
+    assert "EDGE_KINDS[edge.label]" in _function(app, "renderAttackGraph")
+    assert "renderGraphLegend(" in _function(app, "renderAttackGraph")
     assert 'id="graphLegend"' in _index()
-    assert "#attackGraph .edge-line.acts" in styles
+    assert ".entity-graph .edge-line.acts" in styles
+
+
+def test_the_case_card_draws_the_same_graph_as_the_simulation() -> None:
+    """Граф атаки есть и в карточке дела — и рисуется тем же кодом, что на «Симуляции».
+
+    Две копии раскладки разошлись бы на первой правке: у одной вкладки поехали бы вершины,
+    у другой нет. Поэтому отрисовка одна на обе, а различается только начинка вершины —
+    в деле она открывает карточку сущности, в плеере ведёт воспроизведение.
+    """
+    app = _app()
+    index = _index()
+
+    assert 'id="caseAttackGraph"' in index
+    assert 'id="caseGraphBlock"' in index
+    assert 'id="caseGraphLegend"' in index
+    assert 'id="caseGraphNote"' in index
+    # Обе вершины графа рисует одна функция.
+    assert "drawEntityGraph(svg, nodes, edges)" in _function(app, "renderAttackGraph")
+    assert "drawEntityGraph(svg, nodes, edges)" in _function(app, "renderCaseGraph")
+    # Граф дела строится по рабочему столу, а не отдельным запросом.
+    assert "renderCaseGraph(workspace.graph" in app
+
+
+def test_case_graph_knows_every_link_kind_of_the_product() -> None:
+    """Каждый вид связи словаря продукта получает своё начертание.
+
+    Незнакомый код молча рисуется сплошной линией — такой же, как «обратился к». Новый вид
+    связи в словаре обязан либо получить начертание, либо быть отвергнут этим тестом, иначе
+    на графе появится линия, которая врёт о своём смысле.
+    """
+    from takt.domain.vocabulary import GRAPH_EDGE_KIND_RU
+
+    declared = _function(_app(), "renderCaseGraph")
+    line = next(
+        row for row in _app().splitlines() if row.startswith("const CASE_EDGE_KINDS")
+    )
+    for code in GRAPH_EDGE_KIND_RU:
+        assert f"{code}:" in line, f"вид связи {code} без начертания линии"
+    assert "CASE_EDGE_KINDS[edge.type]" in declared
 
 
 def test_glossary_is_reachable_from_the_header() -> None:
@@ -871,9 +914,7 @@ def test_attack_graph_canvas_matches_the_node_count() -> None:
     Фиксированная высота в 320 точек оставляла одинокую вершину в пустом поле — вид ровно
     такой же, как у блока, который не отрисовался.
     """
-    app = _app()
-    start = app.index("function renderAttackGraph(")
-    block = app[start : app.index("\n}\n", start)]
+    block = _function(_app(), "drawEntityGraph")
 
     assert "viewBox" in block and "nodes.length" in block
     assert "height: 320px" not in _STYLES.read_text(encoding="utf-8")

@@ -1680,27 +1680,53 @@ ol.steps {
   }
 }
 
-#attackGraph {
+.entity-graph {
   width: 100%;
   min-width: 720px;
   min-height: 120px;
 }
 
-#attackGraph .edge-line {
+/* Граф в карточке дела: плеера нет, поэтому вершины и линии показаны в полную силу.
+   Приглушённость на «Симуляции» означает «шаг ещё не сыгран»; в деле играть нечего, и та
+   же бледность читалась бы как неполная отрисовка. Курсор обещает переход только там, где
+   он есть: у адреса карточки сущности нет. */
+.entity-graph.static .graph-node {
+  opacity: 1;
+  cursor: default;
+}
+
+.entity-graph.static .graph-node.clickable {
+  cursor: pointer;
+}
+
+.entity-graph.static .edge-line {
+  opacity: 0.9;
+}
+
+.entity-graph .edge-line {
   stroke: var(--line);
   stroke-width: 1.5;
   opacity: 0.35;
 }
 
-#attackGraph .edge-line.played {
+.entity-graph .edge-line.played {
   stroke: var(--accent);
   opacity: 1;
 }
 
-/* Вид связи — начертанием линии: сплошная «обращается к», пунктирная «действует на».
-   Подписи на полотне не осталось, поэтому и накладываться нечему. */
-#attackGraph .edge-line.acts {
+/* Вид связи — начертанием линии, а не подписью на полотне: подпись ставилась на середину
+   перехода, а середина длинного перехода приходится на чужую вершину. Четыре начертания
+   различимы и в чёрно-белой печати. */
+.entity-graph .edge-line.acts {
   stroke-dasharray: 5 4;
+}
+
+.entity-graph .edge-line.starts {
+  stroke-dasharray: 1.5 3.5;
+}
+
+.entity-graph .edge-line.spawns {
+  stroke-dasharray: 7 3 1.5 3;
 }
 
 .graph-legend {
@@ -1716,45 +1742,61 @@ ol.steps {
   gap: 7px;
 }
 
+/* Образец в условных обозначениях рисуется линией, а не рамкой: у рамки нет начертания
+   «штрих-пунктир», и легенда обещала бы не то, что на полотне. */
 .graph-legend-line {
   width: 24px;
-  height: 0;
-  border-top: 2px solid var(--line);
+  height: 2px;
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
-.graph-legend-line.acts {
-  border-top-style: dashed;
+.graph-legend-line line {
+  stroke: var(--line);
+  stroke-width: 2;
 }
 
-#attackGraph .graph-node {
+.graph-legend-line line.acts {
+  stroke-dasharray: 5 4;
+}
+
+.graph-legend-line line.starts {
+  stroke-dasharray: 1.5 3.5;
+}
+
+.graph-legend-line line.spawns {
+  stroke-dasharray: 7 3 1.5 3;
+}
+
+.entity-graph .graph-node {
   opacity: 0.4;
   cursor: pointer;
 }
 
-#attackGraph .graph-node.played {
+.entity-graph .graph-node.played {
   opacity: 1;
 }
 
 /* Текущий шаг плеера: обводка вершины и утолщённая линия. На деле из одной сущности это
    единственный признак, по которому видно, что воспроизведение идёт. */
-#attackGraph .graph-node.current circle {
+.entity-graph .graph-node.current circle {
   stroke: var(--accent);
   stroke-width: 3;
 }
 
-#attackGraph .edge-line.current {
+.entity-graph .edge-line.current {
   stroke: var(--accent);
   stroke-width: 3;
   opacity: 1;
 }
 
-#attackGraph .node-meta {
+.entity-graph .node-meta {
   fill: var(--muted);
   font-size: 10px;
   text-anchor: middle;
 }
 
-#attackGraph .node-label {
+.entity-graph .node-label {
   fill: var(--text);
   font-size: 11px;
   text-anchor: middle;
