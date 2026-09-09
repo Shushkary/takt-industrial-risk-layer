@@ -3367,7 +3367,7 @@ function blockTitle(block) {
 // Разметка блоков в index.html писалась без обёртки содержимого: обёртка ставится один раз
 // при запуске, чтобы сворачивание не требовало править тринадцать мест разметки.
 function prepareCollapsibleBlocks() {
-  for (const block of document.querySelectorAll('.panel.work .block')) {
+  for (const block of document.querySelectorAll('.panel.work .block, #simulationView .block')) {
     const head = block.querySelector('.block-head');
     if (!head || block.querySelector(':scope > .block-body')) continue;
     const body = document.createElement('div');
@@ -3389,6 +3389,25 @@ function prepareCollapsibleBlocks() {
     toggle.setAttribute('aria-label', `Свернуть блок «${title}»`);
     toggle.addEventListener('click', () => toggleBlock(block, !block.classList.contains('collapsed')));
     head.insertBefore(toggle, head.firstChild);
+  }
+}
+
+// Блоки симуляции, свёрнутые при первом открытии окна. Вкладку открывают ради хода
+// цепочки и графа атаки, а два блока счётчиков занимали над ними 727 пикселей —
+// граф уходил под сгиб. Числа никуда не делись: заголовок на месте, клик раскрывает.
+const SIMULATION_COLLAPSED_BY_DEFAULT = new Set([
+  'Трудоёмкость разбора',
+  'За счёт чего сокращены действия',
+]);
+
+function collapseSimulationCountersByDefault() {
+  const stored = readBlockState();
+  for (const block of document.querySelectorAll('#simulationView .block')) {
+    const title = blockTitle(block);
+    if (!SIMULATION_COLLAPSED_BY_DEFAULT.has(title)) continue;
+    // Свой выбор аналитика сильнее умолчания и здесь не переопределяется.
+    if (Object.prototype.hasOwnProperty.call(stored, title)) continue;
+    toggleBlockSilently(block, true);
   }
 }
 
@@ -4907,6 +4926,7 @@ applyQueueMode();
 // Обёртка содержимого блоков ставится один раз: сворачивание не должно требовать правки
 // тринадцати мест разметки.
 prepareCollapsibleBlocks();
+collapseSimulationCountersByDefault();
 
 loadVocabulary().then(() => {
   loadSession();
