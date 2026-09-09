@@ -59,7 +59,10 @@ def test_zip_forensic_bundle_contains_manifest_and_evidence() -> None:
         names = set(zf.namelist())
         assert names == {
             "manifest.json", "case.json", "siem.json", "gossopka-card.json", "audit.txt",
-            "findings.json", "artifacts.json",
+            # Итоговое описание расследования входит в пакет своим файлом: у редакции своё
+            # контрольное значение и признак утверждения, и получатель должен видеть, что
+            # именно ему предъявлено.
+            "findings.json", "artifacts.json", "investigation-summary.json",
         }
         manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
         case_payload = json.loads(zf.read("case.json").decode("utf-8"))
@@ -78,7 +81,8 @@ def test_zip_forensic_bundle_contains_manifest_and_evidence() -> None:
     assert checks["aggregate_checksum"]["ok"] is True
     assert checks["signature"]["ok"] is False
     assert [item["path"] for item in manifest["items"]] == [
-        "case.json", "siem.json", "gossopka-card.json", "audit.txt", "findings.json", "artifacts.json"
+        "case.json", "siem.json", "gossopka-card.json", "audit.txt", "findings.json",
+        "artifacts.json", "investigation-summary.json",
     ]
     assert manifest["items"][0]["element_type"] == "дело"
     assert manifest["items"][0]["source"] == "реестр дел ТАКТ"
@@ -245,7 +249,8 @@ def test_zip_forensic_bundle_verifier_accepts_valid_archive() -> None:
     result = ZipForensicBundleVerifier().verify_bundle(raw)
     assert result.ok is True
     assert result.case_id == "fb-1"
-    assert result.checked_items == 6
+    # Семь элементов: к прежним шести добавилось итоговое описание расследования.
+    assert result.checked_items == 7
     assert result.issues == ()
 
 
@@ -340,7 +345,8 @@ def test_api_forensic_bundle_verify_endpoint() -> None:
     body = verify.json()
     assert body["ok"] is True
     assert body["case_id"] == case_id
-    assert body["checked_items"] == 9
+    # Десять элементов: к прежним девяти добавилось итоговое описание расследования.
+    assert body["checked_items"] == 10
 
 
 def test_forensic_bundle_contains_raw_evidence_from_events_ingest() -> None:

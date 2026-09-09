@@ -40,6 +40,7 @@ def ensure_case_schema(conn: sqlite3.Connection, schema_version: int) -> None:
           dq_reasons TEXT NOT NULL,
           last_event_source TEXT NOT NULL,
           raw_evidence_refs TEXT NOT NULL DEFAULT '[]',
+          investigation_summaries TEXT NOT NULL DEFAULT '[]',
           pdf_last_sha256 TEXT NOT NULL DEFAULT '',
           pdf_last_generated_at TEXT NOT NULL DEFAULT ''
         );
@@ -355,6 +356,7 @@ def _add_missing_case_columns(conn: sqlite3.Connection, cols: set[str]) -> None:
         "pdf_last_sha256": "ALTER TABLE cases ADD COLUMN pdf_last_sha256 TEXT NOT NULL DEFAULT ''",
         "pdf_last_generated_at": "ALTER TABLE cases ADD COLUMN pdf_last_generated_at TEXT NOT NULL DEFAULT ''",
         "raw_evidence_refs": "ALTER TABLE cases ADD COLUMN raw_evidence_refs TEXT NOT NULL DEFAULT '[]'",
+        "investigation_summaries": "ALTER TABLE cases ADD COLUMN investigation_summaries TEXT NOT NULL DEFAULT '[]'",
         "correlation_fingerprints": "ALTER TABLE cases ADD COLUMN correlation_fingerprints TEXT NOT NULL DEFAULT '[]'",
         "correlation_evidence": "ALTER TABLE cases ADD COLUMN correlation_evidence TEXT NOT NULL DEFAULT '[]'",
         "related_cases": "ALTER TABLE cases ADD COLUMN related_cases TEXT NOT NULL DEFAULT '[]'",

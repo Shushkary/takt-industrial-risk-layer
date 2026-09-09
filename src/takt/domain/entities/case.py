@@ -158,6 +158,34 @@ class ManualPermit:
 
 
 @dataclass(slots=True)
+class InvestigationSummary:
+    """Итоговое описание расследования, написанное аналитиком.
+
+    Это текст человека, а не вывод продукта: он не участвует в расчёте риска, вердикта и
+    качества данных и ничего в них не меняет. Значение у него другое — связный итог, который
+    получатель читает вместо того, чтобы собирать историю заново из журнала и выгрузок.
+
+    Версии неизменяемы. Правка не переписывает прошлую редакцию, а добавляет новую: описание
+    уходит в доказательный пакет, и подменённый задним числом текст обесценил бы его целиком.
+    Утверждение (``approved``) отделено от сохранения: в пакет идёт утверждённая редакция, а
+    неутверждённая помечается черновиком — читающий должен видеть разницу.
+    """
+
+    version: int
+    sections: dict[str, str]
+    """Разделы описания по ключам каталога (`application/use_cases/investigation_summary.py`)."""
+    confidence: str
+    """Уверенность аналитика в оценке: `high` | `moderate` | `low`."""
+    author: str
+    created_at: datetime
+    checksum: str = ""
+    """SHA-256 канонической формы редакции: по нему редакция сверяется в пакете."""
+    approved: bool = False
+    approved_by: str = ""
+    approved_at: datetime | None = None
+
+
+@dataclass(slots=True)
 class CaseDecisionRecord:
     ts: datetime
     actor: str
@@ -291,6 +319,7 @@ class Case:
     manual_permits: list[ManualPermit] = field(default_factory=list)
     formal_verdict_records: list[FormalVerdictRecord] = field(default_factory=list)
     decision_records: list[CaseDecisionRecord] = field(default_factory=list)
+    investigation_summaries: list[InvestigationSummary] = field(default_factory=list)
     remediation_attempts: list[RemediationAttempt] = field(default_factory=list)
     raw_evidence_refs: list[RawEvidenceRef] = field(default_factory=list)
     pdf_last_sha256: str = ""

@@ -1184,6 +1184,51 @@ ul.plain li {
   margin: 2px 0;
 }
 
+/* Итоговое описание расследования: восемь разделов, каждый со своим вопросом. Поля растут
+   по содержимому в пределах панели — итог пишут абзацами, а не одной строкой. */
+.summary-sections {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 8px;
+}
+
+.summary-section label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.summary-section p {
+  margin: 0 0 4px;
+}
+
+.summary-section textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  resize: vertical;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.45;
+}
+
+.summary-section textarea:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 8px;
+}
+
 /* Решения аналитика рядом с журналом: та же сетка времени и автора, плюс переход и причина.
    Блок читают в паре с журналом, поэтому он отделён линией, а не вынесен в отдельную панель. */
 .decision-records {

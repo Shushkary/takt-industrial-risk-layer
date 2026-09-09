@@ -109,6 +109,36 @@ def _decision_section(case: Case) -> list[str]:
     return lines
 
 
+def _summary_section(case: Case) -> list[str]:
+    """Итоговое описание расследования — то, ради чего паспорт берут в руки.
+
+    В документ идёт утверждённая редакция; неутверждённая печатается с пометкой «черновик».
+    Разница существенна: черновик — рабочая запись аналитика, утверждённая редакция — итог,
+    который он предъявляет.
+    """
+    from takt.application.use_cases.investigation_summary import SECTIONS
+
+    versions = case.investigation_summaries
+    if not versions:
+        return ["Investigation summary: -"]
+    approved = [item for item in versions if item.approved]
+    record = approved[-1] if approved else versions[-1]
+    state = "approved" if record.approved else "DRAFT (not approved)"
+    lines = [
+        f"Investigation summary (version {record.version}, {state})",
+        f"Author: {record.author or '-'} | {record.created_at.isoformat(timespec='seconds')}"
+        f" | confidence: {record.confidence or '-'} | sha256: {record.checksum[:16]}",
+    ]
+    if record.approved:
+        approved_at = record.approved_at.isoformat(timespec="seconds") if record.approved_at else "-"
+        lines.append(f"Approved by: {record.approved_by or '-'} | {approved_at}")
+    for section in SECTIONS:
+        text = (record.sections.get(section.key) or "").strip()
+        lines.append(f"{section.title}:")
+        lines.append(text or "-")
+    return lines
+
+
 def _open_questions(case: Case) -> list[str]:
     """Нерешённые вопросы: чего в деле не хватает на момент выгрузки.
 
@@ -206,6 +236,10 @@ def render_case_pdf(
         "",
         "Normalized event IDs:",
         ", ".join(case.normalized_event_ids) or "-",
+        "",
+        # Итог расследования идёт первым разделом после карточки: получатель читает ответ,
+        # а не собирает его из состава событий и журнала.
+        T("\n".join(_summary_section(case))),
         "",
         # Содержание находок, артефакты с узлами и основания решений: до этой правки паспорт
         # нёс только строку журнала о том, что находка была добавлена.

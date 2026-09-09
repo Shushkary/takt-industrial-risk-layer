@@ -47,6 +47,34 @@ def _zip_write(zf: ZipFile, path: str, data: bytes) -> None:
     zf.writestr(zi, data)
 
 
+def _investigation_summary_payload(case: Case) -> dict[str, object]:
+    versions = [
+        {
+            "version": item.version,
+            "sections": dict(item.sections),
+            "confidence": item.confidence,
+            "author": item.author,
+            "created_at": _utc_iso(item.created_at),
+            "checksum_algorithm": "SHA-256",
+            "checksum": item.checksum,
+            "approved": bool(item.approved),
+            "approved_by": item.approved_by,
+            "approved_at": _utc_iso(item.approved_at) if item.approved_at else None,
+        }
+        for item in case.investigation_summaries
+    ]
+    approved = [item for item in versions if item["approved"]]
+    presented = approved[-1] if approved else (versions[-1] if versions else None)
+    return {
+        "case_id": case.case_id,
+        # Что предъявлено получателю: утверждённая редакция, а при её отсутствии — черновик,
+        # названный черновиком. Молчаливое «последняя редакция» стирало бы эту разницу.
+        "presented_version": presented["version"] if presented else None,
+        "presented_state": ("approved" if approved else "draft") if presented else "absent",
+        "versions": versions,
+    }
+
+
 def _case_payload(case: Case) -> dict[str, object]:
     forensic_verdict = case_forensic_verdict(case)
     return {
@@ -418,6 +446,8 @@ def _manifest_item_classification(path: str) -> tuple[str, str, str]:
         return ("отчет о качестве данных", "модуль compliance ТАКТ", "оценка полноты наблюдения")
     if path == "forensic-readiness-report.json":
         return ("отчет о готовности доказательств", "модуль forensic readiness ТАКТ", "контроль пригодности пакета")
+    if path == "investigation-summary.json":
+        return ("итоговое описание", "аналитик второй линии", "связный итог расследования")
     if path == "case-evidence-checklist.json":
         return ("чек-лист доказательств", "модуль compliance ТАКТ", "перечень недостающих материалов")
     if path == "engagement.json":
@@ -596,6 +626,14 @@ class ZipForensicBundleBuilder:
                         "created_at": _utc_iso(item.created_at) if item.created_at else None,
                     } for item in case.artifacts
                 ]),
+            ),
+            # Итоговое описание расследования: текст аналитика со своим контрольным значением
+            # и признаком утверждения. Все редакции, а не только последняя — правка добавляет
+            # редакцию, и пакет должен показывать, что именно предъявлено и что ему
+            # предшествовало.
+            (
+                "investigation-summary.json", "application/json",
+                _json_bytes(_investigation_summary_payload(case)),
             ),
         ]
         # Содержимое пакета датируется данными дела, а не часами: см. _case_evidence_moment.

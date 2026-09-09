@@ -9,7 +9,7 @@
          файл пришлось бы отдельно заливать при выкладке. CSP допускает img-src data:. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230b0f14'/%3E%3Crect%20x='1.5'%20y='1.5'%20width='61'%20height='61'%20rx='12.5'%20fill='none'%20stroke='%231f2937'%20stroke-width='3'/%3E%3Cpath%20d='M7%2037H19l6.5-17L34%2047l5.5-15H57'%20fill='none'%20stroke='%2338bdf8'%20stroke-width='6.5'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260908-06" />
+    <link rel="stylesheet" href="./styles.css?v=20260909-01" />
   </head>
   <body>
     <header class="top">
@@ -424,6 +424,37 @@
             <p class="muted small">ТАКТ не выполняет эти действия и не отправляет команды. Исполняет внешняя система после подтверждения аналитика.</p>
           </div>
 
+          <!-- Итоговое описание расследования. Раньше связного итога в продукте не было:
+               получатель паспорта видел, что находка добавлена, но не что в ней написано, и
+               собирал ответ заново из журнала и выгрузок. Разделы взяты из практики
+               отчётности об инцидентах (NIST SP 800-61r2, ISO/IEC 27035-2, SANS), оценка
+               отделена от факта и снабжена выраженной уверенностью.
+
+               Модель языка не участвует: заготовка собрана из того, что продукт уже посчитал.
+               Правка добавляет редакцию, а не переписывает прошлую; в доказательный пакет
+               уходит утверждённая. -->
+          <div class="block" id="summaryBlock">
+            <div class="block-head">
+              <h4>Итоговое описание расследования</h4>
+              <div class="head-actions">
+                <span id="summaryState" class="muted small">—</span>
+                <button id="summaryHistoryButton" class="link" type="button" hidden>Прежние редакции</button>
+                <button class="help" type="button" data-help="summary" aria-label="Пояснение: итоговое описание расследования">?</button>
+              </div>
+            </div>
+            <p id="summaryReadonlyNote" class="muted small pad" hidden>Роль работает только на чтение: описание доступно для чтения.</p>
+            <div id="summarySections" class="summary-sections"></div>
+            <div class="summary-actions">
+              <label for="summaryConfidence">Уверенность в оценке</label>
+              <select id="summaryConfidence" aria-label="Уверенность аналитика в оценке"></select>
+              <button id="summarySave" class="action inline" type="button">Сохранить редакцию</button>
+              <button id="summaryApprove" class="action inline" type="button" hidden>Утвердить редакцию</button>
+              <button id="summaryFill" class="link" type="button">Подставить заготовку</button>
+            </div>
+            <p id="summaryHint" class="muted small">Описание не участвует в расчёте риска и вердикта. Правка добавляет редакцию, прежние сохраняются. В доказательный пакет уходит утверждённая редакция; неутверждённая помечается черновиком.</p>
+            <p id="summaryError" class="relink-error small" hidden></p>
+          </div>
+
           <div class="block">
             <div class="block-head">
               <h4>Журнал действий</h4>
@@ -683,7 +714,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260908-06"></script>
-    <script src="./app.min.js?v=20260908-06"></script>
+    <script src="./env.js?v=20260909-01"></script>
+    <script src="./app.min.js?v=20260909-01"></script>
   </body>
 </html>

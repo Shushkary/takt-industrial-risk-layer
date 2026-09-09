@@ -432,3 +432,67 @@ def test_history_past_the_request_limit_is_fetched_from_the_product() -> None:
     # Уже полученное по-прежнему разворачивается без запроса: лишний запрос за тем, что уже
     # пришло, — та же потеря, что и отсутствие продолжения.
     assert "entityEnvironmentShown < entityEnvironment.length" in _APP
+# --------------------------------------------------------------------------- #
+# Итоговое описание расследования
+# --------------------------------------------------------------------------- #
+
+def test_investigation_summary_is_editable_from_the_window() -> None:
+    """Связного итога в окне не было: он собирался вне продукта."""
+    for marker in ('id="summarySections"', 'id="summarySave"', 'id="summaryConfidence"'):
+        assert marker in _INDEX, marker
+    assert "async function saveSummary(" in _APP
+    assert "async function loadSummary(" in _APP
+    assert 'data-help="summary"' in _INDEX
+    assert re.search(r"^  summary: \{$", _APP, re.MULTILINE), "у блока нет пояснения"
+
+
+def test_the_sections_come_from_the_product_not_from_the_window() -> None:
+    """Свой список разделов разошёлся бы с тем, что уходит в доказательный пакет."""
+    render = _APP[_APP.index("function renderInvestigationSummary(") :]
+    render = render[: render.index(SIG)]
+    assert "payload.sections" in render
+    assert "section.prompt" in render
+    # Уверенность — обозначение со словарём продукта, а не список в окне.
+    assert "vocabulary.analytic_confidence" in render
+
+
+def test_the_draft_never_overwrites_what_the_analyst_wrote() -> None:
+    """Заготовка при каждом открытии дела затирала бы текст аналитика."""
+    fill = _APP[_APP.index("function fillSummaryFromTemplate(") :]
+    fill = fill[: fill.index(SIG)]
+    assert "if (!field.value.trim())" in fill
+
+    render = _APP[_APP.index("function renderInvestigationSummary(") :]
+    render = render[: render.index(SIG)]
+    assert "current.sections" in render
+
+
+def test_approval_is_a_separate_action_of_the_second_line() -> None:
+    """В пакет уходит утверждённая редакция: сохранение и утверждение — разные действия."""
+    assert 'id="summaryApprove"' in _INDEX
+    render = _APP[_APP.index("function renderInvestigationSummary(") :]
+    render = render[: render.index(SIG)]
+    assert "permissions().case_relink" in render, "утверждение доступно не только второй линии"
+
+    approve = _APP[_APP.index("async function approveSummary(") :]
+    approve = approve[: approve.index(SIG)]
+    # Утверждается показанный номер, а не «последнее»: состав мог смениться между чтением и нажатием.
+    assert "summaryState.current.version" in approve
+
+
+def test_the_window_states_that_the_summary_does_not_change_the_verdict() -> None:
+    """Граница приходит вместе с блоком, а не подразумевается."""
+    assert "не участвует в расчёте риска и вердикта" in _INDEX
+    assert "Правка добавляет редакцию" in _INDEX
+def test_no_two_top_level_functions_share_a_name() -> None:
+    """Второе объявление молча заменяет первое, и вызовы уходят не туда.
+
+    Ровно это и случилось: имя `renderSummary` уже занимала сводка вкладки «Симуляция», а
+    итоговое описание завело второе такое же. Побеждало последнее объявление — блок
+    описания не рисовался вовсе, и ошибка была видна только в браузере. АРМ живёт одним
+    файлом на пять тысяч строк, поэтому столкновение имён проверяется статически.
+    """
+    names = re.findall(r"^function ([A-Za-z0-9_]+)\(", _APP, re.MULTILINE)
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+
+    assert duplicates == [], f"объявлены дважды: {duplicates}"

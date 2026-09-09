@@ -38,6 +38,7 @@ from takt.application.use_cases.enrichment import LocalDecoderService
 from takt.application.use_cases.export_facade import ExportFacade
 from takt.application.use_cases.forensic_export_facade import ForensicExportFacade
 from takt.application.use_cases.formal_verdict_confirmation import ConfirmFormalVerdictUseCase
+from takt.application.use_cases.investigation_summary import InvestigationSummaryUseCase
 from takt.application.use_cases.manual_correlation import ManualCorrelationUseCase
 from takt.application.use_cases.manual_permit import AttachManualPermitUseCase
 from takt.application.use_cases.remediation import (
@@ -131,6 +132,7 @@ class ApiContext:
     case_actions_facade: CaseActionsFacade | None = None
     manual_correlation_uc: ManualCorrelationUseCase | None = None
     case_findings_uc: CaseFindingsUseCase | None = None
+    investigation_summary_uc: InvestigationSummaryUseCase | None = None
     decoder_service: LocalDecoderService | None = None
 
     # Преобразователи «доменная сущность ↔ схема ответа» и разбор тел запросов. Аргументы и

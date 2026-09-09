@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 from takt.domain.entities.case import (
@@ -13,6 +14,7 @@ from takt.domain.entities.case import (
     Finding,
     FormalVerdictRecord,
     InvariantHitRecord,
+    InvestigationSummary,
     ManualPermit,
     Observation,
     RawEvidenceRef,
@@ -40,6 +42,141 @@ def _deserialize_observations(raw: str) -> list[Observation]:
                 source=str(item.get("source", "")),
                 ingest_trust=float(item.get("ingest_trust", 1.0)),
                 event_ids=list(item.get("event_ids") or []),
+            )
+        )
+    return out
+
+
+CASE_UPSERT_SQL = """
+                INSERT INTO cases (
+                  case_id, status, title, risk_class, risk_score, created_at,
+                  normalized_event_ids, xai_summary, audit_log, burst_fingerprint,
+                  correlation_fingerprints, correlation_evidence, related_cases, artifacts, findings,
+                  primary_asset_id, trigger_operation, operator_id, invariant_hits,
+                  observations, invariant_hit_records, manual_permits, formal_verdict_records, decision_records, remediation_attempts,
+                  dq_score, dq_partial, dq_reasons, risk_vectors, last_event_source, raw_evidence_refs, pdf_last_sha256, pdf_last_generated_at,
+                  investigation_summaries
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(case_id) DO UPDATE SET
+                  status = excluded.status,
+                  title = excluded.title,
+                  risk_class = excluded.risk_class,
+                  risk_score = excluded.risk_score,
+                  created_at = excluded.created_at,
+                  normalized_event_ids = excluded.normalized_event_ids,
+                  xai_summary = excluded.xai_summary,
+                  audit_log = excluded.audit_log,
+                  burst_fingerprint = excluded.burst_fingerprint,
+                  correlation_fingerprints = excluded.correlation_fingerprints,
+                  correlation_evidence = excluded.correlation_evidence,
+                  related_cases = excluded.related_cases,
+                  artifacts = excluded.artifacts,
+                  findings = excluded.findings,
+                  primary_asset_id = excluded.primary_asset_id,
+                  trigger_operation = excluded.trigger_operation,
+                  operator_id = excluded.operator_id,
+                  invariant_hits = excluded.invariant_hits,
+                  observations = excluded.observations,
+                  invariant_hit_records = excluded.invariant_hit_records,
+                  manual_permits = excluded.manual_permits,
+                  formal_verdict_records = excluded.formal_verdict_records,
+                  decision_records = excluded.decision_records,
+                  remediation_attempts = excluded.remediation_attempts,
+                  dq_score = excluded.dq_score,
+                  dq_partial = excluded.dq_partial,
+                  dq_reasons = excluded.dq_reasons,
+                  risk_vectors = excluded.risk_vectors,
+                  last_event_source = excluded.last_event_source,
+                  raw_evidence_refs = excluded.raw_evidence_refs,
+                  pdf_last_sha256 = excluded.pdf_last_sha256,
+                  pdf_last_generated_at = excluded.pdf_last_generated_at,
+                  investigation_summaries = excluded.investigation_summaries
+                """
+"""Запись карточки дела. SQL и порядок значений живут рядом с разбором строки: врозь
+они расходятся при первом же новом поле, и расхождение видно только в бою.
+"""
+
+
+def case_upsert_params(case: Case) -> tuple:
+    """Значения для CASE_UPSERT_SQL в порядке его колонок."""
+    return (
+
+                    case.case_id,
+                    case.status.value,
+                    case.title,
+                    case.risk_class,
+                    case.risk_score,
+                    _dt_to_sql(case.created_at),
+                    json.dumps(case.normalized_event_ids, ensure_ascii=False),
+                    case.xai_summary,
+                    json.dumps(case.audit_log, ensure_ascii=False),
+                    case.burst_fingerprint,
+                    json.dumps(case.correlation_fingerprints, ensure_ascii=False),
+                    json.dumps([asdict(item) for item in case.correlation_evidence], ensure_ascii=False),
+                    json.dumps(case.related_cases, ensure_ascii=False),
+                    json.dumps([asdict(item) for item in case.artifacts], ensure_ascii=False, default=str),
+                    json.dumps([asdict(item) for item in case.findings], ensure_ascii=False, default=str),
+                    case.primary_asset_id,
+                    case.trigger_operation,
+                    case.operator_id,
+                    json.dumps(case.invariant_hits, ensure_ascii=False),
+                    _serialize_observations(case.observations),
+                    _serialize_hit_records(case.invariant_hit_records),
+                    _serialize_manual_permits(case.manual_permits),
+                    _serialize_formal_verdict_records(case.formal_verdict_records),
+                    _serialize_decision_records(case.decision_records),
+                    _serialize_remediation_attempts(case.remediation_attempts),
+                    case.dq_score,
+                    1 if case.dq_partial else 0,
+                    json.dumps(case.dq_reasons, ensure_ascii=False),
+                    json.dumps(case.risk_vectors, ensure_ascii=False),
+                    case.last_event_source,
+                    _serialize_raw_evidence_refs(case.raw_evidence_refs),
+                    case.pdf_last_sha256,
+                    case.pdf_last_generated_at,
+                    _serialize_investigation_summaries(case.investigation_summaries),
+
+    )
+
+
+def _serialize_investigation_summaries(records: list[InvestigationSummary]) -> str:
+    """Редакции итогового описания. Хранятся целиком: они неизменяемы и входят в пакет."""
+    payload = [
+        {
+            "version": item.version,
+            "sections": dict(item.sections),
+            "confidence": item.confidence,
+            "author": item.author,
+            "created_at": _dt_to_sql(item.created_at),
+            "checksum": item.checksum,
+            "approved": bool(item.approved),
+            "approved_by": item.approved_by,
+            "approved_at": _dt_to_sql(item.approved_at) if item.approved_at else "",
+        }
+        for item in records
+    ]
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _deserialize_investigation_summaries(raw: str) -> list[InvestigationSummary]:
+    if not raw or raw == "[]":
+        return []
+    out: list[InvestigationSummary] = []
+    for item in json.loads(raw):
+        if not isinstance(item, dict):
+            continue
+        approved_at = str(item.get("approved_at") or "")
+        out.append(
+            InvestigationSummary(
+                version=int(item.get("version", 0)),
+                sections={str(key): str(value) for key, value in dict(item.get("sections") or {}).items()},
+                confidence=str(item.get("confidence", "")),
+                author=str(item.get("author", "")),
+                created_at=_dt_from_sql(str(item["created_at"])),
+                checksum=str(item.get("checksum", "")),
+                approved=bool(item.get("approved", False)),
+                approved_by=str(item.get("approved_by", "")),
+                approved_at=_dt_from_sql(approved_at) if approved_at else None,
             )
         )
     return out
@@ -428,6 +565,9 @@ def _row_to_case(row: sqlite3.Row) -> Case:
                 origin_case_id=str(item.get("origin_case_id", "")),
             ) for item in findings_raw if isinstance(item, dict)
         ],
+        investigation_summaries=_deserialize_investigation_summaries(
+            _column(row, "investigation_summaries", "[]")
+        ),
         primary_asset_id=str(row["primary_asset_id"] or ""),
         trigger_operation=str(row["trigger_operation"] or ""),
         operator_id=str(_column(row, "operator_id", "")),

@@ -44,6 +44,11 @@ EXPECTED_ROUTE_CONTRACTS = [
     ("POST", "/cases/{case_id}/events/{event_id}/detach", ("Cases",), None),
     ("GET", "/cases/{case_id}/findings", ("Cases",), None),
     ("POST", "/cases/{case_id}/findings", ("Cases",), None),
+    # Итоговое описание расследования: шаблон и редакции читаются одним маршрутом,
+    # утверждение — отдельным, потому что это другое право (вторая линия).
+    ("GET", "/cases/{case_id}/summary", ("Cases",), None),
+    ("POST", "/cases/{case_id}/summary", ("Cases",), None),
+    ("POST", "/cases/{case_id}/summary/approve", ("Cases",), None),
     ("GET", "/cases/{case_id}/export.pdf", ("Export",), None),
     ("GET", "/cases/{case_id}/export/gossopka-official-transport.json", ("Export",), None),
     ("GET", "/cases/{case_id}/export/gossopka-official.json", ("Export",), None),

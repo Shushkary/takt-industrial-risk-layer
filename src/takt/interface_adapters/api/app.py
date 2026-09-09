@@ -40,6 +40,7 @@ from takt.application.use_cases.export_facade import ExportFacade
 from takt.application.use_cases.forensic_export_facade import ForensicExportFacade
 from takt.application.use_cases.formal_verdict_confirmation import ConfirmFormalVerdictUseCase
 from takt.application.use_cases.ingest_facade import IngestAssessmentFacade
+from takt.application.use_cases.investigation_summary import InvestigationSummaryUseCase
 from takt.application.use_cases.manual_correlation import ManualCorrelationUseCase
 from takt.application.use_cases.manual_permit import AttachManualPermitUseCase
 from takt.application.use_cases.remediation import (
@@ -168,6 +169,9 @@ from takt.interface_adapters.api.routers.findings import register_finding_routes
 from takt.interface_adapters.api.routers.forensic import register_forensic_routes
 from takt.interface_adapters.api.routers.ingest import register_ingest_routes
 from takt.interface_adapters.api.routers.integrations import register_integration_routes
+from takt.interface_adapters.api.routers.investigation_summary import (
+    register_investigation_summary_routes,
+)
 from takt.interface_adapters.api.routers.simulation import register_simulation_routes
 from takt.interface_adapters.api.routers.system import register_system_routes
 from takt.interface_adapters.api.routers.workspace import register_workspace_routes
@@ -492,6 +496,7 @@ def create_app() -> FastAPI:
     # проверка недоступна, и операция ведёт себя как прежде.
     manual_correlation_uc = ManualCorrelationUseCase(repo, events=recent_event_store)
     case_findings_uc = CaseFindingsUseCase(repo)
+    investigation_summary_uc = InvestigationSummaryUseCase(repo)
     decoder_service = LocalDecoderService()
     formal_verdict_confirmation_uc = ConfirmFormalVerdictUseCase(repo, default_clock)
     remediation_uc = RecordRemediationAttemptUseCase(repo, default_clock, default_id_provider)
@@ -778,6 +783,7 @@ def create_app() -> FastAPI:
         formal_verdict_record_to_detail=formal_verdict_record_to_detail,
         manual_correlation_uc=manual_correlation_uc,
         case_findings_uc=case_findings_uc,
+        investigation_summary_uc=investigation_summary_uc,
         decoder_service=decoder_service,
         assess_from_plc_demo_body=_assess_from_plc_demo_body,
         assess_event_ingest_body=_assess_event_ingest_body,
@@ -810,6 +816,7 @@ def create_app() -> FastAPI:
     register_case_action_routes(api_ctx)
     register_correlation_routes(api_ctx)
     register_finding_routes(api_ctx)
+    register_investigation_summary_routes(api_ctx)
     register_ingest_routes(api_ctx)
 
     _register_prometheus_if_enabled(app)

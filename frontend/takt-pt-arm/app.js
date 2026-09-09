@@ -260,6 +260,13 @@ const HELP = {
     action: 'Принимая смену, читать основание здесь, а не запрашивать документ или спрашивать коллегу.',
     doc: 'docs/product_boundary.md',
   },
+  summary: {
+    title: 'Итоговое описание расследования',
+    what: 'Связный итог, написанный аналитиком по шаблону: что произошло, как обнаружено, что затронуто, оценка и её уверенность, предпринятое, нерешённые вопросы, извлечённые уроки.',
+    source: 'Состав разделов взят из практики отчётности об инцидентах (NIST SP 800-61r2, ISO/IEC 27035-2, SANS). Заготовка собрана из уже посчитанного продуктом; языковая модель не участвует. Описание не влияет на риск и вердикт.',
+    action: 'Заполнить разделы, выбрать уверенность и сохранить редакцию. Утверждает редакцию вторая линия — в доказательный пакет уходит именно она, неутверждённая помечается черновиком.',
+    doc: 'docs/pt_techlab/analyst_window.md',
+  },
   journal: {
     title: 'Журнал действий по инциденту',
     what: 'Все действия, изменившие состояние инцидента: сборка, находки, подтверждение пакета, смена статуса. В записи — время, автор и суть действия.',
@@ -999,6 +1006,9 @@ function renderCase(workspace) {
   refreshSideColumn();
   renderDecisionRecords(item.decision_records || []);
   renderJournal(item.audit_log || []);
+  // Описание приходит отдельным запросом: вместе с ним приходит и заготовка, которую
+  // карточке дела возвращать незачем.
+  loadSummary();
 }
 
 // --- Реконструкция цепочки и связанные кейсы --------------------------------
@@ -3034,6 +3044,188 @@ async function submitBulkDecision() {
   if (selectedCaseId && targets.includes(selectedCaseId)) await openCase(selectedCaseId);
 }
 
+
+// --- Итоговое описание расследования ---------------------------------------
+//
+// Связного итога — что произошло, чем подтверждено, что осталось неясным — в продукте не было:
+// получатель паспорта видел, что находка добавлена, но не что в ней написано, и собирал ответ
+// заново из журнала и выгрузок.
+//
+// Разделы и подсказки приходят от продукта (`GET /cases/{id}/summary`), а не заводятся здесь:
+// их состав взят из практики отчётности об инцидентах, и свой список в окне разошёлся бы с
+// тем, что уходит в доказательный пакет. Заготовка собрана из уже посчитанного продуктом —
+// модель языка не участвует.
+//
+// Правка добавляет редакцию, а не переписывает прошлую. Утверждение отделено от сохранения:
+// в пакет уходит утверждённая редакция, неутверждённая помечается черновиком.
+
+let summaryState = null;
+
+function renderInvestigationSummary(payload) {
+  summaryState = payload || null;
+  const box = $('#summarySections');
+  box.replaceChildren();
+  if (!payload) {
+    $('#summaryState').textContent = '—';
+    $('#summaryHistoryButton').hidden = true;
+    return;
+  }
+  const current = payload.current;
+  const draft = (payload.template && payload.template.draft) || {};
+  for (const section of payload.sections || []) {
+    const wrap = document.createElement('div');
+    wrap.className = 'summary-section';
+    const id = `summarySection-${section.key}`;
+    const label = document.createElement('label');
+    label.setAttribute('for', id);
+    label.textContent = section.title;
+    const hint = document.createElement('p');
+    hint.className = 'muted small';
+    hint.textContent = section.prompt;
+    const field = document.createElement('textarea');
+    field.id = id;
+    field.dataset.sectionKey = section.key;
+    field.rows = 3;
+    // В поле идёт сохранённая редакция; заготовка подставляется только там, где аналитик
+    // ещё ничего не написал, — иначе она затирала бы его текст при каждом открытии дела.
+    const saved = current && current.sections ? current.sections[section.key] || '' : '';
+    field.value = saved || (current ? '' : draft[section.key] || '');
+    wrap.append(label, hint, field);
+    box.appendChild(wrap);
+  }
+  const confidence = $('#summaryConfidence');
+  confidence.replaceChildren();
+  for (const [code, title] of Object.entries(vocabulary.analytic_confidence || {})) {
+    const option = document.createElement('option');
+    option.value = code;
+    option.textContent = title;
+    confidence.appendChild(option);
+  }
+  confidence.value = (current && current.confidence) || (payload.template && payload.template.confidence) || 'moderate';
+
+  const canWrite = permissions().case_write;
+  const canApprove = permissions().case_relink;
+  $('#summarySave').hidden = !canWrite;
+  $('#summaryFill').hidden = !canWrite;
+  $('#summaryReadonlyNote').hidden = canWrite;
+  for (const field of box.querySelectorAll('textarea')) field.disabled = !canWrite;
+  // Утверждать нечего, пока редакции нет; утверждённую повторно не утверждают.
+  $('#summaryApprove').hidden = !(canApprove && current && !current.approved);
+  $('#summaryApprove').textContent = current ? `Утвердить редакцию ${current.version}` : 'Утвердить редакцию';
+  $('#summaryHistoryButton').hidden = (payload.versions || []).length < 2;
+  $('#summaryState').textContent = summaryStateText(current);
+  $('#summaryError').hidden = true;
+}
+
+function summaryStateText(current) {
+  if (!current) return 'описание не заполнено';
+  const state = current.approved
+    ? `утверждена (${current.approved_by || '—'})`
+    : 'черновик, не утверждена';
+  const confidence = term('analytic_confidence', current.confidence);
+  return `редакция ${current.version} · ${state} · уверенность: ${confidence} · ${stamp(current.created_at)}`;
+}
+
+function summarySectionsFromForm() {
+  const sections = {};
+  for (const field of $('#summarySections').querySelectorAll('textarea')) {
+    sections[field.dataset.sectionKey] = field.value;
+  }
+  return sections;
+}
+
+function showSummaryError(message) {
+  $('#summaryError').textContent = message;
+  $('#summaryError').hidden = false;
+}
+
+async function loadSummary() {
+  if (!selectedCaseId) return;
+  try {
+    renderInvestigationSummary(await api(`/cases/${encodeURIComponent(selectedCaseId)}/summary`));
+  } catch (error) {
+    renderInvestigationSummary(null);
+    showSummaryError(`Итоговое описание не загружено: ${error.message}`);
+  }
+}
+
+async function saveSummary() {
+  if (!selectedCaseId) return;
+  const button = $('#summarySave');
+  button.disabled = true;
+  try {
+    await api(`/cases/${encodeURIComponent(selectedCaseId)}/summary`, {
+      method: 'POST',
+      body: JSON.stringify({ sections: summarySectionsFromForm(), confidence: $('#summaryConfidence').value }),
+    });
+    toast('Редакция итогового описания сохранена');
+    await loadSummary();
+    await openCase(selectedCaseId);
+  } catch (error) {
+    showSummaryError(summaryErrorText(error));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function summaryErrorText(error) {
+  if (error.status === 403) return 'Недостаточно прав: описание пишет аналитик, утверждает вторая линия';
+  if (error.status === 400 && String(error.message).includes('empty')) {
+    return 'Описание пустое: заполните хотя бы один раздел';
+  }
+  return `Описание не сохранено: ${error.message}`;
+}
+
+async function approveSummary() {
+  if (!selectedCaseId || !summaryState || !summaryState.current) return;
+  const button = $('#summaryApprove');
+  button.disabled = true;
+  try {
+    // Утверждается номер редакции, показанной на экране: между чтением и нажатием состав мог
+    // смениться, и утвердить вслепую чужую правку нельзя.
+    await api(`/cases/${encodeURIComponent(selectedCaseId)}/summary/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ version: summaryState.current.version }),
+    });
+    toast('Редакция утверждена: она уходит в доказательный пакет');
+    await loadSummary();
+    await openCase(selectedCaseId);
+  } catch (error) {
+    showSummaryError(summaryErrorText(error));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function fillSummaryFromTemplate() {
+  if (!summaryState || !summaryState.template) return;
+  const draft = summaryState.template.draft || {};
+  for (const field of $('#summarySections').querySelectorAll('textarea')) {
+    // Заготовка не затирает написанное: она подставляется только в пустые разделы.
+    if (!field.value.trim()) field.value = draft[field.dataset.sectionKey] || '';
+  }
+}
+
+function openSummaryHistory() {
+  const versions = (summaryState && summaryState.versions) || [];
+  openModal('Редакции итогового описания', (body) => {
+    const list = document.createElement('ul');
+    list.className = 'plain small';
+    for (const item of [...versions].reverse()) {
+      const row = document.createElement('li');
+      row.className = 'journal-item';
+      const state = item.approved ? `утверждена (${item.approved_by || '—'})` : 'черновик';
+      row.innerHTML = `<span class="journal-time">${escapeHtml(stamp(item.created_at))}</span><span class="journal-actor">${escapeHtml(item.author || '—')}</span><span>редакция ${escapeHtml(String(item.version))} · ${escapeHtml(state)} · ${escapeHtml(term('analytic_confidence', item.confidence))}</span>`;
+      list.appendChild(row);
+    }
+    body.appendChild(list);
+    const note = document.createElement('p');
+    note.className = 'muted small';
+    note.textContent = 'Редакции неизменяемы: правка добавляет новую. В доказательный пакет уходит утверждённая.';
+    body.appendChild(note);
+  });
+}
+
 // --- Клавиатура ------------------------------------------------------------
 //
 // Разбор очереди — самый частый жест за смену, и он весь был мышью: стрелки не двигали
@@ -3786,6 +3978,10 @@ $('#addFinding').addEventListener('click', addFinding);
 $('#briefButton').addEventListener('click', openDecisionBrief);
 $('#reportButton').addEventListener('click', openCaseReport);
 $('#skipToWork').addEventListener('click', focusInvestigation);
+$('#summarySave').addEventListener('click', saveSummary);
+$('#summaryApprove').addEventListener('click', approveSummary);
+$('#summaryFill').addEventListener('click', fillSummaryFromTemplate);
+$('#summaryHistoryButton').addEventListener('click', openSummaryHistory);
 $('#attachMore').addEventListener('click', async () => {
   const button = $('#attachMore');
   button.disabled = true;
