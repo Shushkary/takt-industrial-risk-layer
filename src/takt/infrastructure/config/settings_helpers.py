@@ -102,6 +102,16 @@ def graph_edges_from_weights(
     return [GraphEdge(src="eng-workstation", dst=demo_dst, kind="ssh")]
 
 
+SUPPORTED_STORAGE_BACKENDS: tuple[str, ...] = ("memory", "sqlite")
+"""Хранилища, для которых в коде есть адаптер.
+
+Единственное место, где этот список объявлен. Внешние материалы обещали
+«SQLite/PostgreSQL-совместимый слой», хотя адаптера PostgreSQL нет ни одного: заявление
+о возможности, которой нет, дороже красивой строки. Сверку держит
+`tests/test_docs_storage_claim.py`.
+"""
+
+
 def apply_storage_env_overrides(weights: dict[str, Any]) -> None:
     """
     Переменная **TAKT_STORAGE**: `memory` | `sqlite` — переопределяет `storage.backend` из YAML
@@ -110,9 +120,10 @@ def apply_storage_env_overrides(weights: dict[str, Any]) -> None:
     mode = os.environ.get("TAKT_STORAGE", "").strip().lower()
     if not mode:
         return
-    if mode not in ("memory", "sqlite"):
+    if mode not in SUPPORTED_STORAGE_BACKENDS:
         raw = os.environ.get("TAKT_STORAGE", "")
-        raise ValueError(f"TAKT_STORAGE must be 'memory' or 'sqlite', not {raw!r}")
+        allowed = " or ".join(repr(name) for name in SUPPORTED_STORAGE_BACKENDS)
+        raise ValueError(f"TAKT_STORAGE must be {allowed}, not {raw!r}")
     current = weights.get("storage")
     if isinstance(current, dict):
         weights["storage"] = {**current, "backend": mode}
