@@ -131,7 +131,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260909-05"}, versions
+    assert versions >= {"20260909-06"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -509,6 +509,27 @@ def test_graph_states_when_there_are_no_transitions() -> None:
     assert "renderGraphNote(" in block
     note = app[app.index("function renderGraphNote(") :]
     assert "#graphNote" in note[:600]
+
+
+def test_the_graph_shows_the_kind_of_link_without_writing_on_the_canvas() -> None:
+    """Подпись на середине перехода ложилась поверх имени чужой вершины.
+
+    Середина длинного перехода приходится на вершину между его концами: у графа из
+    одиннадцати сущностей подписи «обращается к» и «действует на» накрывали имена узлов и
+    учётных записей. Вид связи показывает начертание линии, названия видов — условные
+    обозначения под графом, а точная пара сущностей остаётся во всплывающей подсказке.
+    """
+    app = _app()
+    styles = _STYLES.read_text(encoding="utf-8")
+    start = app.index("function renderAttackGraph(")
+    block = app[start : app.index(chr(10) + "}" + chr(10), start)]
+
+    assert "edge-label" not in block
+    assert "edge-label" not in styles
+    assert "EDGE_KINDS[edge.label]" in block
+    assert "renderGraphLegend(" in block
+    assert 'id="graphLegend"' in _index()
+    assert "#attackGraph .edge-line.acts" in styles
 
 
 def test_glossary_is_reachable_from_the_header() -> None:

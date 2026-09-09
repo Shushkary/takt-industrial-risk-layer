@@ -1697,10 +1697,33 @@ ol.steps {
   opacity: 1;
 }
 
-#attackGraph .edge-label {
-  fill: var(--muted);
-  font-size: 10px;
-  text-anchor: middle;
+/* Вид связи — начертанием линии: сплошная «обращается к», пунктирная «действует на».
+   Подписи на полотне не осталось, поэтому и накладываться нечему. */
+#attackGraph .edge-line.acts {
+  stroke-dasharray: 5 4;
+}
+
+.graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 8px 0 0;
+}
+
+.graph-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.graph-legend-line {
+  width: 24px;
+  height: 0;
+  border-top: 2px solid var(--line);
+}
+
+.graph-legend-line.acts {
+  border-top-style: dashed;
 }
 
 #attackGraph .graph-node {

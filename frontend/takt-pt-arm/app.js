@@ -4565,12 +4565,36 @@ function renderGraphNote(nodes, edges) {
       : `${facts} События инцидента не связывают сущности между собой: каждое касается своей. ${player}`;
 }
 
+// Виды связей графа: имя из данных -> класс начертания линии. Порядок задаёт порядок
+// строк условных обозначений.
+const EDGE_KINDS = { 'обращается к': 'reaches', 'действует на': 'acts' };
+
+// Условные обозначения показывают только те виды связей, которые есть на этом графе: строка
+// про несуществующую линию заставляет искать её глазами.
+function renderGraphLegend(edges) {
+  const box = $('#graphLegend');
+  if (!box) return;
+  const present = new Set(edges.map((edge) => edge.label));
+  box.replaceChildren();
+  for (const [label, kind] of Object.entries(EDGE_KINDS)) {
+    if (!present.has(label)) continue;
+    const item = document.createElement('span');
+    item.className = 'graph-legend-item';
+    const swatch = document.createElement('span');
+    swatch.className = `graph-legend-line ${kind}`;
+    item.append(swatch, document.createTextNode(label));
+    box.appendChild(item);
+  }
+  box.hidden = !box.childElementCount;
+}
+
 function renderAttackGraph() {
   const svg = $('#attackGraph');
   svg.replaceChildren();
   simGraph = chainGraph();
   const { nodes, edges } = simGraph;
   renderGraphNote(nodes.length, edges);
+  renderGraphLegend(edges);
   // Дело из одной сущности связывать нечем: граф вырождается в точку и читается как
   // незагрузившийся блок. Ход цепочки в таком деле показывает лента, а граф скрывается
   // целиком — вместе с заголовком, чтобы на экране не оставалось пустого места.
@@ -4604,16 +4628,15 @@ function renderAttackGraph() {
     line.setAttribute('y1', from.y);
     line.setAttribute('x2', to.x);
     line.setAttribute('y2', to.y);
-    line.setAttribute('class', 'edge-line');
+    line.setAttribute('class', `edge-line ${EDGE_KINDS[edge.label] || 'reaches'}`);
+    // Пара сущностей и вид связи остаются доступны наведением: подпись убрана с полотна,
+    // а не из продукта.
+    const hint = document.createElementNS(ns, 'title');
+    hint.textContent = `${edge.from} ${edge.label} ${edge.to}`;
+    line.appendChild(hint);
     edge.element = line;
     edge.orders = new Set(edge.steps);
     svg.appendChild(line);
-    const label = document.createElementNS(ns, 'text');
-    label.setAttribute('x', (from.x + to.x) / 2);
-    label.setAttribute('y', (from.y + to.y) / 2 - 6);
-    label.setAttribute('class', 'edge-label');
-    label.textContent = edge.label;
-    svg.appendChild(label);
   }
 
   for (const node of nodes) {
