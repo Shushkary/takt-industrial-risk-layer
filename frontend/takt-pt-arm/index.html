@@ -15,7 +15,7 @@
          на вкладке в 16 пикселей внешнее кольцо бледнеет рядом с внутренним. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230b0f14'/%3E%3Crect%20x='1.5'%20y='1.5'%20width='61'%20height='61'%20rx='12.5'%20fill='none'%20stroke='%231f2937'%20stroke-width='3'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='25.23'%20fill='none'%20stroke='%2338bdf8'%20stroke-width='2.55'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='19.28'%20fill='none'%20stroke='%2338bdf8'%20stroke-width='4.13'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='13.01'%20fill='%2338bdf8'/%3E%3C/svg%3E" />
     <title>ТАКТ — расследование инцидента</title>
-    <link rel="stylesheet" href="./styles.css?v=20260909-08" />
+    <link rel="stylesheet" href="./styles.css?v=20260909-09" />
   </head>
   <body>
     <header class="top">
@@ -379,6 +379,14 @@
               <h4>Граф атаки</h4>
               <button class="help" type="button" data-help="case_attack_graph" aria-label="Пояснение: граф атаки">?</button>
             </div>
+            <div class="player">
+              <button id="caseGraphPlay" class="action inline" type="button">Воспроизвести</button>
+              <button id="caseGraphStepBack" class="action inline" type="button">← Шаг</button>
+              <button id="caseGraphStepForward" class="action inline" type="button">Шаг →</button>
+              <button id="caseGraphReset" class="action inline" type="button">Сброс</button>
+              <span id="caseGraphPosition" class="muted small">0 / 0</span>
+            </div>
+            <p id="caseGraphStep" class="muted small">воспроизведение не начато</p>
             <div class="graph-wrap">
               <svg id="caseAttackGraph" class="entity-graph static" role="img" aria-label="Граф сущностей инцидента"></svg>
             </div>
@@ -737,7 +745,7 @@
 
     <!-- Параметры контура задаются до сборки: она читает window.TAKT_DOCS_BASE при первом
          же разборе реестра пояснений. -->
-    <script src="./env.js?v=20260909-08"></script>
-    <script src="./app.min.js?v=20260909-08"></script>
+    <script src="./env.js?v=20260909-09"></script>
+    <script src="./app.min.js?v=20260909-09"></script>
   </body>
 </html>

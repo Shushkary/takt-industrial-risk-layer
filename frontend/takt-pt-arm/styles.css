@@ -1699,15 +1699,39 @@ ol.steps {
   cursor: pointer;
 }
 
-/* Заливка вершины. Без неё SVG рисует круг чёрным — на тёмной панели это дыра, а не
-   сущность. На «Симуляции» заливку ставит плеер по фазе текущего шага; в карточке дела
-   плеера нет, и ставить её некому.
+/* Линии в карточке дела толще, чем на «Симуляции»: там линия — фон для плеера, здесь она
+   сама по себе несёт состав инцидента. */
+.entity-graph.static .edge-line {
+  stroke-width: 2.5;
+}
 
-   Цвет намеренно один на все вершины. Цветом в этом окне говорит фаза атаки, и второй
-   цветовой язык — по виду сущности — читался бы как фаза. Вид сущности подписан под
-   вершиной словами. */
-.entity-graph.static .graph-node circle {
-  fill: var(--muted);
+/* Воспроизведение: пока оно не начато, граф показан целиком — приглушать нечего. С первого
+   шага несыгранное уходит в фон, сыгранное остаётся, текущее событие берёт акцент. */
+.entity-graph.static.playing .graph-node {
+  opacity: 0.3;
+}
+
+.entity-graph.static.playing .graph-node.played {
+  opacity: 1;
+}
+
+.entity-graph.static.playing .graph-node.current circle {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.entity-graph.static.playing .edge-line {
+  opacity: 0.15;
+}
+
+.entity-graph.static.playing .edge-line.played {
+  opacity: 0.9;
+}
+
+.entity-graph.static.playing .edge-line.current {
+  stroke: var(--accent);
+  stroke-width: 4;
+  opacity: 1;
 }
 
 /* Наведение показывает, что вершина ведёт к карточке сущности. У адреса карточки нет,
@@ -1767,6 +1791,14 @@ ol.steps {
   height: 2px;
   flex: 0 0 auto;
   overflow: visible;
+}
+
+/* Образец вида сущности — кружок: на полотне это кружок, а не отрезок. */
+.graph-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
 }
 
 .graph-legend-line line {

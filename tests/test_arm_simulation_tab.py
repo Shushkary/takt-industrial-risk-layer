@@ -137,7 +137,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260909-08"}, versions
+    assert versions >= {"20260909-09"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -557,19 +557,53 @@ def test_the_case_card_draws_the_same_graph_as_the_simulation() -> None:
     assert "renderCaseGraph(workspace.graph" in app
 
 
-def test_case_graph_vertices_are_filled() -> None:
-    """Вершине графа в карточке дела нужна заливка.
+def test_case_graph_vertices_are_coloured_by_entity_kind() -> None:
+    """Вершина графа в карточке дела окрашена по виду сущности.
 
     По умолчанию SVG заливает фигуру чёрным: на тёмной панели вершина выглядела дырой.
-    На «Симуляции» цвет ставит плеер по фазе шага, в карточке дела плеера нет — и цвет
-    приходится задать стилем, иначе он остаётся чёрным.
+    Цвет задаётся атрибутом, а не таблицей стилей: правило стиля перебило бы цвет фазы,
+    который на «Симуляции» ставит плеер тем же атрибутом.
     """
-    styles = _STYLES.read_text(encoding="utf-8")
-    start = styles.index(".entity-graph.static .graph-node circle {")
-    rule = styles[start : styles.index("}", start)]
+    app = _app()
 
-    assert "fill:" in rule
-    assert "#000" not in rule and "black" not in rule
+    palette = _function(app, "renderCaseGraph")
+    assert "ENTITY_COLORS[node.type]" in palette
+    assert "if (node.fill) circle.setAttribute('fill', node.fill);" in _function(app, "drawEntityGraph")
+    assert ".entity-graph.static .graph-node circle" not in _STYLES.read_text(encoding="utf-8")
+
+    # Каждый вид сущности словаря продукта получает цвет: незнакомый вид красился бы
+    # запасным серым и молча сливался с соседями.
+    from takt.domain.vocabulary import ENTITY_TYPE_RU
+
+    start = app.index("const ENTITY_COLORS = {")
+    declared = app[start : app.index("};", start)]
+    for code in ENTITY_TYPE_RU:
+        assert f"{code}:" in declared, f"вид сущности {code} без цвета"
+
+
+def test_case_graph_plays_the_case_events_in_time() -> None:
+    """Воспроизведение в карточке дела идёт по событиям дела, а не по своей выдумке.
+
+    Шаг — событие рабочего стола: какие сущности оно затронуло и какие связи при этом
+    сыграли. Правила связывания живут на сервере, и повторять их в браузере значило бы
+    держать вторую копию, которая разойдётся с первой.
+    """
+    app = _app()
+    index = _index()
+
+    for element in ("caseGraphPlay", "caseGraphStepBack", "caseGraphStepForward", "caseGraphReset",
+                    "caseGraphPosition", "caseGraphStep"):
+        assert f'id="{element}"' in index, element
+
+    steps = _function(app, "buildCaseGraphSteps")
+    assert "event.observed_at" in steps
+    assert "touched.has(edge.from) && touched.has(edge.to)" in steps
+    # События приходят тем же ответом рабочего стола, отдельного запроса нет.
+    assert "renderCaseGraph(workspace.graph" in app and "workspace.events || []" in app
+    # Плеер вкладки «Симуляция» и плеер дела не делят состояние: вкладки открываются порознь.
+    assert "caseGraphCursor" in _function(app, "paintCaseGraph")
+    assert "simCursor" not in _function(app, "paintCaseGraph")
+    assert "$('#caseGraphPlay').addEventListener('click', toggleCaseGraphPlayback);" in app
 
 
 def test_case_graph_knows_every_link_kind_of_the_product() -> None:

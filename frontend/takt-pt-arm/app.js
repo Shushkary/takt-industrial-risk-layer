@@ -217,7 +217,7 @@ const HELP = {
     title: 'Граф атаки',
     what: 'Сущности инцидента и связи между ними одной картинкой: учётная запись, узел, процесс, адрес. Вид связи показывает начертание линии, названия видов — под графом; наведение на линию показывает пару сущностей целиком.',
     source: 'Строится по тем же событиям дела, что и список «Связи сущностей» под ним: картинка показывает форму, список читается точно. Связи вне дела в графе не видны — продукт рисует только состав этого инцидента.',
-    action: 'Искать переходы между узлами и смену учётной записи — по ним видно перемещение внутри сети. Клик по узлу, учётной записи или процессу открывает карточку сущности; у адреса карточки нет.',
+    action: 'Искать переходы между узлами и смену учётной записи — по ним видно перемещение внутри сети. «Воспроизвести» проходит события дела по времени: видно, в каком порядке сущности вступали в дело и какая связь сыграла на текущем событии. Клик по узлу, учётной записи или процессу открывает карточку сущности; у адреса карточки нет.',
     doc: 'docs/pt_techlab/correlation_quality.md',
   },
   graph: {
@@ -1003,7 +1003,7 @@ function renderCase(workspace) {
   renderInvariants(item.invariant_details || [], item.invariant_hits || []);
   renderChain(workspace.events || [], item.correlation_evidence || []);
   renderGraph(workspace.graph || { nodes: [], edges: [] });
-  renderCaseGraph(workspace.graph || { nodes: [], edges: [] });
+  renderCaseGraph(workspace.graph || { nodes: [], edges: [] }, workspace.events || []);
   renderReconstruction(workspace.attack_chain || {});
   renderRelatedCases(item.related_cases || []);
   lastCaseArtifacts = workspace.artifacts || [];
@@ -2200,13 +2200,36 @@ async function mergeSelectedCase() {
   }
 }
 
-// Граф связей в карточке дела: тот же рисунок, что на «Симуляции», но без плеера. Список
-// «Связи сущностей» под ним — тот же состав строками: картинка показывает форму, список
-// читается точно. Данные берутся из рабочего стола дела, лишнего запроса нет.
-function renderCaseGraph(graph) {
+// Цвет вершины по виду сущности. Палитра намеренно светлее и мягче цветов фаз атаки на
+// «Симуляции»: в одном окне два цветовых языка, и спутать их нельзя. Здесь цвет говорит
+// «что это», там — «на каком этапе атаки». Источник и назначение — один вид: на картинке
+// это одна машина.
+const ENTITY_COLORS = {
+  host: '#7dd3fc',
+  user: '#fcd34d',
+  process: '#86efac',
+  address: '#c4b5fd',
+  destination: '#c4b5fd',
+};
+const ENTITY_COLOR_FALLBACK = '#94a3b8';
+
+// Состояние воспроизведения в карточке дела. Плеер «Симуляции» живёт своей жизнью: у него
+// свои шаги (размеченная цепочка) и свой курсор, и делить их нельзя — вкладки открываются
+// независимо.
+let caseGraphNodes = [];
+let caseGraphEdges = [];
+let caseGraphSteps = [];
+let caseGraphCursor = 0;
+let caseGraphTimer = null;
+
+// Граф связей в карточке дела: тот же рисунок, что на «Симуляции». Список «Связи сущностей»
+// под ним — тот же состав строками: картинка показывает форму, список читается точно.
+// Данные берутся из рабочего стола дела, лишнего запроса нет.
+function renderCaseGraph(graph, events = []) {
   const svg = $('#caseAttackGraph');
   const block = $('#caseGraphBlock');
   if (!svg || !block) return;
+  stopCaseGraphPlayback();
   const rawNodes = graph.nodes || [];
   const rawEdges = graph.edges || [];
 
@@ -2230,14 +2253,25 @@ function renderCaseGraph(graph) {
     }
   }
 
+  // Карточка процесса открывается по ключу «узел + PID», а не по имени из источника: один
+  // PID на двух узлах — два разных процесса. Ключ есть в событиях дела, показывается
+  // по-прежнему имя.
+  const processKeys = new Map();
+  for (const event of events) {
+    const id = event.entities && event.entities.process_id;
+    if (id && event.process_key) processKeys.set(id, event.process_key);
+  }
+
   const nodes = [...byValue.values()].map((node) => ({
     key: node.value,
     label: node.value,
+    type: node.type,
+    fill: ENTITY_COLORS[node.type] || ENTITY_COLOR_FALLBACK,
     meta: `${term('entity_type', node.type)} · связей: ${links.get(node.value) || 0}`,
     // Карточка есть только у узла, учётной записи и процесса — у адреса её нет, и вершина
     // адреса остаётся рисунком, а не ссылкой, которая молча ничего не делает.
     onClick: ['host', 'user', 'process'].includes(node.type)
-      ? () => openEntity(node.type, node.value)
+      ? () => openEntity(node.type, processKeys.get(node.value) || node.value)
       : null,
   }));
   const seen = new Set();
@@ -2248,6 +2282,7 @@ function renderCaseGraph(graph) {
     seen.add(key);
     const label = term('graph_edge_kind', edge.type);
     edges.push({
+      id: key,
       from: edge.source,
       to: edge.target,
       kind: CASE_EDGE_KINDS[edge.type] || 'reaches',
@@ -2258,23 +2293,159 @@ function renderCaseGraph(graph) {
   // Дело из одной сущности связывать нечем: граф вырождается в точку и читается как
   // незагрузившийся блок. Состав такого дела показывает список связей и цепочка событий.
   block.hidden = nodes.length < 2;
-  renderCaseGraphNote(nodes.length, edges.length);
-  renderGraphLegend(
-    $('#caseGraphLegend'),
-    presentEdgeKinds(rawEdges.map((edge) => edge.type), CASE_EDGE_KINDS, (code) => term('graph_edge_kind', code)),
-  );
+  caseGraphSteps = buildCaseGraphSteps(events, nodes, edges);
+  caseGraphNodes = nodes;
+  caseGraphEdges = edges;
+  caseGraphCursor = 0;
+  renderCaseGraphNote(nodes.length, edges.length, caseGraphSteps.length);
+  renderCaseGraphLegend(byValue, rawEdges);
   drawEntityGraph(svg, nodes, edges);
+  paintCaseGraph();
+}
+
+// Последовательность атаки для воспроизведения — события дела по времени, как их отдал
+// продукт. Шаг — событие: какие сущности оно затронуло и какие связи при этом сыграли.
+// Связь считается сыгранной, если оба её конца — сущности этого события; правила связывания
+// живут на сервере, и повторять их здесь значило бы держать вторую копию, которая разойдётся.
+function buildCaseGraphSteps(events, nodes, edges) {
+  const known = new Set(nodes.map((node) => node.key));
+  const steps = [];
+  for (const node of nodes) node.firstStep = 0;
+  for (const edge of edges) edge.firstStep = 0;
+
+  for (const event of events) {
+    const entities = event.entities || {};
+    const values = [
+      entities.host_id,
+      entities.user_id,
+      entities.process_id,
+      entities.src_address,
+      entities.dst_address,
+    ].filter((value) => value && known.has(value));
+    if (!values.length) continue;
+
+    const touched = new Set(values);
+    const played = new Set(
+      edges.filter((edge) => touched.has(edge.from) && touched.has(edge.to)).map((edge) => edge.id),
+    );
+    steps.push({
+      at: event.observed_at,
+      operation: event.operation,
+      source: event.source,
+      nodes: touched,
+      edges: played,
+    });
+    const order = steps.length;
+    for (const node of nodes) {
+      if (!node.firstStep && touched.has(node.key)) node.firstStep = order;
+    }
+    for (const edge of edges) {
+      if (!edge.firstStep && played.has(edge.id)) edge.firstStep = order;
+    }
+  }
+  return steps;
+}
+
+// Что уже сыграно, что играет сейчас. До первого шага граф показан целиком: приглушать
+// нечего, пока воспроизведение не начато, — иначе состав дела читался бы как недогруженный.
+function paintCaseGraph() {
+  const svg = $('#caseAttackGraph');
+  if (!svg) return;
+  const cursor = caseGraphCursor;
+  const step = cursor > 0 ? caseGraphSteps[cursor - 1] : null;
+  svg.classList.toggle('playing', cursor > 0);
+
+  for (const node of caseGraphNodes) {
+    if (!node.element) continue;
+    node.element.classList.toggle('played', Boolean(node.firstStep) && node.firstStep <= cursor);
+    node.element.classList.toggle('current', Boolean(step && step.nodes.has(node.key)));
+  }
+  for (const edge of caseGraphEdges) {
+    if (!edge.element) continue;
+    edge.element.classList.toggle('played', Boolean(edge.firstStep) && edge.firstStep <= cursor);
+    edge.element.classList.toggle('current', Boolean(step && step.edges.has(edge.id)));
+  }
+
+  const position = $('#caseGraphPosition');
+  if (position) position.textContent = `${cursor} / ${caseGraphSteps.length}`;
+  const line = $('#caseGraphStep');
+  if (line) {
+    line.textContent = step
+      ? `${utc(step.at)} ${zoneLabel()} · ${step.operation} · ${[...step.nodes].join(', ')}`
+      : 'воспроизведение не начато';
+  }
+}
+
+function setCaseGraphCursor(value) {
+  caseGraphCursor = Math.max(0, Math.min(caseGraphSteps.length, value));
+  paintCaseGraph();
+}
+
+function stopCaseGraphPlayback() {
+  clearInterval(caseGraphTimer);
+  caseGraphTimer = null;
+  const button = $('#caseGraphPlay');
+  if (button) button.textContent = 'Воспроизвести';
+}
+
+function toggleCaseGraphPlayback() {
+  if (!caseGraphSteps.length) return;
+  if (caseGraphTimer) {
+    stopCaseGraphPlayback();
+    return;
+  }
+  // Повторное нажатие после конца начинает сначала, а не молчит.
+  if (caseGraphCursor >= caseGraphSteps.length) setCaseGraphCursor(0);
+  $('#caseGraphPlay').textContent = 'Пауза';
+  caseGraphTimer = setInterval(() => {
+    if (caseGraphCursor >= caseGraphSteps.length) {
+      stopCaseGraphPlayback();
+      return;
+    }
+    setCaseGraphCursor(caseGraphCursor + 1);
+  }, PLAY_INTERVAL_MS);
+}
+
+// Условные обозначения: сначала виды сущностей цветом, затем виды связей начертанием.
+// Показываются только те, что на этом графе есть, — строка про несуществующую вершину
+// заставляет искать её глазами.
+function renderCaseGraphLegend(byValue, rawEdges) {
+  const box = $('#caseGraphLegend');
+  if (!box) return;
+  const kinds = new Set([...byValue.values()].map((node) => node.type));
+  box.replaceChildren();
+  for (const [type, color] of Object.entries(ENTITY_COLORS)) {
+    if (!kinds.has(type)) continue;
+    // Адрес источника и адрес назначения — один вид на картинке и один цвет: две строки
+    // об одном и том же читались бы как два разных вида сущности.
+    if (type === 'destination' && kinds.has('address')) continue;
+    const item = document.createElement('span');
+    item.className = 'graph-legend-item';
+    const dot = document.createElement('i');
+    dot.className = 'graph-legend-dot';
+    dot.style.background = color;
+    item.append(dot, document.createTextNode(term('entity_type', type)));
+    box.appendChild(item);
+  }
+  const lines = presentEdgeKinds(
+    rawEdges.map((edge) => edge.type),
+    CASE_EDGE_KINDS,
+    (code) => term('graph_edge_kind', code),
+  );
+  appendGraphLegendLines(box, lines);
+  box.hidden = !box.childElementCount;
 }
 
 // Что именно нарисовано и по каким данным. Без этой строки граф читается как карта сети,
 // хотя он показывает только события этого инцидента.
-function renderCaseGraphNote(nodes, edges) {
+function renderCaseGraphNote(nodes, edges, steps) {
   const box = $('#caseGraphNote');
   if (!box) return;
   box.textContent =
     `Сущностей в инциденте: ${nodes}, связей между ними: ${edges}. ` +
     'Граф построен только по событиям этого дела: связи вне дела в нём не видны. ' +
-    'Клик по узлу, учётной записи или процессу открывает карточку сущности.';
+    `Воспроизведение проходит ${steps} событий дела по времени и показывает, в каком порядке ` +
+    'сущности вступали в дело. Клик по узлу, учётной записи или процессу открывает карточку сущности.';
 }
 
 function renderGraph(graph) {
@@ -4098,6 +4269,19 @@ $('#skipToWork').addEventListener('click', focusInvestigation);
 $('#summarySave').addEventListener('click', saveSummary);
 $('#summaryApprove').addEventListener('click', approveSummary);
 $('#summaryFill').addEventListener('click', fillSummaryFromTemplate);
+$('#caseGraphPlay').addEventListener('click', toggleCaseGraphPlayback);
+$('#caseGraphStepBack').addEventListener('click', () => {
+  stopCaseGraphPlayback();
+  setCaseGraphCursor(caseGraphCursor - 1);
+});
+$('#caseGraphStepForward').addEventListener('click', () => {
+  stopCaseGraphPlayback();
+  setCaseGraphCursor(caseGraphCursor + 1);
+});
+$('#caseGraphReset').addEventListener('click', () => {
+  stopCaseGraphPlayback();
+  setCaseGraphCursor(0);
+});
 $('#summaryHistoryButton').addEventListener('click', openSummaryHistory);
 $('#attachMore').addEventListener('click', async () => {
   const button = $('#attachMore');
@@ -4661,8 +4845,14 @@ const CASE_EDGE_KINDS = { network: 'reaches', runs: 'acts', initiated: 'starts',
 // что и сама линия, — иначе легенда обещает одно, а на полотне видно другое.
 function renderGraphLegend(box, entries) {
   if (!box) return;
-  const ns = 'http://www.w3.org/2000/svg';
   box.replaceChildren();
+  appendGraphLegendLines(box, entries);
+  box.hidden = !box.childElementCount;
+}
+
+// Строки видов связей: образец рисуется тем же начертанием, что и линия на полотне.
+function appendGraphLegendLines(box, entries) {
+  const ns = 'http://www.w3.org/2000/svg';
   for (const [label, kind] of entries) {
     const item = document.createElement('span');
     item.className = 'graph-legend-item';
@@ -4680,7 +4870,6 @@ function renderGraphLegend(box, entries) {
     item.append(swatch, document.createTextNode(label));
     box.appendChild(item);
   }
-  box.hidden = !box.childElementCount;
 }
 
 // Виды связей, которые на этом графе действительно есть, в порядке объявления набора.
@@ -4746,6 +4935,9 @@ function drawEntityGraph(svg, nodes, edges) {
     circle.setAttribute('cx', point.x);
     circle.setAttribute('cy', point.y);
     circle.setAttribute('r', 14);
+    // Заливка атрибутом, а не стилем: на «Симуляции» её меняет плеер по фазе шага, и
+    // правило в таблице стилей перебило бы этот цвет.
+    if (node.fill) circle.setAttribute('fill', node.fill);
     group.appendChild(circle);
     const text = document.createElementNS(ns, 'text');
     text.setAttribute('x', point.x);
