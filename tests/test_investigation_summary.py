@@ -20,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from takt.application.use_cases.investigation_summary import (
+    DRAFT_MARKER,
     MAX_SECTION_LENGTH,
     SECTION_KEYS,
     InvestigationSummaryUseCase,
@@ -106,13 +107,38 @@ def test_the_template_is_prefilled_from_what_the_product_already_knows() -> None
     assert "INV-OT-01" in template.draft["how_detected"]
 
 
-def test_the_template_does_not_write_conclusions_for_the_analyst() -> None:
-    """Заготовка с выводом — утверждение продукта, выданное за слова человека."""
+def test_the_template_leaves_the_analysts_own_conclusions_empty() -> None:
+    """Краткое изложение и уроки — выводы человека: подписывать их его именем продукт не вправе."""
     template = build_summary_template(_case(), [_event("e-1")])
 
     assert template.draft["executive_summary"] == ""
-    assert template.draft["assessment"] == ""
     assert template.draft["lessons"] == ""
+
+
+def test_the_assessment_draft_is_the_product_explanation_and_says_so() -> None:
+    """Черновик оценки допустим, но он обязан называться черновиком.
+
+    В поле «Оценка аналитика» кладётся то, что продукт посчитал сам: объяснение оценки риска
+    и сработавшие инварианты. Без пометки этот текст ушёл бы в доказательный пакет как слова
+    человека, подписанные его именем.
+    """
+    case = _case()
+    template = build_summary_template(case, [_event("e-1")])
+    draft = template.draft["assessment"]
+
+    assert draft.startswith(f"- {DRAFT_MARKER}")
+    assert case.xai_summary in draft
+    assert "INV-OT-01" in draft
+    assert case.risk_class in draft
+
+
+def test_the_assessment_draft_holds_without_a_product_explanation() -> None:
+    """У дела может не быть объяснения риска — заготовка не должна на этом ломаться."""
+    template = build_summary_template(_case(xai_summary="", invariant_hits=[]), [])
+    draft = template.draft["assessment"]
+
+    assert draft.startswith(f"- {DRAFT_MARKER}")
+    assert "Класс риска" in draft
 
 
 def test_the_template_names_the_gaps_it_knows_about() -> None:
