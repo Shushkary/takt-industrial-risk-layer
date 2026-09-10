@@ -1763,6 +1763,10 @@ ol.steps {
   stroke-dasharray: 5 4;
 }
 
+.entity-graph .edge-line.runs {
+  stroke-dasharray: 10 5;
+}
+
 .entity-graph .edge-line.starts {
   stroke-dasharray: 1.5 3.5;
 }
@@ -1808,6 +1812,10 @@ ol.steps {
 
 .graph-legend-line line.acts {
   stroke-dasharray: 5 4;
+}
+
+.graph-legend-line line.runs {
+  stroke-dasharray: 10 5;
 }
 
 .graph-legend-line line.starts {

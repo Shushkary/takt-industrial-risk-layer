@@ -4838,7 +4838,13 @@ function renderGraphNote(nodes, edges) {
 // условных обозначений. Наборов два, потому что цепочка атаки и дело говорят о связях
 // разными словарями: у плеера свои названия переходов, у дела — коды словаря продукта.
 const EDGE_KINDS = { 'обращается к': 'reaches', 'действует на': 'acts' };
-const CASE_EDGE_KINDS = { network: 'reaches', runs: 'acts', initiated: 'starts', spawned: 'spawns' };
+const CASE_EDGE_KINDS = {
+  network: 'reaches',
+  acts_on: 'acts',
+  runs: 'runs',
+  initiated: 'starts',
+  spawned: 'spawns',
+};
 
 // Условные обозначения показывают только те виды связей, которые есть на этом графе: строка
 // про несуществующую линию заставляет искать её глазами. Образец рисуется тем же начертанием,

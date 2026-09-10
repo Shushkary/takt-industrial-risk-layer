@@ -43,6 +43,13 @@ def _expanded_hosts(case, events) -> list[str]:
 
 
 def _case_graph(events) -> dict:
+    """Сущности дела и связи между ними по его же событиям.
+
+    Связь появляется только там, где событие называет обе стороны. Адрес источника к узлу
+    не подтягивается намеренно: в событии рабочей станции `src_address` — часто адрес
+    самого узла, и связь «адрес обратился к узлу» оказалась бы утверждением о том, что узел
+    обращался к себе. В доказательный материал такое попадать не должно.
+    """
     nodes: dict[tuple[str, str], dict] = {}
     edges: dict[tuple[str, str, str], dict] = {}
     for event in events:
@@ -52,6 +59,9 @@ def _case_graph(events) -> dict:
         values = {
             "host": entities.host_id, "user": entities.user_id, "process": entities.process_id,
             "address": entities.src_address, "destination": entities.dst_address,
+            # Родительский процесс — такая же сущность дела: связь «породил» указывает на
+            # него, и без вершины она вела бы в пустоту. Рисунок такую связь просто терял.
+            "parent": entities.parent_process_id,
         }
         for kind, value in values.items():
             if value:
@@ -61,6 +71,13 @@ def _case_graph(events) -> dict:
             (entities.parent_process_id, entities.process_id, "spawned"),
             (entities.host_id, entities.process_id, "runs"),
             (entities.src_address, entities.dst_address, "network"),
+            # Учётная запись на узле. Все четыре связи выше требуют процесса или пары
+            # адресов, поэтому событие промышленного источника — запись в регистр ПЛК от
+            # учётной записи, без процесса — не давало ни одной связи: узел `plc-line-3`
+            # висел на графе отдельной точкой, хотя событие прямо называет, кто на нём
+            # действовал. Замер на демонстрационном деле: висячих вершин было две
+            # (`plc-line-3`, `jump-01`), с этой связью — ни одной.
+            (entities.user_id, entities.host_id, "acts_on"),
         ]
         for source, target, kind in relations:
             if source and target:

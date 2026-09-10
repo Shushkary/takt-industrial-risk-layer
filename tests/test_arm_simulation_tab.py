@@ -137,7 +137,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260909-09"}, versions
+    assert versions >= {"20260910-01"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -615,13 +615,24 @@ def test_case_graph_knows_every_link_kind_of_the_product() -> None:
     """
     from takt.domain.vocabulary import GRAPH_EDGE_KIND_RU
 
-    declared = _function(_app(), "renderCaseGraph")
-    line = next(
-        row for row in _app().splitlines() if row.startswith("const CASE_EDGE_KINDS")
-    )
+    app = _app()
+    start = app.index("const CASE_EDGE_KINDS = {")
+    declared = app[start : app.index("};", start)]
+
     for code in GRAPH_EDGE_KIND_RU:
-        assert f"{code}:" in line, f"вид связи {code} без начертания линии"
-    assert "CASE_EDGE_KINDS[edge.type]" in declared
+        assert f"{code}:" in declared, f"вид связи {code} без начертания линии"
+    # Начертания различимы между собой: два вида связи с одним пунктиром — это одна линия
+    # на картинке и две строки в условных обозначениях.
+    strokes = [row.split(":")[1].strip().strip("',") for row in declared.splitlines() if ":" in row]
+    assert len(strokes) == len(set(strokes)), f"начертания повторяются: {strokes}"
+    assert "CASE_EDGE_KINDS[edge.type]" in _function(app, "renderCaseGraph")
+
+    styles = _STYLES.read_text(encoding="utf-8")
+    for stroke in strokes:
+        if stroke == "reaches":
+            continue  # сплошная линия — начертание по умолчанию, отдельного правила нет
+        assert f".entity-graph .edge-line.{stroke}" in styles, stroke
+        assert f".graph-legend-line line.{stroke}" in styles, stroke
 
 
 def test_glossary_is_reachable_from_the_header() -> None:
