@@ -1860,6 +1860,25 @@ ol.steps {
   text-anchor: middle;
 }
 
+/* Подпись читается поверх линии, которая под ней проходит. Вершины рисуются после связей,
+   но текст без фона не закрывает линию — она видна в просветах букв и перечёркивает имя.
+   Обводка цветом панели вырезает под текстом чистое поле; `paint-order` кладёт её под
+   заливку, иначе обводка съела бы сами буквы. */
+.entity-graph .node-label,
+.entity-graph .node-meta {
+  paint-order: stroke fill;
+  stroke: var(--panel);
+  stroke-linejoin: round;
+}
+
+.entity-graph .node-label {
+  stroke-width: 3px;
+}
+
+.entity-graph .node-meta {
+  stroke-width: 2.5px;
+}
+
 .assumption {
   display: flex;
   flex-wrap: wrap;

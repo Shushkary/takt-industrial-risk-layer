@@ -137,7 +137,7 @@ def test_cache_version_is_consistent_and_bumped() -> None:
     """Единый параметр версии: иначе браузер отдаст старую сборку при новой разметке."""
     versions = set(_VERSION.findall(_index())) | set(_VERSION.findall(_app()))
     assert len(versions) == 1, f"параметр версии разъехался: {sorted(versions)}"
-    assert versions >= {"20260910-01"}, versions
+    assert versions >= {"20260913-01"}, versions
 
 
 def test_build_artifacts_are_not_committed() -> None:
@@ -604,6 +604,21 @@ def test_case_graph_plays_the_case_events_in_time() -> None:
     assert "caseGraphCursor" in _function(app, "paintCaseGraph")
     assert "simCursor" not in _function(app, "paintCaseGraph")
     assert "$('#caseGraphPlay').addEventListener('click', toggleCaseGraphPlayback);" in app
+
+
+def test_node_labels_are_readable_over_the_links() -> None:
+    """Подпись вершины не перечёркивается линией связи.
+
+    Вершины рисуются после связей, но текст без фона линию не закрывает: она видна
+    в просветах букв, и на воспроизведении, где линия толще и цветная, имя узла читается
+    как зачёркнутое. Обводка цветом панели вырезает под текстом чистое поле.
+    """
+    styles = _STYLES.read_text(encoding="utf-8")
+    start = styles.index(".entity-graph .node-label,")
+    rule = styles[start : styles.index("}", start)]
+
+    assert "paint-order: stroke fill" in rule
+    assert "stroke: var(--panel)" in rule
 
 
 def test_case_graph_knows_every_link_kind_of_the_product() -> None:
