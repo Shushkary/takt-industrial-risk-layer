@@ -111,7 +111,9 @@ python -m takt.tools.assembly_worker   # второе окно: сборка и�
 
 Полезные скрипты: `export_case_scenario.py`, `eval_detection.py`, `eval_correlation.py`, `verify_audit_ledger.py`,
 `verify_operation_ledger.py`, `generate_sbom.py`, `release_finalize.py`, `build_release_package.py`,
-`close_operational_tails.py`, `serve_pt_arm.py` (локальный стенд АРМ: статика + прокси `/api/*`).
+`close_operational_tails.py`, `serve_pt_arm.py` (локальный стенд АРМ: статика + прокси `/api/*`),
+`build_demo_package.py` (демонстрационный пакет для заказчика: ядро + АРМ + данные + инструкция;
+состав держит [`tests/test_demo_package_contents.py`](tests/test_demo_package_contents.py)).
 
 ## Правила разработки
 

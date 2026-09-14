@@ -1,0 +1,103 @@
+# Демонстрационный стенд ТАКТ: API + сборщик инцидентов + АРМ аналитика.
+#
+# Запуск из каталога пакета:
+#   docker compose up -d --build
+#   docker compose run --rm seed      # заполнить стенд демонстрационными данными
+#
+# Порты публикуются только на петлевой адрес (127.0.0.1): стенд поднят без
+# проверки ключа API, и выставлять его в сеть нельзя. Как включить ключ —
+# см. README.md, раздел «Проверка ключа API».
+
+services:
+  api:
+    build:
+      context: .
+    image: takt-demo-api
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      TAKT_STORAGE: sqlite
+      TAKT_SQLITE_PATH: data/takt_demo.db
+      # Демонстрационный режим: ключ API не требуется. Порт открыт только на 127.0.0.1.
+      TAKT_AUTH_REQUIRED: "0"
+      TAKT_PROFILE: dev
+      # Засев пишет в ту же базу напрямую, а воркер опрашивает её же: без запаса
+      # по ожиданию блокировки SQLite параллельная запись даёт "database is locked".
+      TAKT_SQLITE_BUSY_TIMEOUT_MS: "15000"
+    volumes:
+      - takt_demo_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8090/ready', method='HEAD'), timeout=4)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Сборка инцидентов идёт отдельным процессом: приём событий только отмечает работу
+  # и не ждёт прогона. Без этого сервиса API принимает события и заводит дела, но
+  # связанный инцидент не появляется.
+  assembly:
+    build:
+      context: .
+    image: takt-demo-api
+    command: ["python", "-m", "takt.tools.assembly_worker"]
+    environment:
+      TAKT_STORAGE: sqlite
+      TAKT_SQLITE_PATH: data/takt_demo.db
+      TAKT_AUTH_REQUIRED: "0"
+      TAKT_PROFILE: dev
+      TAKT_SQLITE_BUSY_TIMEOUT_MS: "15000"
+    volumes:
+      - takt_demo_data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # АРМ аналитика: статика + прокси /api/* на backend. На боевом контуре роль та же,
+  # конфигурация — frontend/takt-pt-arm/nginx.takt-pt-arm.conf в репозитории продукта.
+  arm:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./arm:/usr/share/nginx/html:ro
+      - ./docs:/usr/share/nginx/docs:ro
+      - ./nginx.arm.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Одноразовый засев демонстрационных данных. В профиле `tools`, поэтому
+  # `docker compose up` его не поднимает: запускается явной командой
+  # `docker compose run --rm seed`.
+  seed:
+    build:
+      context: .
+    image: takt-demo-api
+    profiles: ["tools"]
+    command: ["python", "/seed/seed.py"]
+    environment:
+      TAKT_STORAGE: sqlite
+      TAKT_SQLITE_PATH: data/takt_demo.db
+      TAKT_AUTH_REQUIRED: "0"
+      TAKT_PROFILE: dev
+      TAKT_SQLITE_BUSY_TIMEOUT_MS: "15000"
+      TAKT_DEMO_API_BASE: http://api:8090
+    volumes:
+      - takt_demo_data:/app/data
+      - ./seed:/seed:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  takt_demo_data:
