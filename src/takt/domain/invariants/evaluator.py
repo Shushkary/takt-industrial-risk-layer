@@ -111,7 +111,22 @@ def evaluate_declared_rules(
     eff_ctx = ctx or InvariantContext()
     if rule_overrides and rule_overrides.brute_force_auth_fail_threshold is not None:
         eff_ctx = replace(eff_ctx, auth_fail_threshold=rule_overrides.brute_force_auth_fail_threshold)
-    recent_list = list(recent)
+    # Окно правила канонизируется по времени наблюдения до среза. «Последние N событий» в
+    # каталоге (`docs/invariant_matrix.md`) означает последние по `observed_at`, а не последние
+    # по порядку поступления: порядок доставки зависит от задержек сети, размера пачки выгрузки
+    # и очерёдности коннекторов и доказательством не является.
+    #
+    # Без канонизации срез `[-n:]` отбирал разные подмножества событий в зависимости от того, в
+    # каком порядке окно подали, — и правило оценивало разные данные при одних и тех же
+    # наблюдениях. Источник неканонического порядка штатный: `recent_events` приходит из
+    # таблицы, хранящей порядок поступления.
+    #
+    # Сортировка устойчива и идёт только по `observed_at`: у событий с совпадающей отметкой
+    # данные не содержат сведений о том, какое было раньше, поэтому между ними сохраняется
+    # входной порядок. Второй ключ навязал бы порядок, назначенный коннектором, и изменил бы
+    # смысл «непосредственно предыдущего события» — на это опираются `blind_command` и срез
+    # окна `brute_force`.
+    recent_list = sorted(recent, key=lambda e: e.observed_at)
     out: list[str] = []
     for spec in sorted(specs, key=lambda s: s.id):
         if not rule_inputs_satisfied(spec, event):
