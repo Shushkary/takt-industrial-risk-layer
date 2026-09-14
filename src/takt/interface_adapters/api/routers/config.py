@@ -33,6 +33,7 @@ from takt.interface_adapters.api.schemas.config import (
     RiskWeightsResponse,
     RiskWeightsSet,
 )
+from takt.interface_adapters.api.schemas.errors import CONFLICT_OPENAPI, WEIGHTS_REWRITE_OPENAPI
 
 
 def register_config_routes(ctx: ApiContext) -> None:
@@ -62,7 +63,17 @@ def register_config_routes(ctx: ApiContext) -> None:
         """Действующие веса факторов риска, пороги классов и версия конфигурации."""
         return _snapshot()
 
-    @app.put("/config/risk-weights", response_model=RiskWeightsResponse, tags=["Config"])
+    @app.put(
+        "/config/risk-weights",
+        response_model=RiskWeightsResponse,
+        tags=["Config"],
+        # Обработчик отдаёт 422 со строкой в `detail` (текст нарушенного правила: сумма
+        # весов, диапазон порога), а не список ошибок валидации. Автоматическая схема
+        # FastAPI описывает 422 как HTTPValidationError с массивом — и прогон
+        # schemathesis сообщал «Response violates schema». Описание приведено к тому,
+        # что отдаётся на самом деле; 409 объявлен там же, он возможен при нечитаемом файле.
+        responses={**WEIGHTS_REWRITE_OPENAPI, **CONFLICT_OPENAPI},
+    )
     def write_risk_weights(body: RiskWeightsBody, request: Request) -> RiskWeightsResponse:
         """Записывает набор в `config/risk_weights.yaml` и поднимает версию конфигурации.
 

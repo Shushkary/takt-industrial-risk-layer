@@ -120,6 +120,7 @@ from takt.infrastructure.stores.sqlite_store import (
     SqliteAuditEngagementStore,
     SqliteCaseStore,
 )
+from takt.interface_adapters.api.allow_header import AllowHeaderMiddleware
 from takt.interface_adapters.api.config_paths import (
     ensure_explicit_takt_config_under_project,
     invariant_catalog_dir_for_config,
@@ -178,7 +179,10 @@ from takt.interface_adapters.api.routers.workspace import register_workspace_rou
 from takt.interface_adapters.api.schemas.cases import (
     AssessResponse,
 )
-from takt.interface_adapters.api.schemas.errors import MIDDLEWARE_ERROR_OPENAPI
+from takt.interface_adapters.api.schemas.errors import (
+    APP_ERROR_OPENAPI,
+    MIDDLEWARE_ERROR_OPENAPI,
+)
 from takt.interface_adapters.api.schemas.ingest import (
     AssessRequest,
     EventBatchBody,
@@ -406,7 +410,7 @@ def create_app() -> FastAPI:
         title="РўРђРљРў Industrial Risk Layer",
         version=_PACKAGE_VERSION,
         lifespan=_app_lifespan,
-        responses=MIDDLEWARE_ERROR_OPENAPI,
+        responses={**MIDDLEWARE_ERROR_OPENAPI, **APP_ERROR_OPENAPI},
     )
     app.state.prometheus_metrics_active = False
     app.state.booted_at_utc = datetime.now(UTC)
@@ -549,6 +553,7 @@ def create_app() -> FastAPI:
         file_path=security_log_file_path_from_env(),
     )
 
+    app.add_middleware(AllowHeaderMiddleware)
     app.add_middleware(GZipMiddleware, minimum_size=_GZIP_MINIMUM_SIZE_BYTES)
     app.add_middleware(OptionalApiKeyMiddleware)
     app.add_middleware(SecurityLogMiddleware)

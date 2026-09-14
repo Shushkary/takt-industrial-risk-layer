@@ -76,6 +76,27 @@ def patch_openapi_with_takt_api_key(schema: dict[str, Any]) -> None:
                 sec.append(req)
 
 
+def strip_head_response_bodies(schema: dict[str, Any]) -> None:
+    """Убрать описание тела из ответов HEAD-операций.
+
+    HEAD по RFC 9110 §9.3.2 отдаёт те же заголовки, что GET, но **без тела**. FastAPI
+    описывает `@app.head(...)` так же, как GET, и в схему попадает `content:
+    application/json` — обещание тела, которого не будет.
+
+    Клиент, сгенерированный по такой схеме, ждёт JSON и получает пустой ответ: прогон
+    schemathesis сообщал об этом дважды на каждой HEAD-операции — «Missing Content-Type
+    header» и «JSON deserialization error» (по 6 срабатываний на `/health`, `/live`,
+    `/ready`). Дефект был в схеме, а не в приложении: оно ведёт себя по стандарту.
+    """
+    for path_item in schema.get("paths", {}).values():
+        operation = path_item.get("head")
+        if not isinstance(operation, dict):
+            continue
+        for response in operation.get("responses", {}).values():
+            if isinstance(response, dict):
+                response.pop("content", None)
+
+
 def attach_custom_openapi(app: FastAPI, *, logger: logging.Logger | None = None) -> None:
     def custom_openapi() -> dict[str, Any]:
         if app.openapi_schema:
@@ -89,6 +110,7 @@ def attach_custom_openapi(app: FastAPI, *, logger: logging.Logger | None = None)
         )
         patch_openapi_servers(openapi_schema, logger=logger)
         patch_openapi_with_takt_api_key(openapi_schema)
+        strip_head_response_bodies(openapi_schema)
         app.openapi_schema = openapi_schema
         return app.openapi_schema
 

@@ -9,6 +9,7 @@ from takt.application.use_cases.assemble_incident import (
 )
 from takt.application.use_cases.auto_assemble_incidents import AutoAssembleIncidentsUseCase
 from takt.interface_adapters.api.dependencies import ApiContext
+from takt.interface_adapters.api.schemas.errors import CONFLICT_OPENAPI
 
 
 class AssembleIncidentRequest(BaseModel):
@@ -64,7 +65,12 @@ class AutoAssembleResponse(BaseModel):
 def register_assemble_routes(ctx: ApiContext) -> None:
     app = ctx.app
 
-    @app.post("/cases/assemble/pivot", response_model=AssembleIncidentResponse, tags=["Cases"])
+    @app.post(
+        "/cases/assemble/pivot",
+        response_model=AssembleIncidentResponse,
+        tags=["Cases"],
+        responses=CONFLICT_OPENAPI,
+    )
     def assemble_by_pivot_endpoint(request: AssembleIncidentRequest) -> AssembleIncidentResponse:
         """Собирает кейс из уже принятых событий. Группировка, не действие и не вердикт."""
         store = getattr(app.state, "recent_event_store", None)
@@ -105,7 +111,12 @@ def register_assemble_routes(ctx: ApiContext) -> None:
             source_case_ids=list(assembled.source_case_ids),
         )
 
-    @app.post("/cases/assemble/auto", response_model=AutoAssembleResponse, tags=["Cases"])
+    @app.post(
+        "/cases/assemble/auto",
+        response_model=AutoAssembleResponse,
+        tags=["Cases"],
+        responses=CONFLICT_OPENAPI,
+    )
     def assemble_auto_endpoint(request: AutoAssembleRequest) -> AutoAssembleResponse:
         """Повторяет сборку ядра инцидентов по требованию — с другим порогом отличительности.
 

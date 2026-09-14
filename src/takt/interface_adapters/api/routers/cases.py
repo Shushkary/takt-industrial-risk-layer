@@ -19,6 +19,7 @@ from takt.interface_adapters.api.schemas.cases import (
     CaseSummary,
     DecisionBriefDetail,
 )
+from takt.interface_adapters.api.schemas.errors import RAW_BODY_VALIDATION_OPENAPI
 
 
 def register_case_routes(ctx: ApiContext) -> None:
@@ -221,13 +222,26 @@ def register_case_routes(ctx: ApiContext) -> None:
             cases=[case_to_detail(c) for c in result.items],
         )
 
-    @app.post("/cases/import/full.json", response_model=CasesImportResponse, tags=["Export"])
+    @app.post(
+        "/cases/import/full.json",
+        response_model=CasesImportResponse,
+        tags=["Export"],
+        responses=RAW_BODY_VALIDATION_OPENAPI,
+    )
     async def import_cases_full_json(request: Request):
         raw = await request.body()
         try:
             body = CasesImportBody.model_validate_json(raw)
         except ValidationError as e:
-            raise HTTPException(status_code=422, detail=e.errors()) from e
+            # `input` из отчёта pydantic не отдаётся клиенту: при невалидном JSON туда
+            # попадает сырое тело запроса типом `bytes`, и ответ 422 не сериализуется —
+            # обработчик HTTPException падает с TypeError, а клиент получает 500 вместо
+            # внятного отказа. Заодно тело запроса не отражается обратно в ответе.
+            # Клиенту остаётся то, что ему нужно: тип ошибки, путь до поля и сообщение.
+            raise HTTPException(
+                status_code=422,
+                detail=e.errors(include_url=False, include_input=False, include_context=False),
+            ) from e
         import_secret = os.environ.get("TAKT_IMPORT_HMAC_SECRET", "").strip()
         if import_secret:
             got = request.headers.get("X-TAKT-Import-Signature", "").strip()

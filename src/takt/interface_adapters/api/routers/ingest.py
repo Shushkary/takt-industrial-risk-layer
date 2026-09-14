@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from takt.infrastructure.http.idempotency import idempotency_record_success, idempotent_json_response_or_none
 from takt.interface_adapters.api.dependencies import ApiContext, require
 from takt.interface_adapters.api.schemas.cases import AssessResponse
+from takt.interface_adapters.api.schemas.errors import RAW_BODY_VALIDATION_OPENAPI
 from takt.interface_adapters.api.schemas.ingest import (
     AssessRequest,
     BatchAssessResponse,
@@ -37,7 +38,12 @@ def register_ingest_routes(ctx: ApiContext) -> None:
     def assess_demo(body: AssessRequest):
         return assess_from_plc_demo_body(body)
 
-    @app.post("/events", response_model=AssessResponse, tags=["Ingest"])
+    @app.post(
+        "/events",
+        response_model=AssessResponse,
+        tags=["Ingest"],
+        responses=RAW_BODY_VALIDATION_OPENAPI,
+    )
     async def ingest_event(request: Request):
         raw = await request.body()
         idem = getattr(app.state, "idempotency_store", None)
@@ -48,7 +54,15 @@ def register_ingest_routes(ctx: ApiContext) -> None:
         try:
             body = EventIngestBody.model_validate_json(raw)
         except ValidationError as e:
-            raise HTTPException(status_code=422, detail=e.errors()) from e
+            # `input` из отчёта pydantic не отдаётся клиенту: при невалидном JSON туда
+            # попадает сырое тело запроса типом `bytes`, и ответ 422 не сериализуется —
+            # обработчик HTTPException падает с TypeError, а клиент получает 500 вместо
+            # внятного отказа. Заодно тело запроса не отражается обратно в ответе.
+            # Клиенту остаётся то, что ему нужно: тип ошибки, путь до поля и сообщение.
+            raise HTTPException(
+                status_code=422,
+                detail=e.errors(include_url=False, include_input=False, include_context=False),
+            ) from e
         out = assess_event_ingest_body(body, raw_payload=raw)
         idempotency_record_success(
             request=request,
@@ -74,7 +88,12 @@ def register_ingest_routes(ctx: ApiContext) -> None:
     def ingest_ipfix(body: IpfixIngestBody):
         return assess_ipfix_body(body)
 
-    @app.post("/events/batch", response_model=BatchAssessResponse, tags=["Ingest"])
+    @app.post(
+        "/events/batch",
+        response_model=BatchAssessResponse,
+        tags=["Ingest"],
+        responses=RAW_BODY_VALIDATION_OPENAPI,
+    )
     async def ingest_batch(request: Request):
         raw = await request.body()
         idem = getattr(app.state, "idempotency_store", None)
@@ -85,7 +104,15 @@ def register_ingest_routes(ctx: ApiContext) -> None:
         try:
             body = EventBatchBody.model_validate_json(raw)
         except ValidationError as e:
-            raise HTTPException(status_code=422, detail=e.errors()) from e
+            # `input` из отчёта pydantic не отдаётся клиенту: при невалидном JSON туда
+            # попадает сырое тело запроса типом `bytes`, и ответ 422 не сериализуется —
+            # обработчик HTTPException падает с TypeError, а клиент получает 500 вместо
+            # внятного отказа. Заодно тело запроса не отражается обратно в ответе.
+            # Клиенту остаётся то, что ему нужно: тип ошибки, путь до поля и сообщение.
+            raise HTTPException(
+                status_code=422,
+                detail=e.errors(include_url=False, include_input=False, include_context=False),
+            ) from e
         results = assess_event_batch_body(body)
         out = BatchAssessResponse(results=results, count=len(results))
         idempotency_record_success(

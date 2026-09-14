@@ -4,12 +4,17 @@ from fastapi import HTTPException, Query
 
 from takt.application.use_cases.simulate_incident import SimulateIncidentUseCase
 from takt.interface_adapters.api.dependencies import ApiContext
+from takt.interface_adapters.api.schemas.errors import CONFLICT_OPENAPI
 
 
 def register_simulation_routes(ctx: ApiContext) -> None:
     app = ctx.app
 
-    @app.get("/cases/{case_id}/simulation", tags=["Cases"])
+    @app.get(
+        "/cases/{case_id}/simulation",
+        tags=["Cases"],
+        responses=CONFLICT_OPENAPI,
+    )
     def case_simulation(
         case_id: str,
         seconds_per_action: float | None = Query(
