@@ -97,6 +97,55 @@ def strip_head_response_bodies(schema: dict[str, Any]) -> None:
                 response.pop("content", None)
 
 
+def drop_null_from_parameter_schemas(schema: dict[str, Any]) -> None:
+    """Убрать ветку `null` из типов параметров запроса.
+
+    Необязательный параметр FastAPI выводит из аннотации `int | None` и описывает как
+    `anyOf: [{"type": "integer"}, {"type": "null"}]`. Внутри Python это верно: значение
+    либо число, либо `None`. В строке запроса значения `null` не существует — туда едет
+    только текст, и «не задано» выражается отсутствием параметра. Клиент, читающий схему
+    буквально, шлёт `limit=null`, обработчик разбирает это как строку `"null"` и отдаёт
+    422 на запросе, который схеме соответствует.
+
+    Прогон schemathesis сообщал об этом на шести операциях: `/cases`, `/cases/groups`,
+    `/cases/export/full.json`, `/events/search`, `/cases/{case_id}/simulation` и история
+    перепроверки готовности. Дефект в схеме, а не в приложении: `null` оно не принимало
+    никогда и обещать его не должно.
+
+    Убирается только ветка `null`; тип, границы и формат остальных веток сохраняются, как и
+    сама необязательность параметра (`required: false`).
+    """
+    for path_item in schema.get("paths", {}).values():
+        if not isinstance(path_item, dict):
+            continue
+        # Параметры лежат либо у пути целиком, либо у отдельной операции; операции — это
+        # те значения элемента пути, которые сами являются объектами.
+        holders = [path_item, *(value for value in path_item.values() if isinstance(value, dict))]
+        for holder in holders:
+            for parameter in holder.get("parameters", []) or []:
+                if isinstance(parameter, dict):
+                    _drop_null_branch(parameter.get("schema"))
+
+
+def _drop_null_branch(parameter_schema: Any) -> None:
+    if not isinstance(parameter_schema, dict):
+        return
+    branches = parameter_schema.get("anyOf")
+    if not isinstance(branches, list):
+        return
+    kept = [b for b in branches if not (isinstance(b, dict) and b.get("type") == "null")]
+    if not kept or len(kept) == len(branches):
+        return
+    if len(kept) > 1:
+        parameter_schema["anyOf"] = kept
+        return
+    # Единственная оставшаяся ветка поднимается на уровень параметра. `setdefault` бережёт
+    # то, что описано снаружи (`description`, `title`): оно относится к параметру целиком.
+    parameter_schema.pop("anyOf")
+    for key, value in kept[0].items():
+        parameter_schema.setdefault(key, value)
+
+
 def attach_custom_openapi(app: FastAPI, *, logger: logging.Logger | None = None) -> None:
     def custom_openapi() -> dict[str, Any]:
         if app.openapi_schema:
@@ -111,6 +160,7 @@ def attach_custom_openapi(app: FastAPI, *, logger: logging.Logger | None = None)
         patch_openapi_servers(openapi_schema, logger=logger)
         patch_openapi_with_takt_api_key(openapi_schema)
         strip_head_response_bodies(openapi_schema)
+        drop_null_from_parameter_schemas(openapi_schema)
         app.openapi_schema = openapi_schema
         return app.openapi_schema
 

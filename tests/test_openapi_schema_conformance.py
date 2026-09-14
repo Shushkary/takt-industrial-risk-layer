@@ -15,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from takt.interface_adapters.api.main import create_app
+from takt.interface_adapters.api.openapi import drop_null_from_parameter_schemas
 
 
 @pytest.fixture(scope="module")
@@ -169,3 +170,113 @@ def test_weights_rewrite_documents_both_shapes_of_422(schema: dict) -> None:
 
     kinds = {option.get("type") for option in detail.get("anyOf", [])}
     assert {"string", "array"} <= kinds, detail
+
+
+def test_no_query_parameter_promises_null(schema: dict) -> None:
+    """Ни один параметр запроса не объявлен допускающим `null`.
+
+    Необязательный параметр FastAPI описывает как `anyOf: [<тип>, null]` — так выглядит
+    аннотация `int | None`. По проводу же значения `null` не существует: в строке запроса
+    едет только текст, и «не задано» выражается отсутствием параметра, а не словом `null`.
+    Клиент, читающий схему буквально, шлёт `limit=null` и получает 422 на запросе, который
+    схеме соответствует. Прогон schemathesis сообщал об этом на шести операциях
+    (`/cases`, `/cases/groups`, `/cases/export/full.json`, `/events/search`,
+    `/cases/{case_id}/simulation`, история перепроверки готовности).
+    """
+    promising = [
+        f"{method.upper()} {path} ?{parameter.get('name')}"
+        for path, item in schema["paths"].items()
+        for method, operation in item.items()
+        if isinstance(operation, dict)
+        for parameter in operation.get("parameters", []) or []
+        if any(
+            option.get("type") == "null"
+            for option in parameter.get("schema", {}).get("anyOf", [])
+        )
+    ]
+
+    assert not promising, f"параметры обещают null: {promising[:10]}"
+
+
+@pytest.mark.parametrize(
+    ("path", "name", "expected"),
+    [
+        ("/cases/export/full.json", "limit", {"type": "integer", "minimum": 1, "maximum": 10_000}),
+        ("/cases/{case_id}/simulation", "seconds_per_action", {"type": "number", "minimum": 0.0, "maximum": 3600.0}),
+        (
+            "/cases/{case_id}/compliance/remediations/recheck-readiness/history",
+            "ready",
+            {"type": "boolean"},
+        ),
+        ("/events/search", "observed_to", {"type": "string", "format": "date-time"}),
+        ("/cases", "status", {"type": "string"}),
+    ],
+)
+def test_optional_parameter_keeps_its_type_and_bounds(
+    schema: dict, path: str, name: str, expected: dict
+) -> None:
+    """Убрана только ветка `null`: тип и границы значения остались на месте.
+
+    Иначе лечение было бы хуже болезни: параметр без `minimum`/`maximum` перестал бы
+    описывать то, что обработчик проверяет.
+    """
+    parameter = next(
+        p
+        for p in schema["paths"][path]["get"]["parameters"]
+        if p["name"] == name
+    )
+
+    assert parameter["required"] is False
+    assert "anyOf" not in parameter["schema"]
+    assert expected.items() <= parameter["schema"].items(), parameter["schema"]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/cases/export/full.json",
+        "/cases",
+        "/cases/groups",
+        "/events/search",
+    ],
+)
+def test_optional_parameter_may_still_be_omitted(client: TestClient, url: str) -> None:
+    """Необязательность параметра сохранена: запрос без него по-прежнему проходит.
+
+    Это и есть штатный способ сказать «значение не задано» — вместо `null`.
+    """
+    assert client.get(url).status_code == 200
+
+
+def test_null_branch_is_dropped_without_collapsing_the_rest() -> None:
+    """Из нескольких веток убирается только `null`, остальные остаются перечислением.
+
+    В приложении сейчас таких параметров нет — все двухветочные. Проверка держит поведение
+    на случай, когда параметр будет описан несколькими типами: схлопнуть его до одного типа
+    значило бы соврать в другую сторону.
+    """
+    schema = {
+        "paths": {
+            "/x": {
+                "get": {
+                    "parameters": [
+                        {
+                            "name": "mixed",
+                            "in": "query",
+                            "required": False,
+                            "schema": {
+                                "anyOf": [{"type": "integer"}, {"type": "string"}, {"type": "null"}],
+                                "title": "Mixed",
+                            },
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    drop_null_from_parameter_schemas(schema)
+
+    parameter = schema["paths"]["/x"]["get"]["parameters"][0]
+    assert parameter["schema"]["anyOf"] == [{"type": "integer"}, {"type": "string"}]
+    assert parameter["schema"]["title"] == "Mixed"
