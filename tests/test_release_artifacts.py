@@ -152,7 +152,7 @@ def test_ci_defines_backend_release_gate_jobs() -> None:
         "lint-imports --config pyproject.toml",
         "python scripts/generate_sbom.py",
         "pip-audit",
-        "python -m schemathesis run",
+        "schemathesis run",
         "http://127.0.0.1:8000/openapi.json",
         "python scripts/verify_audit_ledger.py",
         "python scripts/verify_operation_ledger.py",
@@ -166,6 +166,25 @@ def test_ci_defines_backend_release_gate_jobs() -> None:
     )
     missing = [phrase for phrase in required if phrase not in workflow]
     assert missing == []
+
+
+def test_ci_calls_schemathesis_by_console_script() -> None:
+    """Фаззер запускается консольным скриптом, а не `python -m`.
+
+    У пакета `schemathesis` нет `__main__`, поэтому `python -m schemathesis run` падает, не
+    дойдя до схемы. Ворота в таком виде ни разу не проверили её по существу, а падение
+    выглядело так, будто схема недоступна. Список обязательных строк выше на эту разницу не
+    смотрит — `schemathesis run` входит подстрокой и в сломанный вызов.
+
+    Строки-комментарии отбрасываются: сломанный вызов назван в самом workflow — там записано,
+    почему так делать нельзя.
+    """
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    commands = "\n".join(
+        line for line in workflow.splitlines() if not line.lstrip().startswith("#")
+    )
+
+    assert "python -m schemathesis" not in commands
 
 
 def test_ci_defines_frontend_release_gate_job() -> None:
