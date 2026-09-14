@@ -67,6 +67,18 @@ curl -s https://ralta.ru/takt_pt_arm/health | grep -o '"build_revision":"[^"]*"'
 
 `build_revision` обязан совпадать с `git rev-parse HEAD`.
 
+### Пути на подпути `/takt_pt_arm/`
+
+`health` отвечает прямо на подпути, а **остальной API живёт под префиксом `api/`**:
+
+```bash
+curl -s "https://ralta.ru/takt_pt_arm/api/cases?limit=1" -D - -o /dev/null | grep -i x-total-count
+```
+
+Путь без `api/` не ошибка, а ловушка: `/takt_pt_arm/cases` отдаёт `200` и `index.html` —
+SPA-fallback перехватывает запрос раньше прокси. Проверка «ответ 200» такой промах не ловит,
+сверяйте `Content-Type: application/json`. Число дел в базе отдаёт заголовок `x-total-count`.
+
 ## Перед остановкой контейнера — сверить версию схемы БД
 
 ```bash
