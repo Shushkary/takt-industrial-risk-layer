@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException, Query
 
 from takt.interface_adapters.api.dependencies import ApiContext
+from takt.interface_adapters.api.pagination import MAX_PAGE_OFFSET
 
 
 def register_entity_routes(ctx: ApiContext) -> None:
@@ -14,7 +15,7 @@ def register_entity_routes(ctx: ApiContext) -> None:
         entity_id: str,
         event_limit: int = Query(default=100, ge=1, le=1000),
         event_offset: int = Query(
-            default=0, ge=0,
+            default=0, ge=0, le=MAX_PAGE_OFFSET,
             description="Смещение страницы истории: за пределом одного запроса она достаётся страницами",
         ),
     ):

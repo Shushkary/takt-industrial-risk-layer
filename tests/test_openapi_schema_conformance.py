@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from takt.interface_adapters.api.main import create_app
 from takt.interface_adapters.api.openapi import drop_null_from_parameter_schemas
+from takt.interface_adapters.api.pagination import MAX_PAGE_OFFSET
 
 
 @pytest.fixture(scope="module")
@@ -280,3 +281,42 @@ def test_null_branch_is_dropped_without_collapsing_the_rest() -> None:
     parameter = schema["paths"]["/x"]["get"]["parameters"][0]
     assert parameter["schema"]["anyOf"] == [{"type": "integer"}, {"type": "string"}]
     assert parameter["schema"]["title"] == "Mixed"
+
+
+@pytest.mark.parametrize(
+    ("url", "name"),
+    [
+        ("/events/search?offset={value}", "offset"),
+        ("/entities/host/plc-01/card?event_offset={value}", "event_offset"),
+    ],
+)
+def test_page_offset_beyond_the_bound_is_refused_not_crashed(
+    client: TestClient, url: str, name: str
+) -> None:
+    """Смещение страницы ограничено сверху: за границей — отказ, а не 500.
+
+    Смещение этих двух маршрутов уходит прямо в SQL `OFFSET`. Значение больше 2^63−1
+    роняло запрос («OverflowError: Python int too large to convert to SQLite INTEGER»), и
+    клиент получал 500. Прогон schemathesis поймал это на `/events/search` со смещением
+    2.4e35; `/entities/{тип}/{id}/card` ходит в тот же запрос и падал так же, если сущность
+    существует. Ответ 500 на строку запроса — ещё и нарушение релизного ворот
+    (`docs/release_checklist.md`).
+    """
+    response = client.get(url.format(value=247_279_302_659_365_602_267_588_046_364_868_608))
+
+    assert response.status_code == 422, response.text
+    assert any(item["loc"] == ["query", name] for item in response.json()["detail"]), response.text
+
+
+@pytest.mark.parametrize(
+    ("url", "name"),
+    [
+        ("/events/search?offset={value}", "offset"),
+        ("/entities/host/plc-01/card?event_offset={value}", "event_offset"),
+    ],
+)
+def test_page_offset_at_the_bound_is_still_accepted(client: TestClient, url: str, name: str) -> None:
+    """Сама граница остаётся допустимой: ограничение отсекает бессмысленное, а не рабочее."""
+    response = client.get(url.format(value=MAX_PAGE_OFFSET))
+
+    assert response.status_code != 422, response.text

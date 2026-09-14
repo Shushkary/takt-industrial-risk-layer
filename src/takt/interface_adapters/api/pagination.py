@@ -4,6 +4,14 @@ from urllib.parse import urlencode
 
 from fastapi import Request
 
+# Верхняя граница смещения страницы для маршрутов, где смещение уходит прямо в SQL `OFFSET`
+# (`/events/search`, карточка сущности). Без границы значение больше 2^63−1 роняло запрос —
+# «OverflowError: Python int too large to convert to SQLite INTEGER» — и клиент получал 500
+# вместо отказа; поймано прогоном schemathesis. Миллион выбран как заведомо недостижимый
+# предел листания: он на порядок выше корпуса бэктеста в 100 000 событий и на много порядков
+# ниже переполнения, то есть отсекает бессмысленное, не трогая рабочие страницы.
+MAX_PAGE_OFFSET = 1_000_000
+
 
 def offset_limit_link_header(
     request: Request,

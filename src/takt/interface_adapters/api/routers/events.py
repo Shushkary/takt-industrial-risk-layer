@@ -7,6 +7,7 @@ from fastapi import HTTPException, Query, Response
 from takt.application.use_cases.case_scenario import event_to_dict
 from takt.domain.entities.event import NormalizedEvent
 from takt.interface_adapters.api.dependencies import ApiContext
+from takt.interface_adapters.api.pagination import MAX_PAGE_OFFSET
 
 
 def _event_dict(event: NormalizedEvent) -> dict:
@@ -45,7 +46,7 @@ def register_event_routes(ctx: ApiContext) -> None:
                 "теряет кандидатов за её пределами"
             ),
         ),
-        offset: int = Query(default=0, ge=0),
+        offset: int = Query(default=0, ge=0, le=MAX_PAGE_OFFSET),
         limit: int = Query(default=100, ge=1, le=1000),
     ):
         store = getattr(app.state, "recent_event_store", None)
