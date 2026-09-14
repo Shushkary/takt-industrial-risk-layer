@@ -178,10 +178,26 @@ jobs:
         run: pip-audit
 
       - name: Schemathesis gate
+        env:
+          # Без этого приложение не поднимается вовсе: при включённой аутентификации старт
+          # требует TAKT_API_KEY и падает с FATAL до первого запроса. Ключ здесь бессмыслен —
+          # схему фаззят без учётных данных, и с ключом каждый запрос получал бы 401, то есть
+          # ворота проверяли бы обработку отказа, а не соответствие схеме.
+          TAKT_AUTH_REQUIRED: "0"
+          # Хранилище в памяти: фаззер вызывает и пишущие эндпоинты, включая правку весов.
+          # На одноразовом раннере это безвредно, но следа на диске оставлять незачем.
+          TAKT_STORAGE: memory
         run: |
           uvicorn takt.interface_adapters.api.main:app --host 127.0.0.1 --port 8000 &
-          sleep 3
-          python -m schemathesis run --max-examples 20 --checks all http://127.0.0.1:8000/openapi.json
+          # Ожидание готовности вместо `sleep 3`: старт зависит от машины, а молчаливый
+          # недождавшийся фаззер выглядит как «схема недоступна».
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/health > /dev/null && break
+            sleep 1
+          done
+          # `python -m schemathesis` не работает: у пакета нет `__main__`. Запуск — консольным
+          # скриптом, он ставится вместе с зависимостью.
+          schemathesis run --max-examples 20 --checks all --wait-for-schema 30 http://127.0.0.1:8000/openapi.json
 
       - name: Mutation gate (weights loader)
         run: |
@@ -213,6 +229,8 @@ jobs:
 
       - name: Prepare prod-ready fixture
         run: |
+          # Каталог не создаётся ничем до этого шага: `cp` падал с «No such file or directory».
+          mkdir -p dist
           cp docs/releases/2026-05-07_v0.6.23_prod_ready.md dist/release-dry-run-prod-ready.md
 
       - name: Release finalize dry run
