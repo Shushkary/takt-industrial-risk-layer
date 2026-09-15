@@ -694,6 +694,5 @@ forensic_bundle  :     ~800 строк (31 KB)
 
 **Конец отчёта.**
 
-Этот файл предлагается зафиксировать в репозитории
-`takt-industrial-risk-layer/` под именем `AUDIT_REPORT.md`
-и использовать как DoR для следующего release-окна.
+Этот файл зафиксирован в репозитории `takt-industrial-risk-layer/`
+как `docs/AUDIT_REPORT.md` и используется как DoR для следующего release-окна.
