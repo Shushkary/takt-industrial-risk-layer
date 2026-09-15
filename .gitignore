@@ -16,6 +16,10 @@ node_modules/
 .pytest_tmp_path_local/
 .hypothesis/
 .import_linter_cache/
+# mypy и ruff кладут внутрь своих каталогов собственный .gitignore — перечисляем
+# явно, чтобы игнорирование не зависело от поведения сторонних утилит.
+.mypy_cache/
+.ruff_cache/
 .tmp_pytest*/
 tmp_pytest*/
 .tmp_pip_audit_cache/
