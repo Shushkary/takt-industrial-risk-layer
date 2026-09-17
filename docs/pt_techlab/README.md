@@ -16,6 +16,7 @@
 | **Приложение к презентации** | https://github.com/Shushkary/takt-industrial-risk-layer/blob/main/docs/pt_techlab/TAKT_Techlab_2026_Positive_Technologies_Appendix.pptx |
 | **Прототип** | https://github.com/Shushkary/takt-industrial-risk-layer/blob/main/docs/pt_techlab/prototype.md |
 | **Демонстрационный пакет** | https://github.com/Shushkary/takt-industrial-risk-layer/raw/main/docs/pt_techlab/takt-demo-reshenie.zip |
+| **Снимки прототипа** | https://github.com/Shushkary/takt-industrial-risk-layer/tree/main/docs/pt_techlab/screenshots |
 
 ## Что это
 
